@@ -843,7 +843,7 @@ model Webhook {
   name           String    @db.VarChar(255)
   url            String    @db.VarChar(2000)
   events         String[]
-  secretHash     String    @db.VarChar(255)
+  secretEncrypted String   @db.VarChar(500)
   isActive       Boolean   @default(true)
   lastTriggeredAt DateTime?
   failureCount   Int       @default(0)

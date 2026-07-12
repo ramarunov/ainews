@@ -14,6 +14,7 @@ import { PrismaModule } from './infrastructure/prisma/prisma.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
 import { OpenSearchModule } from './infrastructure/opensearch/opensearch.module';
 import { StorageModule } from './infrastructure/storage/storage.module';
+import { EncryptionModule } from './common/crypto/encryption.module';
 
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -143,6 +144,7 @@ import { AuditInterceptor } from './common/audit/audit.interceptor';
     RedisModule,
     OpenSearchModule,
     StorageModule,
+    EncryptionModule,
 
     // ─── Feature Modules ─────────────────────────────────────────────────────
     AuthModule,

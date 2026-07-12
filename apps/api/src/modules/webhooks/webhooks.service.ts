@@ -1,21 +1,28 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
-import { Prisma } from '@prisma/client';
-import { randomBytes, createHash } from 'crypto';
+import { Prisma, Webhook } from '@prisma/client';
+import { randomBytes, createHmac } from 'crypto';
 import axios from 'axios';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { EncryptionService } from '../../common/crypto/encryption.service';
 import { CreateWebhookDto, UpdateWebhookDto } from './dto/webhook.dto';
 
 @Injectable()
 export class WebhooksService {
   private readonly logger = new Logger(WebhooksService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly encryption: EncryptionService,
+  ) {}
 
   async create(dto: CreateWebhookDto, organizationId: string) {
     const secret = randomBytes(32).toString('hex');
-    const secretHash = createHash('sha256').update(secret).digest('hex');
+    // Stored encrypted (reversible), not hashed — deliver() needs the raw
+    // secret back to sign each outbound payload with HMAC-SHA256 so
+    // receivers can verify a delivery actually came from this system.
+    const secretEncrypted = this.encryption.encrypt(secret);
 
     const webhook = await this.prisma.webhook.create({
       data: {
@@ -23,7 +30,7 @@ export class WebhooksService {
         name: dto.name,
         url: dto.url,
         events: dto.events,
-        secretHash,
+        secretEncrypted,
       },
     });
 
@@ -107,7 +114,7 @@ export class WebhooksService {
       },
     });
 
-    await Promise.all(webhooks.map((webhook) => this.deliver(webhook.id, webhook.url, event, payload)));
+    await Promise.all(webhooks.map((webhook) => this.deliver(webhook, event, payload)));
   }
 
   @OnEvent('article.published')
@@ -115,20 +122,27 @@ export class WebhooksService {
     await this.dispatch(payload.organizationId, 'article.published', payload);
   }
 
-  private async deliver(webhookId: string, url: string, event: string, payload: object) {
+  private async deliver(webhook: Webhook, event: string, payload: object) {
     const startedAt = Date.now();
+    const body = JSON.stringify(payload);
+    const secret = this.encryption.decrypt(webhook.secretEncrypted);
+    const signature = createHmac('sha256', secret).update(body).digest('hex');
 
     try {
-      const response = await axios.post(url, payload, {
+      const response = await axios.post(webhook.url, body, {
         timeout: 5000,
-        headers: { 'X-Webhook-Event': event },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Webhook-Event': event,
+          'X-Webhook-Signature': `sha256=${signature}`,
+        },
       });
 
       const duration = Date.now() - startedAt;
 
       await this.prisma.webhookDelivery.create({
         data: {
-          webhookId,
+          webhookId: webhook.id,
           event,
           payload: payload as Prisma.InputJsonValue,
           statusCode: response.status,
@@ -139,7 +153,7 @@ export class WebhooksService {
       });
 
       await this.prisma.webhook.update({
-        where: { id: webhookId },
+        where: { id: webhook.id },
         data: { lastTriggeredAt: new Date() },
       });
     } catch (error: any) {
@@ -147,7 +161,7 @@ export class WebhooksService {
 
       await this.prisma.webhookDelivery.create({
         data: {
-          webhookId,
+          webhookId: webhook.id,
           event,
           payload: payload as Prisma.InputJsonValue,
           statusCode: error?.response?.status,
@@ -158,11 +172,11 @@ export class WebhooksService {
       });
 
       await this.prisma.webhook.update({
-        where: { id: webhookId },
+        where: { id: webhook.id },
         data: { failureCount: { increment: 1 }, lastTriggeredAt: new Date() },
       });
 
-      this.logger.warn(`Webhook delivery failed for ${webhookId}: ${error?.message}`);
+      this.logger.warn(`Webhook delivery failed for ${webhook.id}: ${error?.message}`);
     }
   }
 }

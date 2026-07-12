@@ -1,7 +1,9 @@
 import { ConflictException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
+import { authenticator } from 'otplib';
 import { AuthService } from './auth.service';
 import { DEFAULT_ROLES } from '../../common/constants/default-roles';
+import { EncryptionService } from '../../common/crypto/encryption.service';
 
 describe('AuthService', () => {
   let service: AuthService;
@@ -77,6 +79,7 @@ describe('AuthService', () => {
       config,
       eventEmitter,
       redis,
+      new EncryptionService(config),
     );
   });
 
@@ -229,6 +232,79 @@ describe('AuthService', () => {
       await expect(
         service.validateUser('inactive@example.com', 'correct-password'),
       ).rejects.toThrow(ForbiddenException);
+    });
+  });
+
+  describe('MFA', () => {
+    it('setupMfa stores the TOTP secret encrypted, not in plaintext', async () => {
+      prisma.user.findUniqueOrThrow.mockResolvedValue({
+        id: 'user-1',
+        email: 'jane@example.com',
+        mfaEnabled: false,
+      });
+
+      const result = await service.setupMfa('user-1');
+
+      const storedSecret = prisma.user.update.mock.calls[0][0].data.mfaSecret;
+      expect(storedSecret).not.toBe(result.secret);
+      // Round-trips back to the same raw secret returned to the caller (the
+      // one actually embedded in the QR code / otpAuthUrl).
+      const encryption = new EncryptionService(config);
+      expect(encryption.decrypt(storedSecret)).toBe(result.secret);
+    });
+
+    it('verifyAndEnableMfa decrypts the stored secret before checking the TOTP token', async () => {
+      const encryption = new EncryptionService(config);
+      const rawSecret = authenticator.generateSecret(32);
+      prisma.user.findUniqueOrThrow.mockResolvedValue({
+        id: 'user-1',
+        mfaSecret: encryption.encrypt(rawSecret),
+      });
+      prisma.user.update.mockResolvedValue({});
+      const validToken = authenticator.generate(rawSecret);
+
+      const result = await service.verifyAndEnableMfa('user-1', validToken);
+
+      expect(result.backupCodes).toHaveLength(10);
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ mfaEnabled: true }) }),
+      );
+    });
+
+    it('verifyAndEnableMfa rejects an invalid token', async () => {
+      const encryption = new EncryptionService(config);
+      const rawSecret = authenticator.generateSecret(32);
+      prisma.user.findUniqueOrThrow.mockResolvedValue({
+        id: 'user-1',
+        mfaSecret: encryption.encrypt(rawSecret),
+      });
+
+      await expect(service.verifyAndEnableMfa('user-1', '000000')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('verifyMfaToken decrypts the stored secret and validates a live TOTP code', async () => {
+      const encryption = new EncryptionService(config);
+      const rawSecret = authenticator.generateSecret(32);
+      prisma.user.findUniqueOrThrow.mockResolvedValue({
+        id: 'user-1',
+        mfaEnabled: true,
+        mfaSecret: encryption.encrypt(rawSecret),
+      });
+      const validToken = authenticator.generate(rawSecret);
+
+      await expect(service.verifyMfaToken('user-1', validToken)).resolves.toBe(true);
+    });
+
+    it('verifyMfaToken returns false without decrypting anything when MFA is not enabled', async () => {
+      prisma.user.findUniqueOrThrow.mockResolvedValue({
+        id: 'user-1',
+        mfaEnabled: false,
+        mfaSecret: null,
+      });
+
+      await expect(service.verifyMfaToken('user-1', '123456')).resolves.toBe(false);
     });
   });
 });

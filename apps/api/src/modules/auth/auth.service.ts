@@ -20,6 +20,7 @@ import { REDIS_CLIENT } from '../../infrastructure/redis/redis.module';
 import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
 import { DEFAULT_ROLES } from '../../common/constants/default-roles';
+import { EncryptionService } from '../../common/crypto/encryption.service';
 
 const LOGIN_ATTEMPTS_PREFIX = 'login_attempts:';
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -34,6 +35,7 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly eventEmitter: EventEmitter2,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly encryption: EncryptionService,
   ) {}
 
   // ─── Registration ──────────────────────────────────────────────────────────
@@ -281,10 +283,12 @@ export class AuthService {
     const otpAuthUrl = authenticator.keyuri(user.email, appName, secret);
     const qrCodeUrl = await toDataURL(otpAuthUrl);
 
-    // Store secret temporarily (not enabled until verified)
+    // Store secret temporarily (not enabled until verified), encrypted at
+    // rest per SECURITY.md 5.3 ("MFA secrets encrypted with
+    // application-level encryption key (AES-256-GCM)").
     await this.prisma.user.update({
       where: { id: userId },
-      data: { mfaSecret: secret },
+      data: { mfaSecret: this.encryption.encrypt(secret) },
     });
 
     return { secret, qrCodeUrl, otpAuthUrl };
@@ -299,7 +303,10 @@ export class AuthService {
       throw new BadRequestException('MFA setup not initiated');
     }
 
-    const isValid = authenticator.verify({ token, secret: user.mfaSecret });
+    const isValid = authenticator.verify({
+      token,
+      secret: this.encryption.decrypt(user.mfaSecret),
+    });
     if (!isValid) {
       throw new UnauthorizedException('Invalid MFA token');
     }
@@ -334,7 +341,7 @@ export class AuthService {
       return false;
     }
 
-    return authenticator.verify({ token, secret: user.mfaSecret });
+    return authenticator.verify({ token, secret: this.encryption.decrypt(user.mfaSecret) });
   }
 
   // ─── Private Helpers ──────────────────────────────────────────────────────
