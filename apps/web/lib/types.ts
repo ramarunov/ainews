@@ -38,13 +38,30 @@ export interface Category {
   id: string;
   name: string;
   slug: string;
+  description?: string | null;
+  parentId?: string | null;
+  sortOrder?: number;
 }
 
 export interface Tag {
   id: string;
   name: string;
   slug: string;
+  description?: string | null;
   color?: string | null;
+}
+
+export interface CreateCategoryInput {
+  name: string;
+  slug?: string;
+  description?: string;
+  parentId?: string;
+}
+
+export interface CreateTagInput {
+  name: string;
+  description?: string;
+  color?: string;
 }
 
 export interface Article {
