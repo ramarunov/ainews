@@ -25,6 +25,7 @@ export class StorageService {
   private readonly bucket: string;
   private readonly publicUrl: string;
   private readonly cdnUrl: string;
+  private readonly serverSideEncryption: boolean;
 
   constructor(private readonly config: ConfigService) {
     this.s3 = new S3Client({
@@ -40,6 +41,10 @@ export class StorageService {
     this.bucket = config.get('S3_BUCKET', 'ainews-media');
     this.publicUrl = config.get('S3_PUBLIC_URL', '');
     this.cdnUrl = config.get('CDN_URL', '');
+    // MinIO (local/dev) rejects SSE without a configured KMS; real AWS S3
+    // supports AES256 SSE with no extra setup. Off by default so local dev
+    // works out of the box; set S3_SERVER_SIDE_ENCRYPTION=true in production.
+    this.serverSideEncryption = config.get('S3_SERVER_SIDE_ENCRYPTION', 'false') === 'true';
   }
 
   /**
@@ -63,8 +68,7 @@ export class StorageService {
       Key: key,
       Body: buffer,
       ContentType: options.contentType,
-      // Server-side encryption
-      ServerSideEncryption: 'AES256',
+      ...(this.serverSideEncryption && { ServerSideEncryption: 'AES256' }),
       // Prevent caching of sensitive data
       CacheControl: 'public, max-age=31536000, immutable',
     });

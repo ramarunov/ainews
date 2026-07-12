@@ -47,6 +47,8 @@ export class SearchService {
           tags: tagNames,
           tagIds,
           publishedAt: article.publishedAt,
+          createdAt: article.createdAt,
+          updatedAt: article.updatedAt,
           language: article.language,
         },
         refresh: true,
@@ -80,11 +82,22 @@ export class SearchService {
     const from = (Math.max(1, page) - 1) * take;
 
     try {
-      const filterClauses: any[] = [{ term: { organizationId } }];
-      if (filters.categoryId) filterClauses.push({ term: { categoryId: filters.categoryId } });
-      if (filters.tagId) filterClauses.push({ term: { tagIds: filters.tagId } });
-      if (filters.authorId) filterClauses.push({ term: { authorId: filters.authorId } });
-      if (filters.status) filterClauses.push({ term: { status: filters.status } });
+      // These fields are dynamically mapped by OpenSearch as analyzed `text`
+      // (with a `.keyword` sub-field) since no explicit index mapping is
+      // created. A `term` query against the bare field name matches
+      // individual analyzed tokens, not the original string — for a UUID
+      // like organizationId that means it never matches anything, silently
+      // zeroing out every search result. Query the `.keyword` sub-field for
+      // exact-value filters instead.
+      const filterClauses: any[] = [
+        { term: { 'organizationId.keyword': organizationId } },
+      ];
+      if (filters.categoryId)
+        filterClauses.push({ term: { 'categoryId.keyword': filters.categoryId } });
+      if (filters.tagId) filterClauses.push({ term: { 'tagIds.keyword': filters.tagId } });
+      if (filters.authorId)
+        filterClauses.push({ term: { 'authorId.keyword': filters.authorId } });
+      if (filters.status) filterClauses.push({ term: { 'status.keyword': filters.status } });
 
       const response = await this.opensearch.search({
         index: ARTICLES_INDEX,
@@ -132,7 +145,7 @@ export class SearchService {
           query: {
             bool: {
               must: [{ match_phrase_prefix: { title: prefix } }],
-              filter: [{ term: { organizationId } }],
+              filter: [{ term: { 'organizationId.keyword': organizationId } }],
             },
           },
           _source: ['title', 'slug'],

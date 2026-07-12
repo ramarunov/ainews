@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Newspaper, FolderTree, Tags, LogOut } from "lucide-react";
+import { Newspaper, FolderTree, Tags, Image as ImageIcon, Search, LogOut } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/lib/auth-store";
@@ -13,6 +13,8 @@ const navItems = [
   { href: "/articles", label: "Articles", icon: Newspaper },
   { href: "/categories", label: "Categories", icon: FolderTree },
   { href: "/tags", label: "Tags", icon: Tags },
+  { href: "/media", label: "Media", icon: ImageIcon },
+  { href: "/search", label: "Search", icon: Search },
 ];
 
 export default function DashboardLayout({

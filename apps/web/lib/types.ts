@@ -84,6 +84,82 @@ export interface MediaFile {
   id: string;
   filename: string;
   originalName: string;
+  mimeType: string;
   publicUrl: string | null;
   cdnUrl: string | null;
+  altText?: string | null;
+  folder: string;
+  createdAt: string;
+}
+
+export interface SeoScoreBreakdown {
+  total: number;
+  details: {
+    keywordInTitle: number;
+    keywordInFirstParagraph: number;
+    keywordDensity: number;
+    metaDescription: number;
+    headingStructure: number;
+    wordCount: number;
+    internalLinks: number;
+    imageAltText: number;
+    urlStructure: number;
+    schemaMarkup: number;
+    readability: number;
+  };
+  recommendations: string[];
+}
+
+export interface GeoScore {
+  total: number;
+  breakdown: {
+    llmReadability: number;
+    semanticRichness: number;
+    entityCoverage: number;
+    evidence: number;
+    qaCoverage: number;
+    citationFriendliness: number;
+  };
+  structuredSummary?: string;
+  keyClaims: string[];
+  entitiesCovered: string[];
+  questionsAnswered: string[];
+  recommendations: string[];
+}
+
+export interface QualityScoreResult {
+  overall: number;
+  breakdown: {
+    writingQuality: number;
+    factualAccuracy: number;
+    seoOptimization: number;
+    geoOptimization: number;
+    completeness: number;
+    originality: number;
+  };
+  issues: string[];
+  recommendations: string[];
+  canPublish: boolean;
+}
+
+export interface HallucinationResult {
+  overallConfidence: number;
+  claims: Array<{
+    text: string;
+    confidence: number;
+    flag: "VERIFIED" | "LIKELY_TRUE" | "UNVERIFIED" | "VERIFY_REQUIRED" | "DISPUTED";
+    reason: string;
+  }>;
+  recommendation: "SAFE_TO_PUBLISH" | "REVIEW_BEFORE_PUBLISH" | "DO_NOT_PUBLISH";
+}
+
+export interface ExtractedEntity {
+  text: string;
+  type: "PERSON" | "ORGANIZATION" | "LOCATION" | "DATE" | "PRODUCT" | "EVENT" | "OTHER";
+  confidence: number;
+}
+
+export interface FaqItem {
+  question: string;
+  answer: string;
 }

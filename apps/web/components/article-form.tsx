@@ -7,7 +7,7 @@ import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Loader2, Upload } from "lucide-react";
+import { Loader2, Upload, ImagePlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,14 +23,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { useCategories, useTags } from "@/hooks/use-taxonomy";
 import { useMediaFile, useUploadMedia } from "@/hooks/use-media";
 import { useCreateArticle, useUpdateArticle } from "@/hooks/use-articles";
 import { usePublishArticle } from "@/hooks/use-articles";
 import { ApiError } from "@/lib/api-client";
-import type { Article } from "@/lib/types";
+import type { Article, MediaFile } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { SeoPanel } from "@/components/seo-panel";
+import { GeoPanel } from "@/components/geo-panel";
+import { AiToolsPanel } from "@/components/ai-tools-panel";
+import { MediaPickerDialog } from "@/components/media-picker-dialog";
 
 const articleSchema = z.object({
   title: z.string().min(10, "Title must be at least 10 characters").max(500),
@@ -68,6 +73,7 @@ export function ArticleForm({ article }: { article?: Article }) {
   const [uploadedImagePreview, setUploadedImagePreview] = useState<
     string | undefined
   >(undefined);
+  const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
   const featuredImagePreview =
     uploadedImagePreview ??
     existingFeaturedImage?.publicUrl ??
@@ -78,6 +84,8 @@ export function ArticleForm({ article }: { article?: Article }) {
     register,
     handleSubmit,
     control,
+    watch,
+    setValue,
     formState: { errors },
   } = useForm<ArticleFormValues>({
     resolver: zodResolver(articleSchema),
@@ -92,6 +100,11 @@ export function ArticleForm({ article }: { article?: Article }) {
       isFeatured: article?.isFeatured ?? false,
     },
   });
+
+  const liveTitle = watch("title");
+  const liveContent = watch("content");
+  const liveExcerpt = watch("excerpt");
+  const liveSlug = watch("slug");
 
   const [categoryValue, setCategoryValue] = useState<string | undefined>(
     article?.primaryCategoryId ?? undefined,
@@ -114,6 +127,11 @@ export function ArticleForm({ article }: { article?: Article }) {
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Upload failed");
     }
+  };
+
+  const handleMediaPick = (media: MediaFile) => {
+    setFeaturedImageId(media.id);
+    setUploadedImagePreview(media.publicUrl ?? media.cdnUrl ?? undefined);
   };
 
   const buildPayload = (values: ArticleFormValues) => ({
@@ -202,112 +220,180 @@ export function ArticleForm({ article }: { article?: Article }) {
 
         <div className="flex flex-col gap-4">
           <Card>
-            <CardContent className="flex flex-col gap-4 pt-6">
-              <div className="flex flex-col gap-2">
-                <Label>Category</Label>
-                <Select
-                  value={categoryValue}
-                  onValueChange={(v) => setCategoryValue(v ?? undefined)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories?.data.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <CardContent className="pt-6">
+              <Tabs defaultValue="details">
+                <TabsList className="w-full">
+                  <TabsTrigger value="details">Details</TabsTrigger>
+                  <TabsTrigger value="seo">SEO</TabsTrigger>
+                  <TabsTrigger value="geo">GEO</TabsTrigger>
+                  <TabsTrigger value="ai">AI Tools</TabsTrigger>
+                </TabsList>
 
-              <div className="flex flex-col gap-2">
-                <Label>Tags</Label>
-                <div className="flex flex-wrap gap-2">
-                  {tags?.data.map((tag) => (
-                    <Badge
-                      key={tag.id}
-                      variant={
-                        selectedTagIds.includes(tag.id) ? "default" : "outline"
-                      }
-                      className="cursor-pointer select-none"
-                      onClick={() => toggleTag(tag.id)}
+                <TabsContent value="details" className="flex flex-col gap-4 pt-4">
+                  <div className="flex flex-col gap-2">
+                    <Label>Category</Label>
+                    <Select
+                      value={categoryValue}
+                      onValueChange={(v) => setCategoryValue(v ?? undefined)}
                     >
-                      {tag.name}
-                    </Badge>
-                  ))}
-                  {tags?.data.length === 0 && (
-                    <p className="text-sm text-muted-foreground">No tags yet</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <Label>Featured image</Label>
-                {featuredImagePreview && (
-                  <div className="relative aspect-video w-full overflow-hidden rounded-md border">
-                    <Image
-                      src={featuredImagePreview}
-                      alt=""
-                      fill
-                      className="object-cover"
-                      unoptimized
-                    />
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {categories?.data.map((cat) => (
+                          <SelectItem key={cat.id} value={cat.id}>
+                            {cat.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                )}
-                <label
-                  className={cn(
-                    "flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed py-3 text-sm text-muted-foreground hover:bg-muted",
-                  )}
-                >
-                  {uploadMedia.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Upload className="h-4 w-4" />
-                  )}
-                  Upload image
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleFileChange}
-                  />
-                </label>
-              </div>
 
-              <div className="flex items-center gap-2">
-                <Controller
-                  name="isBreaking"
-                  control={control}
-                  render={({ field }) => (
-                    <Checkbox
-                      id="isBreaking"
-                      checked={field.value}
-                      onCheckedChange={(v) => field.onChange(!!v)}
+                  <div className="flex flex-col gap-2">
+                    <Label>Tags</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {tags?.data.map((tag) => (
+                        <Badge
+                          key={tag.id}
+                          variant={
+                            selectedTagIds.includes(tag.id) ? "default" : "outline"
+                          }
+                          className="cursor-pointer select-none"
+                          onClick={() => toggleTag(tag.id)}
+                        >
+                          {tag.name}
+                        </Badge>
+                      ))}
+                      {tags?.data.length === 0 && (
+                        <p className="text-sm text-muted-foreground">No tags yet</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    <Label>Featured image</Label>
+                    {featuredImagePreview && (
+                      <div className="relative aspect-video w-full overflow-hidden rounded-md border">
+                        <Image
+                          src={featuredImagePreview}
+                          alt=""
+                          fill
+                          className="object-cover"
+                          unoptimized
+                        />
+                      </div>
+                    )}
+                    <div className="flex gap-2">
+                      <label
+                        className={cn(
+                          "flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed py-3 text-sm text-muted-foreground hover:bg-muted",
+                        )}
+                      >
+                        {uploadMedia.isPending ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Upload className="h-4 w-4" />
+                        )}
+                        Upload
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleFileChange}
+                        />
+                      </label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => setMediaPickerOpen(true)}
+                      >
+                        <ImagePlus className="h-4 w-4" />
+                        Library
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Controller
+                      name="isBreaking"
+                      control={control}
+                      render={({ field }) => (
+                        <Checkbox
+                          id="isBreaking"
+                          checked={field.value}
+                          onCheckedChange={(v) => field.onChange(!!v)}
+                        />
+                      )}
                     />
-                  )}
-                />
-                <Label htmlFor="isBreaking" className="font-normal">
-                  Breaking news
-                </Label>
-              </div>
-              <div className="flex items-center gap-2">
-                <Controller
-                  name="isFeatured"
-                  control={control}
-                  render={({ field }) => (
-                    <Checkbox
-                      id="isFeatured"
-                      checked={field.value}
-                      onCheckedChange={(v) => field.onChange(!!v)}
+                    <Label htmlFor="isBreaking" className="font-normal">
+                      Breaking news
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Controller
+                      name="isFeatured"
+                      control={control}
+                      render={({ field }) => (
+                        <Checkbox
+                          id="isFeatured"
+                          checked={field.value}
+                          onCheckedChange={(v) => field.onChange(!!v)}
+                        />
+                      )}
                     />
+                    <Label htmlFor="isFeatured" className="font-normal">
+                      Featured
+                    </Label>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="seo" className="pt-4">
+                  {isEditing ? (
+                    <SeoPanel
+                      articleId={article.id}
+                      title={liveTitle}
+                      content={liveContent ?? ""}
+                      slug={liveSlug ?? ""}
+                    />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Save this article as a draft first to unlock SEO tools.
+                    </p>
                   )}
-                />
-                <Label htmlFor="isFeatured" className="font-normal">
-                  Featured
-                </Label>
-              </div>
+                </TabsContent>
+
+                <TabsContent value="geo" className="pt-4">
+                  {isEditing ? (
+                    <GeoPanel
+                      articleId={article.id}
+                      title={liveTitle}
+                      content={liveContent ?? ""}
+                    />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Save this article as a draft first to unlock GEO analysis.
+                    </p>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="ai" className="pt-4">
+                  {isEditing ? (
+                    <AiToolsPanel
+                      articleId={article.id}
+                      title={liveTitle}
+                      content={liveContent ?? ""}
+                      excerpt={liveExcerpt ?? ""}
+                      onSetTitle={(t) => setValue("title", t)}
+                      onInsertContent={(c) => setValue("content", c)}
+                    />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      Save this article as a draft first to unlock AI tools.
+                    </p>
+                  )}
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
 
@@ -321,6 +407,12 @@ export function ArticleForm({ article }: { article?: Article }) {
           </div>
         </div>
       </div>
+
+      <MediaPickerDialog
+        open={mediaPickerOpen}
+        onOpenChange={setMediaPickerOpen}
+        onSelect={handleMediaPick}
+      />
     </form>
   );
 }
