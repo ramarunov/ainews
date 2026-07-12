@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import slugify from 'slugify';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { withOrgTransaction } from '../../infrastructure/prisma/rls-extension';
 import { CreateTagDto, UpdateTagDto, TagQueryDto } from './dto/tag.dto';
 
 @Injectable()
@@ -150,10 +151,10 @@ export class TagsService {
   async remove(id: string, organizationId: string) {
     await this.findOne(id, organizationId);
 
-    await this.prisma.$transaction([
-      this.prisma.articleTag.deleteMany({ where: { tagId: id } }),
-      this.prisma.tag.update({ where: { id }, data: { deletedAt: new Date() } }),
-    ]);
+    await withOrgTransaction(this.prisma, async (tx) => {
+      await tx.articleTag.deleteMany({ where: { tagId: id } });
+      await tx.tag.update({ where: { id }, data: { deletedAt: new Date() } });
+    });
 
     this.eventEmitter.emit('tag.deleted', {
       tagId: id,

@@ -43,6 +43,7 @@ import { SystemSettingsModule } from './modules/system-settings/system-settings.
 import { configValidationSchema } from './config/config.validation';
 import { AuditLogService } from './common/audit/audit-log.service';
 import { AuditInterceptor } from './common/audit/audit.interceptor';
+import { OrgContextInterceptor } from './common/interceptors/org-context.interceptor';
 
 @Module({
   imports: [
@@ -177,6 +178,9 @@ import { AuditInterceptor } from './common/audit/audit.interceptor';
   ],
   providers: [
     AuditLogService,
+    // Order matters: OrgContextInterceptor must run first so its RLS
+    // context wraps AuditInterceptor's own downstream audit-log write too.
+    { provide: APP_INTERCEPTOR, useClass: OrgContextInterceptor },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],
 })

@@ -14,7 +14,13 @@ generator client {
 
 datasource db {
   provider   = "postgresql"
+  // Runtime connection — the non-superuser `ainews_app` role Row-Level
+  // Security actually applies to. Postgres superusers unconditionally
+  // bypass every RLS policy, so the app must never run queries as `ainews`.
   url        = env("DATABASE_URL")
+  // Migrations need DDL privileges (CREATE TABLE/ALTER TABLE/etc.), so
+  // `prisma migrate`/`db push` connect as the `ainews` superuser instead.
+  directUrl  = env("DIRECT_DATABASE_URL")
   extensions = [uuidOssp(map: "uuid-ossp"), vector, pgTrgm(map: "pg_trgm"), unaccent]
 }
 

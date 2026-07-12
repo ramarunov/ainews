@@ -13,6 +13,7 @@
         "test:watch": "jest --watch",
         "test:cov": "jest --coverage",
         "test:e2e": "jest --config ./test/jest-e2e.json",
+        "test:integration": "jest --config ./test/jest-integration.json --runInBand",
         "db:migrate": "prisma migrate dev",
         "db:deploy": "prisma migrate deploy",
         "db:seed": "ts-node prisma/seed.ts",

@@ -18,8 +18,12 @@ describe('TagsService', () => {
       articleTag: {
         deleteMany: jest.fn(),
       },
-      $transaction: jest.fn().mockResolvedValue([]),
     };
+    // withOrgTransaction(this.prisma, cb) calls prisma.$transaction(cb) when
+    // there's no active RLS org context (as in every unit test here, which
+    // runs outside the request-scoped interceptor) — invoke the callback
+    // with the same mock as `tx` so its own calls are observable below.
+    prisma.$transaction = jest.fn((cb: any) => cb(prisma));
     eventEmitter = { emit: jest.fn() };
     service = new TagsService(prisma, eventEmitter);
   });
@@ -76,7 +80,6 @@ describe('TagsService', () => {
       const result = await service.remove('tag-1', 'org-1');
 
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-      expect(prisma.$transaction.mock.calls[0][0]).toHaveLength(2);
       expect(prisma.articleTag.deleteMany).toHaveBeenCalledWith({ where: { tagId: 'tag-1' } });
       expect(eventEmitter.emit).toHaveBeenCalledWith(
         'tag.deleted',

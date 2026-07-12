@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { withOrgTransaction } from '../../infrastructure/prisma/rls-extension';
 import { InstallThemeDto } from './dto/theme.dto';
 
 @Injectable()
@@ -44,7 +45,7 @@ export class ThemesService {
   async activate(id: string, organizationId: string) {
     await this.findOne(id, organizationId);
 
-    return this.prisma.$transaction(async (tx) => {
+    return withOrgTransaction(this.prisma, async (tx) => {
       await tx.theme.updateMany({
         where: { organizationId, id: { not: id } },
         data: { isActive: false },

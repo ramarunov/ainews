@@ -5,6 +5,7 @@ import slugify from 'slugify';
 import DOMPurify from 'isomorphic-dompurify';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { withOrgTransaction } from '../../infrastructure/prisma/rls-extension';
 import { CreateArticleDto, UpdateArticleDto, ArticleQueryDto } from './dto/article.dto';
 
 const ALLOWED_CONTENT_TAGS = [
@@ -374,19 +375,19 @@ export class ArticlesService {
       country?: string;
     },
   ) {
-    await this.prisma.$transaction([
-      this.prisma.articleView.create({
+    await withOrgTransaction(this.prisma, async (tx) => {
+      await tx.articleView.create({
         data: {
           articleId: id,
           organizationId,
           ...viewData,
         },
-      }),
-      this.prisma.article.update({
+      });
+      await tx.article.update({
         where: { id },
         data: { viewCount: { increment: 1 } },
-      }),
-    ]);
+      });
+    });
   }
 
   // ─── Private Helpers ──────────────────────────────────────────────────────

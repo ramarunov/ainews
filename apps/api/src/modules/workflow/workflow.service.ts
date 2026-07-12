@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import slugify from 'slugify';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { withOrgTransaction } from '../../infrastructure/prisma/rls-extension';
 import {
   CreateWorkflowDto,
   UpdateWorkflowDto,
@@ -100,14 +101,14 @@ export class WorkflowService {
   async reorderStages(workflowId: string, stageIds: string[], organizationId: string) {
     await this.findOneWorkflow(workflowId, organizationId, false);
 
-    await this.prisma.$transaction(
-      stageIds.map((id, index) =>
-        this.prisma.workflowStage.update({
+    await withOrgTransaction(this.prisma, async (tx) => {
+      for (const [index, id] of stageIds.entries()) {
+        await tx.workflowStage.update({
           where: { id, workflowId },
           data: { sortOrder: index },
-        }),
-      ),
-    );
+        });
+      }
+    });
 
     return this.findOneWorkflow(workflowId, organizationId, true);
   }
@@ -138,8 +139,8 @@ export class WorkflowService {
       throw new NotFoundException('Workflow stage not found');
     }
 
-    const [assignment] = await this.prisma.$transaction([
-      this.prisma.articleAssignment.create({
+    const assignment = await withOrgTransaction(this.prisma, async (tx) => {
+      const created = await tx.articleAssignment.create({
         data: {
           articleId,
           stageId,
@@ -148,12 +149,13 @@ export class WorkflowService {
           dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
           note: dto.note,
         },
-      }),
-      this.prisma.article.update({
+      });
+      await tx.article.update({
         where: { id: articleId },
         data: { assignedTo: assigneeId, workflowStageId: stageId },
-      }),
-    ]);
+      });
+      return created;
+    });
 
     this.eventEmitter.emit('workflow.assigned', {
       articleId,

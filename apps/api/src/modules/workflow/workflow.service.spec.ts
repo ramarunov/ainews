@@ -37,6 +37,11 @@ describe('WorkflowService', () => {
       },
       $transaction: jest.fn(),
     };
+    // withOrgTransaction(this.prisma, cb) calls prisma.$transaction(cb) when
+    // there's no active RLS org context (as in every unit test here, which
+    // runs outside the request-scoped interceptor) — invoke the callback
+    // with the same mock as `tx` so its own calls are observable below.
+    prisma.$transaction.mockImplementation((cb: any) => cb(prisma));
     eventEmitter = { emit: jest.fn() };
     service = new WorkflowService(prisma, eventEmitter);
   });
@@ -93,13 +98,20 @@ describe('WorkflowService', () => {
   describe('reorderStages', () => {
     it('updates every stage sortOrder inside one transaction, in the given order', async () => {
       jest.spyOn(service, 'findOneWorkflow').mockResolvedValue({ id: 'wf-1' } as any);
-      prisma.$transaction.mockResolvedValue([]);
+      prisma.workflowStage.update.mockResolvedValue({});
 
       await service.reorderStages('wf-1', ['stage-b', 'stage-a'], 'org-1');
 
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
-      const updateCalls = prisma.$transaction.mock.calls[0][0];
-      expect(updateCalls).toHaveLength(2);
+      expect(prisma.workflowStage.update).toHaveBeenCalledTimes(2);
+      expect(prisma.workflowStage.update).toHaveBeenNthCalledWith(1, {
+        where: { id: 'stage-b', workflowId: 'wf-1' },
+        data: { sortOrder: 0 },
+      });
+      expect(prisma.workflowStage.update).toHaveBeenNthCalledWith(2, {
+        where: { id: 'stage-a', workflowId: 'wf-1' },
+        data: { sortOrder: 1 },
+      });
     });
   });
 
@@ -126,7 +138,8 @@ describe('WorkflowService', () => {
     it('creates the assignment and updates the article in one transaction, then emits workflow.assigned', async () => {
       prisma.article.findFirst.mockResolvedValue({ id: 'article-1' });
       prisma.workflowStage.findFirst = jest.fn().mockResolvedValue({ id: 'stage-1' });
-      prisma.$transaction.mockResolvedValue([{ id: 'assignment-1' }, {}]);
+      prisma.articleAssignment.create.mockResolvedValue({ id: 'assignment-1' });
+      prisma.article.update.mockResolvedValue({});
 
       const result = await service.assignArticle(
         'article-1',
