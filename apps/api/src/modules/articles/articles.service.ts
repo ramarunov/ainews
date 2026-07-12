@@ -2,9 +2,21 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ArticleStatus, Prisma } from '@prisma/client';
 import slugify from 'slugify';
+import DOMPurify from 'isomorphic-dompurify';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { CreateArticleDto, UpdateArticleDto, ArticleQueryDto } from './dto/article.dto';
+
+const ALLOWED_CONTENT_TAGS = [
+  'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'p', 'br', 'hr',
+  'strong', 'b', 'em', 'i', 's', 'u', 'code', 'mark',
+  'a', 'img',
+  'ul', 'ol', 'li',
+  'blockquote', 'pre',
+  'table', 'thead', 'tbody', 'tr', 'th', 'td',
+];
+const ALLOWED_CONTENT_ATTR = ['href', 'src', 'alt', 'title', 'target', 'rel'];
 
 @Injectable()
 export class ArticlesService {
@@ -17,7 +29,8 @@ export class ArticlesService {
 
   async create(dto: CreateArticleDto, authorId: string, organizationId: string) {
     const slug = await this.generateSlug(dto.slug ?? dto.title, organizationId);
-    const wordCount = this.countWords(dto.content ?? '');
+    const sanitizedContent = this.sanitizeContent(dto.content ?? '');
+    const wordCount = this.countWords(sanitizedContent);
     const readingTime = Math.ceil(wordCount / 200); // ~200 WPM
 
     const article = await this.prisma.article.create({
@@ -29,7 +42,7 @@ export class ArticlesService {
         subtitle: dto.subtitle,
         slug,
         excerpt: dto.excerpt,
-        content: dto.content ?? '',
+        content: sanitizedContent,
         contentJson: dto.contentJson as Prisma.InputJsonValue,
         wordCount,
         readingTime,
@@ -209,7 +222,8 @@ export class ArticlesService {
       slug = await this.generateSlug(dto.slug, organizationId, id);
     }
 
-    const content = dto.content ?? existing.content;
+    const content =
+      dto.content !== undefined ? this.sanitizeContent(dto.content) : existing.content;
     const wordCount = this.countWords(content);
     const readingTime = Math.ceil(wordCount / 200);
 
@@ -416,6 +430,17 @@ export class ArticlesService {
       .trim()
       .split(' ')
       .filter(Boolean).length;
+  }
+
+  // Strict allowlist matching exactly what the Tiptap editor's StarterKit +
+  // link/image extensions can produce — strips <script>, event handler
+  // attributes (onerror, onclick, ...), <iframe>, and anything else not on
+  // the list, per SECURITY.md's XSS prevention requirement.
+  private sanitizeContent(html: string): string {
+    return DOMPurify.sanitize(html, {
+      ALLOWED_TAGS: ALLOWED_CONTENT_TAGS,
+      ALLOWED_ATTR: ALLOWED_CONTENT_ATTR,
+    });
   }
 
   private async createRevision(

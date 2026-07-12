@@ -1,3 +1,11 @@
+/**
+ * @jest-environment jsdom
+ *
+ * articles.service.ts imports isomorphic-dompurify, which requires a real
+ * `window` (via jsdom) when running outside a browser. The rest of this
+ * suite (and the rest of the backend's tests) run under the default `node`
+ * environment; this override is scoped to this one file only.
+ */
 import { NotFoundException } from '@nestjs/common';
 import { ArticleStatus } from '@prisma/client';
 import { ArticlesService } from './articles.service';
@@ -82,6 +90,39 @@ describe('ArticlesService', () => {
           data: expect.objectContaining({ slug: 'hello-world-1' }),
         }),
       );
+    });
+
+    it('strips <script> tags and event-handler attributes from content before storing', async () => {
+      prisma.article.findFirst.mockResolvedValue(null);
+      prisma.article.create.mockResolvedValue({ id: 'article-3', title: 'Safe Title', content: '' });
+
+      await service.create(
+        {
+          title: 'Safe Title',
+          content:
+            '<p>Hello <img src="x.png" onerror="alert(1)">world</p><script>alert(document.cookie)</script>',
+        } as any,
+        'author-1',
+        'org-1',
+      );
+
+      const storedContent = prisma.article.create.mock.calls[0][0].data.content;
+      expect(storedContent).not.toContain('<script');
+      expect(storedContent).not.toContain('onerror');
+      expect(storedContent).toContain('<p>Hello');
+      expect(storedContent).toContain('<img src="x.png"');
+    });
+
+    it('preserves ordinary formatting HTML unchanged', async () => {
+      prisma.article.findFirst.mockResolvedValue(null);
+      prisma.article.create.mockResolvedValue({ id: 'article-4', title: 'Formatted', content: '' });
+      const formatted =
+        '<h2>Heading</h2><p>Some <strong>bold</strong> and <a href="https://example.com">a link</a>.</p><ul><li>one</li></ul>';
+
+      await service.create({ title: 'Formatted', content: formatted } as any, 'author-1', 'org-1');
+
+      const storedContent = prisma.article.create.mock.calls[0][0].data.content;
+      expect(storedContent).toBe(formatted);
     });
   });
 
@@ -225,6 +266,22 @@ describe('ArticlesService', () => {
 
       expect(prisma.articleTag.deleteMany).toHaveBeenCalled();
       expect(prisma.articleTag.createMany).not.toHaveBeenCalled();
+    });
+
+    it('sanitizes new content on update, but leaves already-stored content alone when not provided', async () => {
+      await service.update(
+        'article-1',
+        { content: '<p>ok</p><script>alert(1)</script>' } as any,
+        'author-1',
+        'org-1',
+      );
+      const firstCallContent = prisma.article.update.mock.calls[0][0].data.content;
+      expect(firstCallContent).toBe('<p>ok</p>');
+
+      prisma.article.update.mockClear();
+      await service.update('article-1', { excerpt: 'no content field here' } as any, 'author-1', 'org-1');
+      const secondCallContent = prisma.article.update.mock.calls[0][0].data.content;
+      expect(secondCallContent).toBe(existingArticle.content); // untouched, not re-sanitized
     });
   });
 

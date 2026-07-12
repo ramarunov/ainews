@@ -32,6 +32,7 @@ import { usePublishArticle } from "@/hooks/use-articles";
 import { ApiError } from "@/lib/api-client";
 import type { Article, MediaFile } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { RichTextEditor } from "@/components/rich-text-editor";
 import { SeoPanel } from "@/components/seo-panel";
 import { GeoPanel } from "@/components/geo-panel";
 import { AiToolsPanel } from "@/components/ai-tools-panel";
@@ -212,7 +213,13 @@ export function ArticleForm({ article }: { article?: Article }) {
               </div>
               <div className="flex flex-col gap-2">
                 <Label htmlFor="content">Content</Label>
-                <Textarea id="content" rows={16} {...register("content")} />
+                <Controller
+                  name="content"
+                  control={control}
+                  render={({ field }) => (
+                    <RichTextEditor content={field.value ?? ""} onChange={field.onChange} />
+                  )}
+                />
               </div>
             </CardContent>
           </Card>
