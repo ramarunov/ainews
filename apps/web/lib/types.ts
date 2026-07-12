@@ -163,3 +163,13 @@ export interface FaqItem {
   question: string;
   answer: string;
 }
+
+export interface AuditLogEntry {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  ipAddress: string | null;
+  createdAt: string;
+  user: { id: string; displayName?: string | null; email: string } | null;
+}

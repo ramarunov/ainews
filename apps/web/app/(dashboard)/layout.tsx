@@ -3,10 +3,10 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Newspaper, FolderTree, Tags, Image as ImageIcon, Search, LogOut } from "lucide-react";
+import { Newspaper, FolderTree, Tags, Image as ImageIcon, Search, History, LogOut } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { useAuthStore } from "@/lib/auth-store";
+import { hasPermission, useAuthStore } from "@/lib/auth-store";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -67,6 +67,18 @@ export default function DashboardLayout({
               {label}
             </Link>
           ))}
+          {hasPermission(user, "audit:read") && (
+            <Link
+              href="/activity"
+              className={cn(
+                "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-muted",
+                pathname.startsWith("/activity") && "bg-muted text-foreground",
+              )}
+            >
+              <History className="h-4 w-4" />
+              Activity
+            </Link>
+          )}
         </nav>
         <div className="border-t p-3">
           <Button

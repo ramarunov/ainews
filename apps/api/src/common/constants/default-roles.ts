@@ -34,6 +34,7 @@ export const ALL_PERMISSIONS = [
   ...PLUGINS_ALL,
   ...THEMES_ALL,
   ...WEBHOOKS_ALL,
+  'audit:read',
 ];
 
 export const DEFAULT_ROLES: DefaultRoleDefinition[] = [

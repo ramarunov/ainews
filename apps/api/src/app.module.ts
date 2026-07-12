@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { EventEmitterModule } from '@nestjs/event-emitter';
@@ -35,8 +36,11 @@ import { AIModule } from './modules/ai/ai.module';
 import { SeoModule } from './modules/seo/seo.module';
 import { GeoModule } from './modules/geo/geo.module';
 import { NewsIntelligenceModule } from './modules/news-intelligence/news-intelligence.module';
+import { AuditModule } from './modules/audit/audit.module';
 
 import { configValidationSchema } from './config/config.validation';
+import { AuditLogService } from './common/audit/audit-log.service';
+import { AuditInterceptor } from './common/audit/audit.interceptor';
 
 @Module({
   imports: [
@@ -163,6 +167,13 @@ import { configValidationSchema } from './config/config.validation';
     SeoModule,
     GeoModule,
     NewsIntelligenceModule,
+
+    // ─── Audit ───────────────────────────────────────────────────────────────
+    AuditModule,
+  ],
+  providers: [
+    AuditLogService,
+    { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
   ],
 })
 export class AppModule {}
