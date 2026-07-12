@@ -91,6 +91,29 @@ export interface Article {
   publishedAt?: string | null;
 }
 
+export interface PublicArticleSeo {
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  canonicalUrl?: string | null;
+  ogTitle?: string | null;
+  ogDescription?: string | null;
+  ogImageUrl?: string | null;
+}
+
+export interface PublicArticle {
+  id: string;
+  title: string;
+  subtitle?: string | null;
+  slug: string;
+  excerpt?: string | null;
+  content?: string | null;
+  publishedAt?: string | null;
+  primaryAuthor?: { displayName?: string | null } | null;
+  primaryCategory?: Category | null;
+  articleTags?: { tag: Tag }[];
+  seoData?: PublicArticleSeo | null;
+}
+
 export interface CreateArticleInput {
   title: string;
   subtitle?: string;

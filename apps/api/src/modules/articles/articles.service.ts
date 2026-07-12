@@ -186,7 +186,7 @@ export class ArticlesService {
   async findBySlug(slug: string, organizationId: string) {
     const article = await this.prisma.article.findFirst({
       where: { slug, organizationId, deletedAt: null },
-      include: this.defaultIncludes(),
+      include: { ...this.defaultIncludes(), seoData: true },
     });
 
     if (!article) {
