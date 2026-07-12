@@ -107,6 +107,7 @@
     "@types/passport-google-oauth20": "^2.0.14",
     "@types/qrcode": "^1.5.5",
     "@types/uuid": "^9.0.8",
+    "@types/jest": "^29.5.12",
     "dotenv": "^16.4.5",
     "@typescript-eslint/eslint-plugin": "^7.11.0",
     "@typescript-eslint/parser": "^7.11.0",

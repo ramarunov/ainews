@@ -225,7 +225,8 @@ Return ONLY the title text, no quotes or explanation.`,
     // Keyword density (10 points)
     const wordCount = text.split(/\s+/).filter(Boolean).length;
     if (keyword && wordCount > 0) {
-      const keywordCount = (text.match(new RegExp(keyword, 'g')) ?? []).length;
+      const escapedKeyword = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const keywordCount = (text.match(new RegExp(escapedKeyword, 'g')) ?? []).length;
       const density = (keywordCount / wordCount) * 100;
       if (density >= 0.5 && density <= 3.0) {
         details.keywordDensity = 10;
@@ -255,7 +256,6 @@ Return ONLY the title text, no quotes or explanation.`,
     }
 
     // Heading structure (10 points)
-    const h1Count = (content.match(/<h1/gi) ?? []).length;
     const h2Count = (content.match(/<h2/gi) ?? []).length;
     if (h2Count >= 2) {
       details.headingStructure = 10;

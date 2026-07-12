@@ -19,8 +19,8 @@ export class SeoController {
   @ApiOperation({ summary: 'Generate full SEO data for article' })
   async generateSeo(
     @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: { siteUrl: string; focusKeyword?: string },
-    @CurrentUser() user: any,
+    @Body() _dto: { siteUrl: string; focusKeyword?: string },
+    @CurrentUser() _user: any,
   ) {
     // In production, fetch article from DB and pass it
     return { message: 'SEO generation queued', articleId: id };

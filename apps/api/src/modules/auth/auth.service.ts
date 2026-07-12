@@ -19,10 +19,8 @@ import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { REDIS_CLIENT } from '../../infrastructure/redis/redis.module';
 import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
-import { LoginDto } from './dto/login.dto';
 import { DEFAULT_ROLES } from '../../common/constants/default-roles';
 
-const REFRESH_TOKEN_PREFIX = 'refresh:';
 const LOGIN_ATTEMPTS_PREFIX = 'login_attempts:';
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION = 900; // 15 minutes in seconds
@@ -189,7 +187,6 @@ export class AuthService {
       .digest('hex');
     const family = randomBytes(16).toString('hex');
 
-    const refreshExpiresIn = this.config.get('JWT_REFRESH_EXPIRES_IN', '7d');
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
 

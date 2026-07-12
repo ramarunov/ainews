@@ -4,7 +4,7 @@ import {
   IsArray,
   MaxLength,
 } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UploadMediaDto {
   @ApiPropertyOptional({ description: 'Folder path to store the file under', example: 'media' })

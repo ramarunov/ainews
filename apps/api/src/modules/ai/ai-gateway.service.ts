@@ -184,7 +184,9 @@ export class AIGatewayService {
       if (jsonMatch) {
         try {
           return JSON.parse(jsonMatch[1]) as T;
-        } catch {}
+        } catch {
+          // fall through to the error below
+        }
       }
       throw new Error(`AI returned invalid JSON: ${content.substring(0, 200)}`);
     }

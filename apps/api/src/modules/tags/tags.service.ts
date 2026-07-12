@@ -179,6 +179,7 @@ export class TagsService {
     let slug = base;
     let counter = 1;
 
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       const existing = await this.prisma.tag.findFirst({
         where: {

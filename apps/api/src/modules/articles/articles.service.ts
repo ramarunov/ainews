@@ -1,9 +1,4 @@
-import {
-  Injectable,
-  NotFoundException,
-  ForbiddenException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ArticleStatus, Prisma } from '@prisma/client';
 import slugify from 'slugify';
@@ -324,7 +319,7 @@ export class ArticlesService {
   // ─── Delete (Soft) ─────────────────────────────────────────────────────────
 
   async remove(id: string, userId: string, organizationId: string) {
-    const article = await this.findOne(id, organizationId);
+    await this.findOne(id, organizationId);
 
     await this.prisma.article.update({
       where: { id },
@@ -395,6 +390,7 @@ export class ArticlesService {
     let slug = base;
     let counter = 1;
 
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       const existing = await this.prisma.article.findFirst({
         where: {

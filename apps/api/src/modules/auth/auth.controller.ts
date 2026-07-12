@@ -5,14 +5,12 @@ import {
   Body,
   UseGuards,
   Req,
-  Res,
   HttpCode,
   HttpStatus,
-  Patch,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { Request, Response } from 'express';
+import { Request } from 'express';
 
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';

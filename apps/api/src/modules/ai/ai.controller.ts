@@ -137,7 +137,6 @@ export class AIController {
   async generateMetaDescription(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: { content: string; focusKeyword?: string },
-    @CurrentUser() user: any,
   ) {
     const metaDescription = await this.aiWriter.generateMetaDescription(
       dto.content,
