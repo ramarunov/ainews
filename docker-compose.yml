@@ -1,0 +1,166 @@
+version: "3.9"
+
+services:
+  # ─── PostgreSQL 16 with pgvector ───────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: ainews_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ainews_db
+      POSTGRES_USER: ainews
+      POSTGRES_PASSWORD: strongpassword
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ainews -d ainews_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ainews_network
+
+  # ─── Redis 7 ────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: ainews_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ainews_network
+
+  # ─── OpenSearch ─────────────────────────────────────────────────────────────
+  opensearch:
+    image: opensearchproject/opensearch:2.13.0
+    container_name: ainews_opensearch
+    restart: unless-stopped
+    environment:
+      - cluster.name=ainews-cluster
+      - node.name=ainews-node
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+      - DISABLE_SECURITY_PLUGIN=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    ports:
+      - "9200:9200"
+      - "9600:9600"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - ainews_network
+
+  # ─── OpenSearch Dashboards ──────────────────────────────────────────────────
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.13.0
+    container_name: ainews_dashboards
+    restart: unless-stopped
+    environment:
+      - OPENSEARCH_HOSTS=["http://opensearch:9200"]
+      - DISABLE_SECURITY_DASHBOARDS_PLUGIN=true
+    ports:
+      - "5601:5601"
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    networks:
+      - ainews_network
+
+  # ─── MinIO (S3-compatible Object Storage) ───────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: ainews_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9002:9000"
+      - "9003:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - ainews_network
+
+  # ─── MinIO Bucket Init ──────────────────────────────────────────────────────
+  minio-init:
+    image: minio/mc:latest
+    container_name: ainews_minio_init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      /usr/bin/mc mb myminio/ainews-media --ignore-existing;
+      /usr/bin/mc policy set public myminio/ainews-media;
+      exit 0;
+      "
+    networks:
+      - ainews_network
+
+  # ─── Mailhog (SMTP for development) ─────────────────────────────────────────
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: ainews_mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - ainews_network
+
+  # ─── Redis Insight (Redis GUI) ──────────────────────────────────────────────
+  redis-insight:
+    image: redislabs/redisinsight:latest
+    container_name: ainews_redis_insight
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    volumes:
+      - redis_insight_data:/db
+    depends_on:
+      - redis
+    networks:
+      - ainews_network
+
+volumes:
+  postgres_data:
+  redis_data:
+  opensearch_data:
+  minio_data:
+  redis_insight_data:
+
+networks:
+  ainews_network:
+    driver: bridge

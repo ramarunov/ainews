@@ -1,0 +1,918 @@
+// =============================================================================
+// Prisma Schema — AI News CMS Enterprise
+// PostgreSQL 16 + pgvector
+// =============================================================================
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions", "relationJoins"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [uuidOssp(map: "uuid-ossp"), vector, pgTrgm(map: "pg_trgm"), unaccent]
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum ArticleStatus {
+  DRAFT
+  IN_REVIEW
+  APPROVED
+  SCHEDULED
+  PUBLISHED
+  ARCHIVED
+  REJECTED
+}
+
+enum UserPlan {
+  FREE
+  STARTER
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+enum NewsItemStatus {
+  NEW
+  ANALYZED
+  DRAFTED
+  PUBLISHED
+  IGNORED
+}
+
+enum NewsSourceType {
+  RSS
+  ATOM
+  NEWSAPI
+  GNEWS
+  WEBSITE
+  MANUAL
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+  DOCUMENT
+  AUDIO
+}
+
+enum RedirectType {
+  PERMANENT   // 301
+  TEMPORARY   // 302
+  GONE        // 410
+}
+
+// =============================================================================
+// ORGANIZATIONS & USERS
+// =============================================================================
+
+model Organization {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name        String    @db.VarChar(255)
+  slug        String    @unique @db.VarChar(255)
+  domain      String?   @db.VarChar(255)
+  logoUrl     String?   @db.VarChar(500)
+  plan        UserPlan  @default(FREE)
+  settings    Json      @default("{}")
+  metadata    Json      @default("{}")
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  users        User[]
+  roles        Role[]
+  articles     Article[]
+  categories   Category[]
+  tags         Tag[]
+  mediaFiles   MediaFile[]
+  newsSources  NewsSource[]
+  newsItems    NewsItem[]
+  workflows    Workflow[]
+  plugins      Plugin[]
+  themes       Theme[]
+  redirects    Redirect[]
+  apiKeys      ApiKey[]
+  webhooks     Webhook[]
+  auditLogs    AuditLog[]
+
+  @@map("organizations")
+}
+
+model User {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId    String    @db.Uuid
+  email             String    @db.VarChar(255)
+  emailVerifiedAt   DateTime?
+  passwordHash      String?   @db.VarChar(255)
+  firstName         String    @db.VarChar(100)
+  lastName          String    @db.VarChar(100)
+  displayName       String?   @db.VarChar(200)
+  avatarUrl         String?   @db.VarChar(500)
+  bio               String?
+  timezone          String    @default("UTC") @db.VarChar(100)
+  locale            String    @default("en") @db.VarChar(20)
+  mfaEnabled        Boolean   @default(false)
+  mfaSecret         String?   @db.VarChar(255)
+  mfaBackupCodes    String[]
+  lastLoginAt       DateTime?
+  lastLoginIp       String?   @db.VarChar(45)
+  loginCount        Int       @default(0)
+  isActive          Boolean   @default(true)
+  isSuperadmin      Boolean   @default(false)
+  metadata          Json      @default("{}")
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  organization      Organization   @relation(fields: [organizationId], references: [id])
+  userRoles         UserRole[]
+  refreshTokens     RefreshToken[]
+  oauthAccounts     OauthAccount[]
+  apiKeys           ApiKey[]
+  articles          Article[]      @relation("PrimaryAuthor")
+  coAuthoredArticles ArticleAuthor[]
+  assignedArticles  Article[]      @relation("AssignedTo")
+  revisions         ArticleRevision[]
+  mediaFiles        MediaFile[]
+  assignments       ArticleAssignment[] @relation("AssignedTo")
+  assignedBy        ArticleAssignment[] @relation("AssignedBy")
+  editorialComments EditorialComment[]
+  notifications     Notification[]
+  auditLogs         AuditLog[]
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+  @@map("users")
+}
+
+model Role {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @db.Uuid
+  name           String   @db.VarChar(100)
+  slug           String   @db.VarChar(100)
+  description    String?
+  permissions    String[]
+  isSystem       Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  userRoles    UserRole[]
+
+  @@unique([organizationId, slug])
+  @@map("roles")
+}
+
+model UserRole {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String    @db.Uuid
+  roleId     String    @db.Uuid
+  grantedBy  String?   @db.Uuid
+  grantedAt  DateTime  @default(now())
+  expiresAt  DateTime?
+
+  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role       Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@map("user_roles")
+}
+
+model RefreshToken {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String    @db.Uuid
+  tokenHash   String    @unique @db.VarChar(255)
+  family      String    @db.Uuid
+  expiresAt   DateTime
+  revokedAt   DateTime?
+  revokeReason String?  @db.VarChar(100)
+  userAgent   String?
+  ipAddress   String?   @db.VarChar(45)
+  createdAt   DateTime  @default(now())
+
+  user        User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model ApiKey {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  userId         String    @db.Uuid
+  name           String    @db.VarChar(255)
+  keyPrefix      String    @db.VarChar(20)
+  keyHash        String    @unique @db.VarChar(255)
+  permissions    String[]
+  rateLimit      Int       @default(1000)
+  lastUsedAt     DateTime?
+  expiresAt      DateTime?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@map("api_keys")
+}
+
+model OauthAccount {
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String    @db.Uuid
+  provider     String    @db.VarChar(50)
+  providerId   String    @db.VarChar(255)
+  accessToken  String?
+  refreshToken String?
+  tokenExpires DateTime?
+  profile      Json      @default("{}")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user         User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerId])
+  @@map("oauth_accounts")
+}
+
+// =============================================================================
+// TAXONOMY
+// =============================================================================
+
+model Category {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId  String    @db.Uuid
+  parentId        String?   @db.Uuid
+  name            String    @db.VarChar(255)
+  slug            String    @db.VarChar(255)
+  description     String?
+  imageUrl        String?   @db.VarChar(500)
+  metaTitle       String?   @db.VarChar(255)
+  metaDescription String?   @db.VarChar(500)
+  seoData         Json      @default("{}")
+  sortOrder       Int       @default(0)
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  parent          Category?    @relation("CategoryChildren", fields: [parentId], references: [id])
+  children        Category[]   @relation("CategoryChildren")
+  articles        Article[]    @relation("PrimaryCategory")
+  articleCategories ArticleCategory[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+  @@map("categories")
+}
+
+model Tag {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  name           String    @db.VarChar(100)
+  slug           String    @db.VarChar(100)
+  description    String?
+  color          String?   @db.VarChar(7)
+  articleCount   Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  articleTags    ArticleTag[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+  @@map("tags")
+}
+
+// =============================================================================
+// ARTICLES
+// =============================================================================
+
+model Article {
+  id                String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId    String        @db.Uuid
+  primaryAuthorId   String        @db.Uuid
+  primaryCategoryId String?       @db.Uuid
+
+  // Content
+  title             String        @db.VarChar(500)
+  subtitle          String?       @db.VarChar(500)
+  slug              String        @db.VarChar(500)
+  excerpt           String?
+  content           String        @default("")
+  contentJson       Json?
+  wordCount         Int           @default(0)
+  readingTime       Int           @default(0)
+
+  // Status
+  status            ArticleStatus @default(DRAFT)
+  workflowStageId   String?       @db.Uuid
+  assignedTo        String?       @db.Uuid
+
+  // Publishing
+  publishedAt       DateTime?
+  scheduledAt       DateTime?
+
+  // Flags
+  isBreaking        Boolean       @default(false)
+  isFeatured        Boolean       @default(false)
+  isPremium         Boolean       @default(false)
+  isAiAssisted      Boolean       @default(false)
+
+  // Featured Image
+  featuredImageId   String?       @db.Uuid
+  featuredImageUrl  String?       @db.VarChar(500)
+  featuredImageAlt  String?       @db.VarChar(255)
+
+  // Language
+  language          String        @default("en") @db.VarChar(10)
+  translationOf     String?       @db.Uuid
+
+  // Source
+  sourceUrl         String?       @db.VarChar(1000)
+  sourceName        String?       @db.VarChar(255)
+  newsItemId        String?       @db.Uuid
+
+  // Versioning
+  currentRevisionId String?       @db.Uuid
+  revisionCount     Int           @default(0)
+
+  // Stats
+  viewCount         BigInt        @default(0)
+  shareCount        Int           @default(0)
+  commentCount      Int           @default(0)
+
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  deletedAt         DateTime?
+
+  organization      Organization  @relation(fields: [organizationId], references: [id])
+  primaryAuthor     User          @relation("PrimaryAuthor", fields: [primaryAuthorId], references: [id])
+  primaryCategory   Category?     @relation("PrimaryCategory", fields: [primaryCategoryId], references: [id])
+  assignedUser      User?         @relation("AssignedTo", fields: [assignedTo], references: [id])
+  featuredImage     MediaFile?    @relation(fields: [featuredImageId], references: [id])
+  translationParent Article?      @relation("Translations", fields: [translationOf], references: [id])
+  translations      Article[]     @relation("Translations")
+
+  revisions         ArticleRevision[]
+  articleTags       ArticleTag[]
+  articleCategories ArticleCategory[]
+  authors           ArticleAuthor[]
+  seoData           ArticleSeo?
+  geoData           ArticleGeo?
+  aiAnalyses        ArticleAiAnalysis[]
+  assignments       ArticleAssignment[]
+  editorialComments EditorialComment[]
+  views             ArticleView[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([primaryAuthorId])
+  @@index([primaryCategoryId])
+  @@index([organizationId, publishedAt(sort: Desc)])
+  @@index([scheduledAt])
+  @@map("articles")
+}
+
+model ArticleRevision {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  articleId     String   @db.Uuid
+  authorId      String   @db.Uuid
+  versionNumber Int
+  title         String   @db.VarChar(500)
+  content       String
+  contentJson   Json?
+  changeSummary String?  @db.VarChar(500)
+  createdAt     DateTime @default(now())
+
+  article       Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  author        User    @relation(fields: [authorId], references: [id])
+
+  @@unique([articleId, versionNumber])
+  @@map("article_revisions")
+}
+
+model ArticleTag {
+  articleId  String @db.Uuid
+  tagId      String @db.Uuid
+  sortOrder  Int    @default(0)
+
+  article    Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  tag        Tag     @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, tagId])
+  @@map("article_tags")
+}
+
+model ArticleCategory {
+  articleId   String  @db.Uuid
+  categoryId  String  @db.Uuid
+  isPrimary   Boolean @default(false)
+  sortOrder   Int     @default(0)
+
+  article     Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, categoryId])
+  @@map("article_categories")
+}
+
+model ArticleAuthor {
+  articleId String @db.Uuid
+  userId    String @db.Uuid
+  role      String @default("author") @db.VarChar(50)
+  sortOrder Int    @default(0)
+
+  article   Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([articleId, userId])
+  @@map("article_authors")
+}
+
+// =============================================================================
+// SEO & GEO
+// =============================================================================
+
+model ArticleSeo {
+  id                 String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  articleId          String   @unique @db.Uuid
+  metaTitle          String?  @db.VarChar(255)
+  metaDescription    String?  @db.VarChar(500)
+  canonicalUrl       String?  @db.VarChar(1000)
+  robots             String   @default("index,follow") @db.VarChar(100)
+  ogTitle            String?  @db.VarChar(255)
+  ogDescription      String?  @db.VarChar(500)
+  ogImageUrl         String?  @db.VarChar(500)
+  ogType             String   @default("article") @db.VarChar(50)
+  twitterCard        String   @default("summary_large_image") @db.VarChar(50)
+  twitterTitle       String?  @db.VarChar(255)
+  twitterDescription String?  @db.VarChar(500)
+  twitterImageUrl    String?  @db.VarChar(500)
+  schemaJsonld       Json     @default("{}")
+  focusKeyword       String?  @db.VarChar(255)
+  secondaryKeywords  String[]
+  seoScore           Int?
+  readabilityScore   Int?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  article            Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@map("article_seo")
+}
+
+model ArticleGeo {
+  id                    String                  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  articleId             String                  @unique @db.Uuid
+  llmReadabilityScore   Int?
+  semanticRichnessScore Int?
+  entityCoverageScore   Int?
+  evidenceScore         Int?
+  qaCoverageScore       Int?
+  citationFriendliness  Int?
+  geoTotalScore         Int?
+  structuredSummary     String?
+  keyClaims             Json                    @default("[]")
+  entitiesCovered       Json                    @default("[]")
+  questionsAnswered     Json                    @default("[]")
+  citations             Json                    @default("[]")
+  eeatSignals           Json                    @default("{}")
+  contentEmbedding      Unsupported("vector")?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  article               Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@map("article_geo")
+}
+
+model ArticleAiAnalysis {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  articleId    String   @db.Uuid
+  analysisType String   @db.VarChar(100)
+  provider     String   @db.VarChar(50)
+  model        String   @db.VarChar(100)
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  costUsd      Decimal  @default(0) @db.Decimal(10, 6)
+  result       Json     @default("{}")
+  confidence   Decimal? @db.Decimal(4, 3)
+  durationMs   Int?
+  createdAt    DateTime @default(now())
+
+  article      Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+
+  @@index([articleId])
+  @@map("article_ai_analyses")
+}
+
+// =============================================================================
+// MEDIA LIBRARY
+// =============================================================================
+
+model MediaFile {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  uploadedBy     String    @db.Uuid
+  filename       String    @db.VarChar(500)
+  originalName   String    @db.VarChar(500)
+  mimeType       String    @db.VarChar(100)
+  fileSize       BigInt
+  storageKey     String    @unique @db.VarChar(1000)
+  storageBucket  String    @db.VarChar(255)
+  publicUrl      String?   @db.VarChar(1000)
+  cdnUrl         String?   @db.VarChar(1000)
+  width          Int?
+  height         Int?
+  altText        String?   @db.VarChar(500)
+  caption        String?
+  variants       Json      @default("{}")
+  folder         String    @default("/") @db.VarChar(500)
+  tags           String[]
+  aiDescription  String?
+  aiTags         String[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  uploader       User         @relation(fields: [uploadedBy], references: [id])
+  articles       Article[]
+
+  @@index([organizationId])
+  @@map("media_files")
+}
+
+// =============================================================================
+// NEWS INTELLIGENCE
+// =============================================================================
+
+model NewsSource {
+  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId  String         @db.Uuid
+  name            String         @db.VarChar(255)
+  type            NewsSourceType
+  url             String         @db.VarChar(1000)
+  config          Json           @default("{}")
+  categoryHint    String?        @db.VarChar(255)
+  language        String         @default("en") @db.VarChar(10)
+  credibilityScore Int           @default(50)
+  isActive        Boolean        @default(true)
+  lastFetchedAt   DateTime?
+  fetchCount      Int            @default(0)
+  errorCount      Int            @default(0)
+  lastError       String?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  deletedAt       DateTime?
+
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  newsItems       NewsItem[]
+
+  @@index([organizationId])
+  @@map("news_sources")
+}
+
+model NewsItem {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String         @db.Uuid
+  sourceId       String         @db.Uuid
+  title          String         @db.VarChar(1000)
+  content        String?
+  excerpt        String?
+  url            String         @db.VarChar(2000)
+  urlHash        String         @db.VarChar(64)
+  authorName     String?        @db.VarChar(255)
+  sourceName     String?        @db.VarChar(255)
+  category       String?        @db.VarChar(255)
+  tags           String[]
+  language       String         @default("en") @db.VarChar(10)
+  entities       Json           @default("[]")
+  sentiment      String?        @db.VarChar(20)
+  clusterId      String?        @db.Uuid
+  isDuplicate    Boolean        @default(false)
+  duplicateOf    String?        @db.Uuid
+  status         NewsItemStatus @default(NEW)
+  articleId      String?        @db.Uuid
+  publishedAt    DateTime?
+  fetchedAt      DateTime       @default(now())
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  source         NewsSource   @relation(fields: [sourceId], references: [id])
+  cluster        NewsCluster? @relation(fields: [clusterId], references: [id])
+  duplicate      NewsItem?    @relation("DuplicateItems", fields: [duplicateOf], references: [id])
+  duplicates     NewsItem[]   @relation("DuplicateItems")
+
+  @@unique([organizationId, urlHash])
+  @@index([organizationId])
+  @@index([organizationId, status])
+  @@index([publishedAt(sort: Desc)])
+  @@map("news_items")
+}
+
+model NewsCluster {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @db.Uuid
+  title          String?  @db.VarChar(500)
+  summary        String?
+  itemCount      Int      @default(0)
+  trendScore     Decimal  @default(0) @db.Decimal(5, 2)
+  entities       Json     @default("[]")
+  firstSeenAt    DateTime @default(now())
+  lastUpdatedAt  DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  newsItems      NewsItem[]
+
+  @@map("news_clusters")
+}
+
+// =============================================================================
+// EDITORIAL WORKFLOW
+// =============================================================================
+
+model Workflow {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @db.Uuid
+  name           String   @db.VarChar(255)
+  description    String?
+  isDefault      Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization    @relation(fields: [organizationId], references: [id])
+  stages         WorkflowStage[]
+
+  @@map("workflows")
+}
+
+model WorkflowStage {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  workflowId   String   @db.Uuid
+  name         String   @db.VarChar(100)
+  slug         String   @db.VarChar(100)
+  description  String?
+  color        String?  @db.VarChar(7)
+  sortOrder    Int      @default(0)
+  requiresRole String?  @db.VarChar(100)
+  autoAssignTo String?  @db.Uuid
+  isTerminal   Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  workflow     Workflow            @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  assignments  ArticleAssignment[]
+
+  @@map("workflow_stages")
+}
+
+model ArticleAssignment {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  articleId   String    @db.Uuid
+  stageId     String    @db.Uuid
+  assignedTo  String    @db.Uuid
+  assignedBy  String    @db.Uuid
+  dueDate     DateTime?
+  note        String?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  article     Article       @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  stage       WorkflowStage @relation(fields: [stageId], references: [id])
+  assignee    User          @relation("AssignedTo", fields: [assignedTo], references: [id])
+  assigner    User          @relation("AssignedBy", fields: [assignedBy], references: [id])
+
+  @@map("article_assignments")
+}
+
+model EditorialComment {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  articleId  String    @db.Uuid
+  authorId   String    @db.Uuid
+  parentId   String?   @db.Uuid
+  content    String
+  selection  Json?
+  resolvedAt DateTime?
+  resolvedBy String?   @db.Uuid
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  article    Article           @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  author     User              @relation(fields: [authorId], references: [id])
+  parent     EditorialComment? @relation("CommentReplies", fields: [parentId], references: [id])
+  replies    EditorialComment[] @relation("CommentReplies")
+
+  @@index([articleId])
+  @@map("editorial_comments")
+}
+
+// =============================================================================
+// SEARCH & REDIRECTS
+// =============================================================================
+
+model Redirect {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String       @db.Uuid
+  fromPath       String       @db.VarChar(1000)
+  toUrl          String       @db.VarChar(2000)
+  statusCode     Int          @default(301)
+  hitCount       BigInt       @default(0)
+  lastHitAt      DateTime?
+  note           String?      @db.VarChar(500)
+  isActive       Boolean      @default(true)
+  createdBy      String?      @db.Uuid
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, fromPath])
+  @@index([organizationId, fromPath])
+  @@map("redirects")
+}
+
+// =============================================================================
+// ANALYTICS
+// =============================================================================
+
+model ArticleView {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  articleId      String   @db.Uuid
+  organizationId String   @db.Uuid
+  sessionId      String?  @db.VarChar(64)
+  userId         String?  @db.Uuid
+  referrer       String?  @db.VarChar(1000)
+  utmSource      String?  @db.VarChar(255)
+  utmMedium      String?  @db.VarChar(255)
+  utmCampaign    String?  @db.VarChar(255)
+  device         String?  @db.VarChar(50)
+  country        String?  @db.VarChar(2)
+  region         String?  @db.VarChar(100)
+  viewedAt       DateTime @default(now())
+
+  article        Article @relation(fields: [articleId], references: [id])
+
+  @@index([articleId, viewedAt(sort: Desc)])
+  @@index([organizationId, viewedAt(sort: Desc)])
+  @@map("article_views")
+}
+
+// =============================================================================
+// NOTIFICATIONS
+// =============================================================================
+
+model Notification {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @db.Uuid
+  type      String    @db.VarChar(100)
+  title     String    @db.VarChar(255)
+  body      String?
+  data      Json      @default("{}")
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+// =============================================================================
+// PLUGINS & THEMES
+// =============================================================================
+
+model Plugin {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @db.Uuid
+  name           String   @db.VarChar(255)
+  slug           String   @db.VarChar(255)
+  version        String   @db.VarChar(50)
+  description    String?
+  author         String?  @db.VarChar(255)
+  homepage       String?  @db.VarChar(500)
+  config         Json     @default("{}")
+  hooks          String[]
+  isActive       Boolean  @default(false)
+  installedAt    DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, slug])
+  @@map("plugins")
+}
+
+model Theme {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @db.Uuid
+  name           String   @db.VarChar(255)
+  slug           String   @db.VarChar(255)
+  version        String   @db.VarChar(50)
+  config         Json     @default("{}")
+  customCss      String?
+  isActive       Boolean  @default(false)
+  installedAt    DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, slug])
+  @@map("themes")
+}
+
+// =============================================================================
+// WEBHOOKS
+// =============================================================================
+
+model Webhook {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  name           String    @db.VarChar(255)
+  url            String    @db.VarChar(2000)
+  events         String[]
+  secretHash     String    @db.VarChar(255)
+  isActive       Boolean   @default(true)
+  lastTriggeredAt DateTime?
+  failureCount   Int       @default(0)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  deliveries     WebhookDelivery[]
+
+  @@map("webhooks")
+}
+
+model WebhookDelivery {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  webhookId   String   @db.Uuid
+  event       String   @db.VarChar(100)
+  payload     Json
+  statusCode  Int?
+  response    String?
+  duration    Int?
+  success     Boolean  @default(false)
+  attemptedAt DateTime @default(now())
+
+  webhook     Webhook @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+
+  @@index([webhookId])
+  @@map("webhook_deliveries")
+}
+
+// =============================================================================
+// AUDIT LOGS
+// =============================================================================
+
+model AuditLog {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String?  @db.Uuid
+  userId         String?  @db.Uuid
+  action         String   @db.VarChar(100)
+  entityType     String   @db.VarChar(100)
+  entityId       String?  @db.Uuid
+  beforeState    Json?
+  afterState     Json?
+  ipAddress      String?  @db.VarChar(45)
+  userAgent      String?
+  requestId      String?  @db.Uuid
+  createdAt      DateTime @default(now())
+
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  user           User?         @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@map("audit_logs")
+}
+
+// =============================================================================
+// SETTINGS
+// =============================================================================
+
+model Setting {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String   @db.Uuid
+  key            String   @db.VarChar(255)
+  value          Json
+  isPublic       Boolean  @default(false)
+  updatedBy      String?  @db.Uuid
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, key])
+  @@map("settings")
+}
