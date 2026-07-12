@@ -1,0 +1,39 @@
+# Assumes an ingress-nginx controller and cert-manager ClusterIssuer named
+# "letsencrypt-prod" are already installed on the cluster (per SAD.md
+# §8.2 — neither is created by this file). Replace both hostnames.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ainews
+  namespace: ainews-cms
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - app.example.com
+        - api.example.com
+      secretName: ainews-tls
+  rules:
+    - host: api.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: api
+                port:
+                  number: 4000
+    - host: app.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 3100

@@ -1,0 +1,87 @@
+# Non-sensitive configuration only. Anything that looks like a credential —
+# passwords, API keys, JWT/session/encryption secrets — belongs in a Secret
+# (see secret.example.yaml), never here: ConfigMaps are plaintext in etcd
+# and visible to anyone who can `kubectl get configmap -o yaml`.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ainews-config
+  namespace: ainews-cms
+data:
+  NODE_ENV: "production"
+  APP_NAME: "AI News CMS"
+  APP_URL: "https://app.example.com"
+  API_URL: "https://api.example.com"
+  PORT: "4000"
+
+  DATABASE_HOST: "postgres"
+  DATABASE_PORT: "5432"
+  DATABASE_NAME: "ainews_db"
+  DATABASE_SSL: "true"
+  DATABASE_POOL_MIN: "2"
+  DATABASE_POOL_MAX: "20"
+
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  REDIS_CACHE_TTL: "3600"
+
+  OPENSEARCH_URL: "http://opensearch:9200"
+  OPENSEARCH_INDEX_PREFIX: "ainews"
+
+  JWT_ACCESS_EXPIRES_IN: "15m"
+  JWT_REFRESH_EXPIRES_IN: "7d"
+  BCRYPT_ROUNDS: "12"
+
+  MFA_APP_NAME: "AI News CMS"
+  MFA_ISSUER: "ainews"
+
+  COOKIE_DOMAIN: "example.com"
+  COOKIE_SECURE: "true"
+
+  S3_REGION: "us-east-1"
+  S3_BUCKET: "ainews-media"
+  S3_SERVER_SIDE_ENCRYPTION: "true"
+
+  SMTP_HOST: "smtp.example.com"
+  SMTP_PORT: "587"
+  SMTP_SECURE: "true"
+  EMAIL_FROM: "noreply@example.com"
+  EMAIL_FROM_NAME: "AI News CMS"
+
+  AI_PRIMARY_PROVIDER: "openai"
+  AI_FALLBACK_PROVIDER: "anthropic"
+  OPENAI_DEFAULT_MODEL: "gpt-4o"
+  OPENAI_EMBEDDING_MODEL: "text-embedding-3-large"
+  GOOGLE_AI_DEFAULT_MODEL: "gemini-1.5-pro"
+  ANTHROPIC_DEFAULT_MODEL: "claude-3-5-sonnet-20241022"
+
+  RSS_FETCH_INTERVAL_MINUTES: "15"
+  RSS_MAX_ITEMS_PER_FEED: "50"
+  RSS_TIMEOUT_MS: "10000"
+
+  QUEUE_CONCURRENCY: "5"
+  QUEUE_RETRY_ATTEMPTS: "3"
+  QUEUE_RETRY_DELAY_MS: "5000"
+
+  RATE_LIMIT_WINDOW_MS: "60000"
+  RATE_LIMIT_MAX_REQUESTS: "100"
+  RATE_LIMIT_AI_MAX_REQUESTS: "20"
+
+  CORS_ORIGINS: "https://app.example.com"
+  HELMET_CSP: "true"
+
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+  PROMETHEUS_PORT: "9090"
+
+  WEBHOOK_TIMEOUT_MS: "5000"
+
+  FEATURE_AI_ENABLED: "true"
+  FEATURE_COMMENTS_ENABLED: "true"
+  FEATURE_ANALYTICS_ENABLED: "true"
+  FEATURE_NEWS_INTELLIGENCE: "true"
+  FEATURE_GEO_ENGINE: "true"
+  FEATURE_PLUGIN_SYSTEM: "true"
+
+  NEXT_PUBLIC_API_URL: "https://api.example.com/api/v1"

@@ -1,0 +1,25 @@
+# Run once per deploy, before rolling out a new `api` image, so schema
+# changes land before the new pods start serving traffic:
+#   kubectl apply -f migration-job.yaml
+#   kubectl wait --for=condition=complete job/api-migrate -n ainews-cms --timeout=120s
+#   kubectl delete job/api-migrate -n ainews-cms   # Job names must be unique on re-apply
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: api-migrate
+  namespace: ainews-cms
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: ainews-api:latest
+          command: ["node_modules/.bin/prisma", "migrate", "deploy"]
+          workingDir: /app/apps/api
+          envFrom:
+            - configMapRef:
+                name: ainews-config
+            - secretRef:
+                name: ainews-secrets

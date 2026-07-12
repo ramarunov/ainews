@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+**/dist
+**/.next
+**/coverage
+**/.turbo
+.git
+.env
+**/.env
+*.md
+docs
+.claude
