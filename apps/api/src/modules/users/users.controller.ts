@@ -26,6 +26,7 @@ import {
   UpdateOwnProfileDto,
   UserQueryDto,
   AssignRoleDto,
+  EraseAccountDto,
 } from './dto/user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
@@ -56,6 +57,19 @@ export class UsersController {
   @ApiOperation({ summary: 'Update current user profile' })
   updateMe(@Body() dto: UpdateOwnProfileDto, @CurrentUser() user: any) {
     return this.usersService.updateOwnProfile(user.id, dto);
+  }
+
+  @Get('me/export')
+  @ApiOperation({ summary: 'Export all personal data for the current user (GDPR right to access/portability)' })
+  exportMe(@CurrentUser() user: any) {
+    return this.usersService.exportOwnData(user.id);
+  }
+
+  @Post('me/erase')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Erase/anonymize the current user's personal data (GDPR right to erasure)" })
+  eraseMe(@Body() dto: EraseAccountDto, @CurrentUser() user: any) {
+    return this.usersService.eraseOwnAccount(user.id, dto.password);
   }
 
   @Get(':id')

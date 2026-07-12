@@ -83,3 +83,13 @@ export class AssignRoleDto {
   @IsUUID()
   roleId: string;
 }
+
+export class EraseAccountDto {
+  @ApiProperty({
+    required: false,
+    description: 'Current password, required to confirm erasure unless the account has none (OAuth-only).',
+  })
+  @IsOptional()
+  @IsString()
+  password?: string;
+}
