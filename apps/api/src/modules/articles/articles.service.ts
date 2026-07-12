@@ -33,6 +33,7 @@ export class ArticlesService {
         contentJson: dto.contentJson as Prisma.InputJsonValue,
         wordCount,
         readingTime,
+        revisionCount: 1,
         language: dto.language ?? 'en',
         isBreaking: dto.isBreaking ?? false,
         isFeatured: dto.isFeatured ?? false,
