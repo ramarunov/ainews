@@ -46,7 +46,9 @@ async function main() {
 
   const admin = await prisma.user.upsert({
     where: { organizationId_email: { organizationId: org.id, email: adminEmail } },
-    update: {},
+    // isSuperadmin also set on update so re-running the seed against a DB
+    // created before this flag existed still grants it to the demo admin.
+    update: { isSuperadmin: true },
     create: {
       organizationId: org.id,
       email: adminEmail,
@@ -55,6 +57,7 @@ async function main() {
       lastName: 'Admin',
       displayName: 'Demo Admin',
       isActive: true,
+      isSuperadmin: true,
     },
   });
 

@@ -212,6 +212,7 @@ export class AuthService {
         displayName: user.displayName,
         avatarUrl: user.avatarUrl,
         organizationId: user.organizationId,
+        isSuperadmin: user.isSuperadmin,
         permissions,
       },
     };

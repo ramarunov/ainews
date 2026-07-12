@@ -4,6 +4,9 @@ import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+import { SystemSettingsService } from '../../system-settings/system-settings.service';
+import { AI_PROVIDER_SETTING_KEYS } from '../../system-settings/system-settings.constants';
+
 // ─── Shared Types ─────────────────────────────────────────────────────────────
 
 export interface Message {
@@ -67,13 +70,25 @@ function estimateCost(model: string, inputTokens: number, outputTokens: number):
 
 @Injectable()
 export class OpenAIProvider {
-  private readonly client: OpenAI;
   private readonly logger = new Logger(OpenAIProvider.name);
   readonly name: AIProviderName = 'openai';
 
-  constructor(private readonly config: ConfigService) {
-    this.client = new OpenAI({
-      apiKey: config.get('OPENAI_API_KEY', ''),
+  constructor(
+    private readonly config: ConfigService,
+    private readonly systemSettings: SystemSettingsService,
+  ) {}
+
+  // Resolved per call (not cached at boot) so a key entered via the
+  // superadmin System Settings dashboard takes effect immediately, without
+  // restarting the process. Falls back to the env var default if no
+  // platform-wide override has been configured.
+  private async getClient(): Promise<OpenAI> {
+    const dbKey = await this.systemSettings.getDecryptedValue(
+      AI_PROVIDER_SETTING_KEYS.openaiApiKey,
+    );
+
+    return new OpenAI({
+      apiKey: dbKey ?? this.config.get('OPENAI_API_KEY', ''),
       maxRetries: 2,
       timeout: 60_000,
     });
@@ -82,8 +97,9 @@ export class OpenAIProvider {
   async complete(request: CompletionRequest): Promise<CompletionResponse> {
     const model = request.model ?? this.config.get<string>('OPENAI_DEFAULT_MODEL', 'gpt-4o');
     const start = Date.now();
+    const client = await this.getClient();
 
-    const response = await this.client.chat.completions.create({
+    const response = await client.chat.completions.create({
       model,
       messages: request.messages.map((m) => ({
         role: m.role,
@@ -119,7 +135,8 @@ export class OpenAIProvider {
       'text-embedding-3-large',
     );
 
-    const response = await this.client.embeddings.create({
+    const client = await this.getClient();
+    const response = await client.embeddings.create({
       model,
       input: text.substring(0, 8000), // Limit input length
     });
@@ -141,12 +158,20 @@ export class OpenAIProvider {
 
 @Injectable()
 export class AnthropicProvider {
-  private readonly client: Anthropic;
   readonly name: AIProviderName = 'anthropic';
 
-  constructor(private readonly config: ConfigService) {
-    this.client = new Anthropic({
-      apiKey: config.get('ANTHROPIC_API_KEY', ''),
+  constructor(
+    private readonly config: ConfigService,
+    private readonly systemSettings: SystemSettingsService,
+  ) {}
+
+  private async getClient(): Promise<Anthropic> {
+    const dbKey = await this.systemSettings.getDecryptedValue(
+      AI_PROVIDER_SETTING_KEYS.anthropicApiKey,
+    );
+
+    return new Anthropic({
+      apiKey: dbKey ?? this.config.get('ANTHROPIC_API_KEY', ''),
       maxRetries: 2,
       timeout: 60_000,
     });
@@ -156,12 +181,13 @@ export class AnthropicProvider {
     const model = request.model ??
       this.config.get<string>('ANTHROPIC_DEFAULT_MODEL', 'claude-3-5-sonnet-20241022');
     const start = Date.now();
+    const client = await this.getClient();
 
     // Extract system message from messages array
     const systemMessage = request.messages.find((m) => m.role === 'system');
     const userMessages = request.messages.filter((m) => m.role !== 'system');
 
-    const response = await this.client.messages.create({
+    const response = await client.messages.create({
       model,
       system: systemMessage?.content,
       messages: userMessages.map((m) => ({
@@ -196,11 +222,19 @@ export class AnthropicProvider {
 
 @Injectable()
 export class GoogleAIProvider {
-  private readonly genAI: GoogleGenerativeAI;
   readonly name: AIProviderName = 'google';
 
-  constructor(private readonly config: ConfigService) {
-    this.genAI = new GoogleGenerativeAI(config.get('GOOGLE_AI_API_KEY', ''));
+  constructor(
+    private readonly config: ConfigService,
+    private readonly systemSettings: SystemSettingsService,
+  ) {}
+
+  private async getClient(): Promise<GoogleGenerativeAI> {
+    const dbKey = await this.systemSettings.getDecryptedValue(
+      AI_PROVIDER_SETTING_KEYS.googleAiApiKey,
+    );
+
+    return new GoogleGenerativeAI(dbKey ?? this.config.get('GOOGLE_AI_API_KEY', ''));
   }
 
   async complete(request: CompletionRequest): Promise<CompletionResponse> {
@@ -208,7 +242,8 @@ export class GoogleAIProvider {
       this.config.get<string>('GOOGLE_AI_DEFAULT_MODEL', 'gemini-1.5-pro');
     const start = Date.now();
 
-    const model = this.genAI.getGenerativeModel({ model: modelName });
+    const genAI = await this.getClient();
+    const model = genAI.getGenerativeModel({ model: modelName });
 
     const systemMessage = request.messages.find((m) => m.role === 'system');
     const userMessages = request.messages.filter((m) => m.role !== 'system');

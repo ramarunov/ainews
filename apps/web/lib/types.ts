@@ -25,7 +25,14 @@ export interface AuthUser {
   displayName?: string;
   avatarUrl?: string;
   organizationId: string;
+  isSuperadmin?: boolean;
   permissions: string[];
+}
+
+export interface AiProviderStatus {
+  openai: boolean;
+  anthropic: boolean;
+  google: boolean;
 }
 
 export interface AuthResponse {

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Newspaper, FolderTree, Tags, Image as ImageIcon, Search, History, UserCircle, LogOut } from "lucide-react";
+import { Newspaper, FolderTree, Tags, Image as ImageIcon, Search, History, UserCircle, LogOut, ShieldCheck } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { hasPermission, useAuthStore } from "@/lib/auth-store";
@@ -77,6 +77,18 @@ export default function DashboardLayout({
             >
               <History className="h-4 w-4" />
               Activity
+            </Link>
+          )}
+          {user?.isSuperadmin && (
+            <Link
+              href="/system-settings"
+              className={cn(
+                "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-muted",
+                pathname.startsWith("/system-settings") && "bg-muted text-foreground",
+              )}
+            >
+              <ShieldCheck className="h-4 w-4" />
+              System Settings
             </Link>
           )}
         </nav>

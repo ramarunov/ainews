@@ -8,9 +8,10 @@ import {
   AnthropicProvider,
   GoogleAIProvider,
 } from './providers/ai-providers';
+import { SystemSettingsModule } from '../system-settings/system-settings.module';
 
 @Module({
-  imports: [ConfigModule],
+  imports: [ConfigModule, SystemSettingsModule],
   providers: [
     OpenAIProvider,
     AnthropicProvider,

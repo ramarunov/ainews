@@ -38,6 +38,7 @@ import { SeoModule } from './modules/seo/seo.module';
 import { GeoModule } from './modules/geo/geo.module';
 import { NewsIntelligenceModule } from './modules/news-intelligence/news-intelligence.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { SystemSettingsModule } from './modules/system-settings/system-settings.module';
 
 import { configValidationSchema } from './config/config.validation';
 import { AuditLogService } from './common/audit/audit-log.service';
@@ -163,6 +164,7 @@ import { AuditInterceptor } from './common/audit/audit.interceptor';
     ThemesModule,
     WebhooksModule,
     HealthModule,
+    SystemSettingsModule,
 
     // ─── AI & Intelligence ───────────────────────────────────────────────────
     AIModule,

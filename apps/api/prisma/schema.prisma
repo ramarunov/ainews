@@ -920,3 +920,18 @@ model Setting {
   @@unique([organizationId, key])
   @@map("settings")
 }
+
+// Platform-wide config (as opposed to Setting, which is per-organization),
+// managed only by superadmins — e.g. AI provider API keys that apply to the
+// whole deployed instance. Values are stored pre-encrypted (via
+// EncryptionService) by the service layer; this table never holds plaintext
+// secrets.
+model SystemSetting {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  key       String   @unique @db.VarChar(255)
+  value     String   @db.Text
+  updatedBy String?  @db.Uuid
+  updatedAt DateTime @updatedAt
+
+  @@map("system_settings")
+}
