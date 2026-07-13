@@ -32,6 +32,22 @@ export class OrganizationsService {
     return organization;
   }
 
+  // ─── Roles ─────────────────────────────────────────────────────────────────
+
+  /**
+   * Powers the "assign role" picker in the Users admin UI — assignRole()/
+   * revokeRole() on UsersService already existed and take a roleId, but
+   * there was no way for the frontend to discover which role IDs exist
+   * for this organization until now.
+   */
+  async listRoles(organizationId: string) {
+    return this.prisma.role.findMany({
+      where: { organizationId },
+      select: { id: true, name: true, slug: true, description: true, isSystem: true },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   // ─── Update ────────────────────────────────────────────────────────────────
 
   async update(organizationId: string, dto: UpdateOrganizationDto) {

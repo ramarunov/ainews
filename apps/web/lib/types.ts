@@ -225,6 +225,27 @@ export interface OrgUser {
   lastName?: string | null;
 }
 
+export interface OrgRole {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  isSystem: boolean;
+}
+
+export interface OrgMember {
+  id: string;
+  email: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  displayName?: string | null;
+  isActive: boolean;
+  isSuperadmin: boolean;
+  lastLoginAt?: string | null;
+  createdAt: string;
+  userRoles: { role: { id: string; name: string; slug: string } }[];
+}
+
 export interface Workflow {
   id: string;
   name: string;

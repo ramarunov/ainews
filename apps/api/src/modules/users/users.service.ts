@@ -33,6 +33,9 @@ const SAFE_SELECT: Prisma.UserSelect = {
   createdAt: true,
   updatedAt: true,
   deletedAt: true,
+  userRoles: {
+    select: { role: { select: { id: true, name: true, slug: true } } },
+  },
 };
 
 @Injectable()

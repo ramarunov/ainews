@@ -37,6 +37,13 @@ export class OrganizationsController {
     return this.organizationsService.update(user.organizationId, dto);
   }
 
+  @Get('me/roles')
+  @RequirePermissions('users:read')
+  @ApiOperation({ summary: 'List roles available in the current organization' })
+  listRoles(@CurrentUser() user: any) {
+    return this.organizationsService.listRoles(user.organizationId);
+  }
+
   @Get(':id')
   @RequirePermissions('organizations:read')
   @ApiOperation({ summary: 'Get organization by ID (superadmin only for other orgs)' })

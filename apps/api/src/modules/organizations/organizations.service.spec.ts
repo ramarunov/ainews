@@ -12,6 +12,9 @@ describe('OrganizationsService', () => {
         findFirst: jest.fn(),
         update: jest.fn(),
       },
+      role: {
+        findMany: jest.fn(),
+      },
     };
     eventEmitter = { emit: jest.fn() };
     service = new OrganizationsService(prisma, eventEmitter);
@@ -38,6 +41,20 @@ describe('OrganizationsService', () => {
       prisma.organization.findFirst.mockResolvedValue(org);
 
       await expect(service.findCurrent('org-1')).resolves.toBe(org);
+    });
+  });
+
+  describe('listRoles', () => {
+    it('scopes the role list to this organization only', async () => {
+      const roles = [{ id: 'role-1', name: 'Admin', slug: 'admin' }];
+      prisma.role.findMany.mockResolvedValue(roles);
+
+      const result = await service.listRoles('org-1');
+
+      expect(prisma.role.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { organizationId: 'org-1' } }),
+      );
+      expect(result).toBe(roles);
     });
   });
 
