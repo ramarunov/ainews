@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Prisma } from '@prisma/client';
+import { ArticleStatus, Prisma } from '@prisma/client';
 import slugify from 'slugify';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
@@ -60,6 +60,69 @@ export class WorkflowService {
     }
 
     return workflow;
+  }
+
+  // ─── Board ─────────────────────────────────────────────────────────────────
+
+  private static readonly BOARD_CARD_SELECT = {
+    id: true,
+    title: true,
+    slug: true,
+    status: true,
+    workflowStageId: true,
+    updatedAt: true,
+    assignedUser: { select: { id: true, displayName: true, avatarUrl: true } },
+  } as const;
+
+  /**
+   * All articles currently sitting in each of this workflow's stages, plus
+   * a separate "unassigned" bucket of draft/in-review articles that have
+   * never entered the workflow yet — the board's source column for
+   * dragging a fresh article in for the first time.
+   */
+  async getBoard(workflowId: string, organizationId: string) {
+    // findOneWorkflow's return type is the base Workflow shape since
+    // `includeStages` is a runtime boolean TS can't narrow from — `true`
+    // here does guarantee `stages` is present on the actual result.
+    const workflow = (await this.findOneWorkflow(workflowId, organizationId, true)) as Prisma.WorkflowGetPayload<{
+      include: { stages: true };
+    }>;
+    const stageIds = workflow.stages.map((s) => s.id);
+
+    const [staged, unassigned] = await Promise.all([
+      this.prisma.article.findMany({
+        where: { organizationId, workflowStageId: { in: stageIds }, deletedAt: null },
+        select: WorkflowService.BOARD_CARD_SELECT,
+        orderBy: { updatedAt: 'desc' },
+      }),
+      this.prisma.article.findMany({
+        where: {
+          organizationId,
+          workflowStageId: null,
+          deletedAt: null,
+          status: { in: [ArticleStatus.DRAFT, ArticleStatus.IN_REVIEW] },
+        },
+        select: WorkflowService.BOARD_CARD_SELECT,
+        orderBy: { updatedAt: 'desc' },
+        take: 50,
+      }),
+    ]);
+
+    const articlesByStage = new Map<string, (typeof staged)[number][]>();
+    for (const article of staged) {
+      const list = articlesByStage.get(article.workflowStageId!) ?? [];
+      list.push(article);
+      articlesByStage.set(article.workflowStageId!, list);
+    }
+
+    return {
+      ...workflow,
+      stages: workflow.stages.map((stage) => ({
+        ...stage,
+        articles: articlesByStage.get(stage.id) ?? [],
+      })),
+      unassigned,
+    };
   }
 
   async updateWorkflow(id: string, dto: UpdateWorkflowDto, organizationId: string) {

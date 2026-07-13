@@ -21,6 +21,7 @@ describe('WorkflowService', () => {
       },
       article: {
         findFirst: jest.fn(),
+        findMany: jest.fn(),
         update: jest.fn(),
       },
       articleAssignment: {
@@ -66,6 +67,50 @@ describe('WorkflowService', () => {
       await expect(service.findOneWorkflow('wf-1', 'org-1')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('getBoard', () => {
+    it('groups staged articles under their own stage and includes an unassigned bucket', async () => {
+      prisma.workflow.findFirst.mockResolvedValue({
+        id: 'wf-1',
+        stages: [
+          { id: 'stage-draft', name: 'Draft', sortOrder: 0 },
+          { id: 'stage-review', name: 'Review', sortOrder: 1 },
+        ],
+      });
+      prisma.article.findMany
+        .mockResolvedValueOnce([
+          { id: 'a1', workflowStageId: 'stage-draft', title: 'A1' },
+          { id: 'a2', workflowStageId: 'stage-review', title: 'A2' },
+          { id: 'a3', workflowStageId: 'stage-draft', title: 'A3' },
+        ])
+        .mockResolvedValueOnce([{ id: 'a4', workflowStageId: null, title: 'A4 unassigned' }]);
+
+      const board = await service.getBoard('wf-1', 'org-1');
+
+      expect(board.stages[0].articles.map((a: any) => a.id)).toEqual(['a1', 'a3']);
+      expect(board.stages[1].articles.map((a: any) => a.id)).toEqual(['a2']);
+      expect(board.unassigned).toHaveLength(1);
+      expect(board.unassigned[0].id).toBe('a4');
+    });
+
+    it('gives every stage an empty array, not undefined, when it has no articles', async () => {
+      prisma.workflow.findFirst.mockResolvedValue({
+        id: 'wf-1',
+        stages: [{ id: 'stage-draft', name: 'Draft', sortOrder: 0 }],
+      });
+      prisma.article.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+      const board = await service.getBoard('wf-1', 'org-1');
+
+      expect(board.stages[0].articles).toEqual([]);
+    });
+
+    it('throws NotFoundException when the workflow does not belong to this org', async () => {
+      prisma.workflow.findFirst.mockResolvedValue(null);
+
+      await expect(service.getBoard('wf-1', 'org-1')).rejects.toThrow(NotFoundException);
     });
   });
 

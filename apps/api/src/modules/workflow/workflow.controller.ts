@@ -68,6 +68,13 @@ export class WorkflowController {
     return this.workflowService.updateWorkflow(id, dto, user.organizationId);
   }
 
+  @Get('workflows/:id/board')
+  @RequirePermissions('workflow:read')
+  @ApiOperation({ summary: 'Get the kanban board: articles grouped by stage, plus unassigned' })
+  getBoard(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
+    return this.workflowService.getBoard(id, user.organizationId);
+  }
+
   // ─── Stages ────────────────────────────────────────────────────────────────
 
   @Post('workflows/:id/stages')

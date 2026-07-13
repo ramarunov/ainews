@@ -211,6 +211,70 @@ export interface FaqItem {
   answer: string;
 }
 
+export interface WorkflowUser {
+  id: string;
+  displayName?: string | null;
+  avatarUrl?: string | null;
+}
+
+export interface OrgUser {
+  id: string;
+  email: string;
+  displayName?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+}
+
+export interface Workflow {
+  id: string;
+  name: string;
+  description?: string | null;
+  isDefault: boolean;
+  isActive: boolean;
+}
+
+export interface WorkflowStage {
+  id: string;
+  workflowId: string;
+  name: string;
+  slug: string;
+  color?: string | null;
+  sortOrder: number;
+  requiresRole?: string | null;
+  isTerminal: boolean;
+}
+
+export interface WorkflowBoardCard {
+  id: string;
+  title: string;
+  slug: string;
+  status: ArticleStatus;
+  workflowStageId: string | null;
+  updatedAt: string;
+  assignedUser?: WorkflowUser | null;
+}
+
+export interface WorkflowStageWithCards extends WorkflowStage {
+  articles: WorkflowBoardCard[];
+}
+
+export interface WorkflowBoard extends Workflow {
+  stages: WorkflowStageWithCards[];
+  unassigned: WorkflowBoardCard[];
+}
+
+export interface EditorialComment {
+  id: string;
+  articleId: string;
+  authorId: string;
+  parentId?: string | null;
+  content: string;
+  resolvedAt?: string | null;
+  createdAt: string;
+  author?: WorkflowUser;
+  replies: EditorialComment[];
+}
+
 export interface AuditLogEntry {
   id: string;
   action: string;
