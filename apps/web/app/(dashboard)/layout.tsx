@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Newspaper, FolderTree, Tags, Image as ImageIcon, Search, History, UserCircle, LogOut, ShieldCheck, KanbanSquare } from "lucide-react";
+import { Newspaper, FolderTree, Tags, Image as ImageIcon, Search, History, UserCircle, LogOut, ShieldCheck, KanbanSquare, Radio, BarChart3 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { hasPermission, useAuthStore } from "@/lib/auth-store";
@@ -77,6 +77,30 @@ export default function DashboardLayout({
             >
               <KanbanSquare className="h-4 w-4" />
               Workflow
+            </Link>
+          )}
+          {hasPermission(user, "news:read") && (
+            <Link
+              href="/news-intelligence"
+              className={cn(
+                "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-muted",
+                pathname.startsWith("/news-intelligence") && "bg-muted text-foreground",
+              )}
+            >
+              <Radio className="h-4 w-4" />
+              News Intelligence
+            </Link>
+          )}
+          {hasPermission(user, "analytics:read") && (
+            <Link
+              href="/analytics"
+              className={cn(
+                "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-muted",
+                pathname.startsWith("/analytics") && "bg-muted text-foreground",
+              )}
+            >
+              <BarChart3 className="h-4 w-4" />
+              Analytics
             </Link>
           )}
           {hasPermission(user, "audit:read") && (

@@ -17,6 +17,15 @@ function lowerFirst(value: string): string {
   return value.charAt(0).toLowerCase() + value.slice(1);
 }
 
+// $queryRawUnsafe/$executeRawUnsafe take a plain positional array
+// ([sql, ...values]) that must be spread. $queryRaw/$executeRaw (the
+// tagged-template forms, e.g. prisma.$queryRaw`...${x}...`) instead
+// receive ONE special Sql object as `args` — spreading that throws
+// "Spread syntax requires ...iterable[Symbol.iterator] to be a function",
+// since it isn't an array — confirmed by direct testing after this broke
+// AnalyticsService's dashboard query in production-shaped testing.
+const UNSAFE_RAW_OPERATIONS = new Set(['$queryRawUnsafe', '$executeRawUnsafe']);
+
 /**
  * Wraps every Prisma model operation so that, when an org context is active
  * (see org-context.ts), the call runs inside a short-lived transaction with
@@ -61,19 +70,17 @@ export function createRlsExtendedClient(basePrisma: PrismaClient) {
           // in org-context.ts for why: Prisma operations are lazy thenables,
           // and only awaiting them INSIDE this callback keeps their actual
           // execution within the tracked AsyncLocalStorage context.
-          return orgContextStorage.run({ ...ctx, inTransaction: true }, async () =>
-            // `model` is undefined for client-level raw operations
-            // ($queryRaw, $executeRaw, etc.), which aren't scoped to a
-            // specific model delegate — and `args` for those is a plain
-            // positional array ([sql, ...values]) that must be spread, not
-            // passed as one argument. When `model` is present, it's the
-            // PascalCase schema model name (e.g. "Article"), not the
-            // camelCase client property (e.g. "article") — both confirmed
-            // by direct testing against the extension's actual arguments.
-            model
-              ? (tx as any)[lowerFirst(model)][operation](args)
-              : (tx as any)[operation](...(args as unknown[])),
-          );
+          return orgContextStorage.run({ ...ctx, inTransaction: true }, async () => {
+            // `model` is present for ordinary model operations and is the
+            // PascalCase schema name (e.g. "Article"), not the camelCase
+            // client property (e.g. "article") — confirmed by direct
+            // testing against the extension's actual arguments.
+            if (model) return (tx as any)[lowerFirst(model)][operation](args);
+            if (UNSAFE_RAW_OPERATIONS.has(operation)) {
+              return (tx as any)[operation](...(args as unknown[]));
+            }
+            return (tx as any)[operation](args);
+          });
         });
       },
     },

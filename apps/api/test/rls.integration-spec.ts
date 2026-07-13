@@ -126,6 +126,21 @@ describe('Row-Level Security: tenant isolation (real Postgres)', () => {
     expect(rows[0].id).toBe(articleA.id);
   });
 
+  it('supports the tagged-template $queryRaw form too, not just $queryRawUnsafe', async () => {
+    // Regression test: $queryRaw (tagged template) passes a single Sql
+    // object as `args`, not a positional array like $queryRawUnsafe —
+    // spreading it unconditionally (an earlier version of the extension
+    // did) throws "Spread syntax requires ...iterable[Symbol.iterator] to
+    // be a function". Caught via AnalyticsService's dashboard query
+    // (which uses this exact tagged-template form) 500ing in live testing.
+    const rows = await runWithOrgContext(
+      orgA.id,
+      () => appClient.$queryRaw<{ id: string }[]>`SELECT id FROM articles WHERE id = ${articleA.id}::uuid`,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(articleA.id);
+  });
+
   it('blocks an insert that claims the wrong organizationId for the active context (WITH CHECK)', async () => {
     await expect(
       runWithOrgContext(orgA.id, () =>

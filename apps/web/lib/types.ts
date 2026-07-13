@@ -263,6 +263,55 @@ export interface WorkflowBoard extends Workflow {
   unassigned: WorkflowBoardCard[];
 }
 
+export type NewsSourceType = "RSS" | "ATOM" | "NEWSAPI" | "GNEWS" | "WEBSITE" | "MANUAL";
+export type NewsItemStatus = "NEW" | "ANALYZED" | "DRAFTED" | "PUBLISHED" | "IGNORED";
+
+export interface NewsSource {
+  id: string;
+  name: string;
+  type: NewsSourceType;
+  url: string;
+  categoryHint?: string | null;
+  language: string;
+  credibilityScore: number;
+  isActive: boolean;
+  lastFetchedAt?: string | null;
+  fetchCount: number;
+  errorCount: number;
+  lastError?: string | null;
+}
+
+export interface NewsItem {
+  id: string;
+  sourceId: string;
+  title: string;
+  excerpt?: string | null;
+  url: string;
+  authorName?: string | null;
+  sourceName?: string | null;
+  category?: string | null;
+  status: NewsItemStatus;
+  articleId?: string | null;
+  publishedAt?: string | null;
+  fetchedAt: string;
+}
+
+export interface AnalyticsTopArticle {
+  articleId: string;
+  views: number;
+  title: string | null;
+  slug: string | null;
+}
+
+export interface AnalyticsDashboard {
+  period: { days: number; since: string };
+  totalViews: number;
+  totalArticles: number;
+  publishedInPeriod: number;
+  topArticles: AnalyticsTopArticle[];
+  dailyViews: { date: string; views: number }[];
+}
+
 export interface EditorialComment {
   id: string;
   articleId: string;
