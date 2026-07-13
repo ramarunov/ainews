@@ -1,5 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Queue } from 'bull';
 import { NewsSourceType, NewsItemStatus, ArticleStatus, Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
 import Parser from 'rss-parser';
@@ -13,12 +15,19 @@ import {
   CreateNewsItemDto,
   NewsItemQueryDto,
 } from './dto/news-intelligence.dto';
+import { NEWS_INGESTION_QUEUE } from './news-intelligence.constants';
+
+export interface IngestSourceJobData {
+  sourceId: string;
+  organizationId: string;
+}
 
 @Injectable()
 export class NewsIntelligenceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    @InjectQueue(NEWS_INGESTION_QUEUE) private readonly ingestionQueue: Queue<IngestSourceJobData>,
   ) {}
 
   // ─── Sources ───────────────────────────────────────────────────────────────
@@ -93,6 +102,33 @@ export class NewsIntelligenceService {
   }
 
   // ─── Ingestion ─────────────────────────────────────────────────────────────
+
+  /**
+   * Manual "ingest now" trigger. Validates the source synchronously (so a
+   * bad ID still 404s immediately, not after a round-trip through the
+   * queue), then enqueues the actual fetch onto the same
+   * NewsIngestionProcessor the scheduled job uses — one code path for
+   * both triggers — and waits for it to finish so this keeps its original
+   * synchronous response shape ({itemsFound, itemsCreated, itemsSkipped}).
+   *
+   * Bull's job.finished() resolves/rejects with whatever the processor
+   * returned/threw, but a thrown NestJS exception loses its class identity
+   * once serialized through Redis and back — only .message survives. The
+   * upfront findOneSource() call preserves the correct 404 for a missing
+   * source; any other failure is deliberately re-wrapped as
+   * BadRequestException below to keep this endpoint's existing contract
+   * (400, not a generic 500) for bad feed URLs / fetch failures.
+   */
+  async enqueueAndAwaitIngest(sourceId: string, organizationId: string) {
+    await this.findOneSource(sourceId, organizationId);
+
+    const job = await this.ingestionQueue.add('ingest-source', { sourceId, organizationId });
+    try {
+      return await job.finished();
+    } catch (err: any) {
+      throw new BadRequestException(err?.message ?? 'Ingestion failed');
+    }
+  }
 
   async ingestSource(sourceId: string, organizationId: string) {
     const source = await this.findOneSource(sourceId, organizationId);

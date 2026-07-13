@@ -81,9 +81,9 @@ export class NewsIntelligenceController {
 
   @Post('sources/:id/ingest')
   @RequirePermissions('news:manage-sources')
-  @ApiOperation({ summary: 'Trigger ingestion for a news source' })
+  @ApiOperation({ summary: 'Trigger ingestion for a news source (queued via BullMQ)' })
   ingestSource(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
-    return this.newsIntelligenceService.ingestSource(id, user.organizationId);
+    return this.newsIntelligenceService.enqueueAndAwaitIngest(id, user.organizationId);
   }
 
   // ─── Items ─────────────────────────────────────────────────────────────────
