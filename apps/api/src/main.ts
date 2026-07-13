@@ -1,5 +1,5 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, VersioningType } from '@nestjs/common';
+import { ValidationPipe, VersioningType, RequestMethod } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { NestExpressApplication } from '@nestjs/platform-express';
@@ -7,6 +7,8 @@ import helmet from 'helmet';
 import compression from 'compression';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { AppModule } from './app.module';
+import { initSentry } from './infrastructure/sentry/sentry';
+import { SentryExceptionFilter } from './common/filters/sentry-exception.filter';
 
 // Prisma returns BigInt for columns like Article.viewCount / MediaFile.fileSize;
 // JSON.stringify can't serialize BigInt natively, so every response touching
@@ -18,6 +20,8 @@ import { AppModule } from './app.module';
 };
 
 async function bootstrap() {
+  const sentryEnabled = initSentry();
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
   });
@@ -25,6 +29,9 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const logger = app.get(WINSTON_MODULE_NEST_PROVIDER);
   app.useLogger(logger);
+  if (sentryEnabled) logger.log('Sentry error tracking enabled', 'Bootstrap');
+
+  app.useGlobalFilters(new SentryExceptionFilter());
 
   // ─── Security ─────────────────────────────────────────────────────────────
   app.use(
@@ -88,7 +95,13 @@ async function bootstrap() {
     prefix: 'v',
   });
 
-  app.setGlobalPrefix('api');
+  // /metrics stays unprefixed/unversioned (plain GET /metrics) — matches
+  // what Prometheus scrapers expect out of the box, and MetricsController
+  // already declares version: VERSION_NEUTRAL so it won't pick up the
+  // default API version either.
+  app.setGlobalPrefix('api', {
+    exclude: [{ path: 'metrics', method: RequestMethod.GET }],
+  });
 
   // ─── Swagger / OpenAPI ────────────────────────────────────────────────────
   if (configService.get('NODE_ENV') !== 'production') {

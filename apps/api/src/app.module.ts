@@ -40,11 +40,13 @@ import { NewsIntelligenceModule } from './modules/news-intelligence/news-intelli
 import { AuditModule } from './modules/audit/audit.module';
 import { SystemSettingsModule } from './modules/system-settings/system-settings.module';
 import { PublicSiteModule } from './modules/public-site/public-site.module';
+import { MetricsModule } from './modules/metrics/metrics.module';
 
 import { configValidationSchema } from './config/config.validation';
 import { AuditLogService } from './common/audit/audit-log.service';
 import { AuditInterceptor } from './common/audit/audit.interceptor';
 import { OrgContextInterceptor } from './common/interceptors/org-context.interceptor';
+import { MetricsInterceptor } from './modules/metrics/metrics.interceptor';
 
 @Module({
   imports: [
@@ -168,6 +170,7 @@ import { OrgContextInterceptor } from './common/interceptors/org-context.interce
     HealthModule,
     SystemSettingsModule,
     PublicSiteModule,
+    MetricsModule,
 
     // ─── AI & Intelligence ───────────────────────────────────────────────────
     AIModule,
@@ -184,6 +187,7 @@ import { OrgContextInterceptor } from './common/interceptors/org-context.interce
     // context wraps AuditInterceptor's own downstream audit-log write too.
     { provide: APP_INTERCEPTOR, useClass: OrgContextInterceptor },
     { provide: APP_INTERCEPTOR, useClass: AuditInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: MetricsInterceptor },
   ],
 })
 export class AppModule {}
