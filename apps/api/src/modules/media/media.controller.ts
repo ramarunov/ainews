@@ -88,6 +88,14 @@ export class MediaController {
     return this.mediaService.update(id, dto, user.organizationId);
   }
 
+  @Post(':id/generate-alt-text')
+  @RequirePermissions('media:write')
+  @ApiOperation({ summary: 'Generate alt text for an image with AI (MED-005)' })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  generateAltText(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
+    return this.mediaService.generateAltText(id, user.organizationId);
+  }
+
   @Delete(':id')
   @RequirePermissions('media:delete')
   @HttpCode(HttpStatus.OK)

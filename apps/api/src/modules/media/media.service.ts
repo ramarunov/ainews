@@ -6,6 +6,7 @@ import sharp from 'sharp';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { StorageService } from '../../infrastructure/storage/storage.service';
+import { AIWriterService } from '../ai/ai-writer.service';
 import { UpdateMediaDto, MediaQueryDto } from './dto/media.dto';
 
 const ALLOWED_MIME_PREFIXES = ['image/', 'video/', 'application/', 'audio/'];
@@ -16,6 +17,7 @@ export class MediaService {
     private readonly prisma: PrismaService,
     private readonly storageService: StorageService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly aiWriter: AIWriterService,
   ) {}
 
   // ─── Upload ────────────────────────────────────────────────────────────────
@@ -171,6 +173,26 @@ export class MediaService {
         ...(dto.tags !== undefined && { tags: dto.tags }),
       },
     });
+  }
+
+  // ─── AI Alt Text (MED-005) ──────────────────────────────────────────────────
+
+  async generateAltText(id: string, organizationId: string) {
+    const media = await this.findOne(id, organizationId);
+
+    if (!media.mimeType.startsWith('image/')) {
+      throw new BadRequestException('Alt text generation is only supported for images');
+    }
+    if (!media.publicUrl) {
+      throw new BadRequestException('This file has no publicly reachable URL to analyze');
+    }
+
+    const altText = await this.aiWriter.generateAltText(media.publicUrl, {
+      caption: media.caption ?? undefined,
+      organizationId,
+    });
+
+    return this.update(id, { altText }, organizationId);
   }
 
   // ─── Delete (Soft) ─────────────────────────────────────────────────────────

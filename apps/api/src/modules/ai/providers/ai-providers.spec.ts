@@ -73,6 +73,38 @@ describe('AI provider key resolution', () => {
     );
   });
 
+  it('OpenAIProvider attaches imageUrl to the last user message as a vision content part', async () => {
+    const createFn = jest.fn().mockResolvedValue({
+      choices: [{ message: { content: 'a dog on a beach' } }],
+      usage: {},
+    });
+    MockedOpenAI.prototype.chat = { completions: { create: createFn } } as any;
+
+    const provider = new OpenAIProvider(config, systemSettings);
+    await provider.complete({
+      messages: [
+        { role: 'system', content: 'Describe the image' },
+        { role: 'user', content: 'Write alt text' },
+      ],
+      imageUrl: 'https://cdn/photo.png',
+    });
+
+    expect(createFn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [
+          { role: 'system', content: 'Describe the image' },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'Write alt text' },
+              { type: 'image_url', image_url: { url: 'https://cdn/photo.png' } },
+            ],
+          },
+        ],
+      }),
+    );
+  });
+
   it('GoogleAIProvider prefers the System Settings key over the env var', async () => {
     systemSettings.getDecryptedValue.mockResolvedValue('db-google-key');
     MockedGoogleGenerativeAI.prototype.getGenerativeModel = jest.fn().mockReturnValue({

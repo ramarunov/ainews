@@ -2,11 +2,13 @@
 
 import { useRef, useState } from "react";
 import Image from "next/image";
-import { Loader2, Trash2, Upload } from "lucide-react";
+import { Loader2, Pencil, Sparkles, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import {
   Select,
@@ -16,8 +18,112 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useDeleteMedia, useMediaList, useUploadMedia } from "@/hooks/use-media";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  useDeleteMedia,
+  useGenerateAltText,
+  useMediaList,
+  useUpdateMedia,
+  useUploadMedia,
+} from "@/hooks/use-media";
 import { ApiError } from "@/lib/api-client";
+import type { MediaFile } from "@/lib/types";
+
+function EditMediaDialog({
+  media,
+  onOpenChange,
+}: {
+  media: MediaFile;
+  onOpenChange: (open: boolean) => void;
+}) {
+  // Keyed by media.id from the parent, so a fresh instance (and fresh
+  // initial state below) mounts whenever a different file is opened.
+  const [altText, setAltText] = useState(media.altText ?? "");
+  const [caption, setCaption] = useState(media.caption ?? "");
+  const updateMedia = useUpdateMedia();
+  const generateAltText = useGenerateAltText();
+  const isImage = media.mimeType.startsWith("image/");
+
+  const handleGenerate = async () => {
+    try {
+      const updated = await generateAltText.mutateAsync(media.id);
+      setAltText(updated.altText ?? "");
+      toast.success("Alt text generated");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to generate alt text");
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      await updateMedia.mutateAsync({ id: media.id, altText, caption });
+      toast.success("Media details saved");
+      onOpenChange(false);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to save");
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit media details</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="media-alt-text">Alt text</Label>
+              {isImage && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={generateAltText.isPending}
+                  onClick={handleGenerate}
+                >
+                  {generateAltText.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="h-3.5 w-3.5" />
+                  )}
+                  Generate with AI
+                </Button>
+              )}
+            </div>
+            <Textarea
+              id="media-alt-text"
+              value={altText}
+              onChange={(e) => setAltText(e.target.value)}
+              placeholder="Describe what's in the image for screen readers"
+              rows={2}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="media-caption">Caption</Label>
+            <Input
+              id="media-caption"
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              placeholder="Optional caption shown alongside the image"
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button onClick={handleSave} disabled={updateMedia.isPending}>
+            {updateMedia.isPending ? "Saving…" : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 const TYPE_OPTIONS = [
   { value: "ALL", label: "All types" },
@@ -30,6 +136,7 @@ export default function MediaLibraryPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [type, setType] = useState("ALL");
+  const [editingMedia, setEditingMedia] = useState<MediaFile | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data, isLoading, isError } = useMediaList({
@@ -160,15 +267,24 @@ export default function MediaLibraryPage() {
                       <p className="mt-1 truncate text-xs text-muted-foreground">
                         {media.originalName}
                       </p>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="icon"
-                        className="absolute top-1 right-1 opacity-0 transition-opacity group-hover:opacity-100"
-                        onClick={() => handleDelete(media.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                      <div className="absolute top-1 right-1 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="icon"
+                          onClick={() => setEditingMedia(media)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon"
+                          onClick={() => handleDelete(media.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
                   );
                 })}
@@ -201,6 +317,14 @@ export default function MediaLibraryPage() {
           )}
         </CardContent>
       </Card>
+
+      {editingMedia && (
+        <EditMediaDialog
+          key={editingMedia.id}
+          media={editingMedia}
+          onOpenChange={(open) => !open && setEditingMedia(null)}
+        />
+      )}
     </div>
   );
 }

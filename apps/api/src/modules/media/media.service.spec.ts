@@ -12,6 +12,7 @@ describe('MediaService', () => {
   let prisma: any;
   let storageService: any;
   let eventEmitter: any;
+  let aiWriter: any;
 
   const baseFile = (overrides: Partial<Express.Multer.File> = {}): Express.Multer.File =>
     ({
@@ -40,7 +41,8 @@ describe('MediaService', () => {
       delete: jest.fn().mockResolvedValue(undefined),
     };
     eventEmitter = { emit: jest.fn() };
-    service = new MediaService(prisma, storageService, eventEmitter);
+    aiWriter = { generateAltText: jest.fn() };
+    service = new MediaService(prisma, storageService, eventEmitter, aiWriter);
   });
 
   describe('upload', () => {
@@ -155,6 +157,59 @@ describe('MediaService', () => {
         expect.objectContaining({ mediaId: 'media-1' }),
       );
       expect(result).toEqual({ success: true, message: 'Media file deleted' });
+    });
+  });
+
+  describe('generateAltText', () => {
+    it('rejects a non-image file', async () => {
+      prisma.mediaFile.findFirst.mockResolvedValue({
+        id: 'media-1',
+        mimeType: 'application/pdf',
+      });
+
+      await expect(service.generateAltText('media-1', 'org-1')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(aiWriter.generateAltText).not.toHaveBeenCalled();
+    });
+
+    it('rejects a file with no public URL', async () => {
+      prisma.mediaFile.findFirst.mockResolvedValue({
+        id: 'media-1',
+        mimeType: 'image/png',
+        publicUrl: null,
+      });
+
+      await expect(service.generateAltText('media-1', 'org-1')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(aiWriter.generateAltText).not.toHaveBeenCalled();
+    });
+
+    it('generates alt text via AI and saves it', async () => {
+      prisma.mediaFile.findFirst.mockResolvedValue({
+        id: 'media-1',
+        mimeType: 'image/png',
+        publicUrl: 'https://cdn/photo.png',
+        caption: 'A press conference',
+      });
+      aiWriter.generateAltText.mockResolvedValue('A speaker at a podium addressing reporters');
+      prisma.mediaFile.update.mockResolvedValue({
+        id: 'media-1',
+        altText: 'A speaker at a podium addressing reporters',
+      });
+
+      const result = await service.generateAltText('media-1', 'org-1');
+
+      expect(aiWriter.generateAltText).toHaveBeenCalledWith('https://cdn/photo.png', {
+        caption: 'A press conference',
+        organizationId: 'org-1',
+      });
+      expect(prisma.mediaFile.update).toHaveBeenCalledWith({
+        where: { id: 'media-1' },
+        data: { altText: 'A speaker at a podium addressing reporters' },
+      });
+      expect(result.altText).toBe('A speaker at a podium addressing reporters');
     });
   });
 

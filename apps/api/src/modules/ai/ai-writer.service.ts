@@ -316,4 +316,23 @@ The image should be appropriate for a news article, not promotional or cartoon-l
       { temperature: 0.7, maxTokens: 256, analysisType: 'image_prompt' },
     );
   }
+
+  async generateAltText(
+    imageUrl: string,
+    context: { caption?: string; organizationId?: string } = {},
+  ): Promise<string> {
+    const systemPrompt = `You are an accessibility expert writing alt text for images on a news website.
+Describe only what is visibly present in the image, concisely (aim for under 125 characters, never over 250).
+Do not start with "Image of" or "Picture of". Do not invent names of people or places unless given in context.
+Return only the alt text itself — no quotes, no explanation, no trailing period.`;
+
+    const userPrompt = context.caption
+      ? `Write alt text for this image. Existing caption for context: "${context.caption}"`
+      : 'Write alt text for this image.';
+
+    return this.gateway.visionPrompt(systemPrompt, userPrompt, imageUrl, {
+      organizationId: context.organizationId,
+      analysisType: 'alt_text_generation',
+    });
+  }
 }

@@ -163,6 +163,45 @@ export class AIGatewayService {
   }
 
   /**
+   * Convenience: run a prompt with an image attached to the user message
+   * (vision). Only OpenAI currently understands `imageUrl` (see
+   * CompletionRequest) — always uncached, since two different images with
+   * identical prompt text must never collide on the same cache entry.
+   */
+  async visionPrompt(
+    systemPrompt: string,
+    userPrompt: string,
+    imageUrl: string,
+    options: {
+      temperature?: number;
+      maxTokens?: number;
+      organizationId?: string;
+      articleId?: string;
+      analysisType?: string;
+    } = {},
+  ): Promise<string> {
+    const response = await this.complete(
+      {
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: userPrompt },
+        ],
+        imageUrl,
+        temperature: options.temperature ?? 0.4,
+        maxTokens: options.maxTokens ?? 256,
+      },
+      {
+        organizationId: options.organizationId,
+        articleId: options.articleId,
+        analysisType: options.analysisType,
+        useCache: false,
+      },
+    );
+
+    return response.content;
+  }
+
+  /**
    * JSON prompt — auto-parses response as JSON with retry on parse failure
    */
   async jsonPrompt<T>(
@@ -215,6 +254,7 @@ export class AIGatewayService {
       messages: request.messages,
       model: request.model,
       temperature: request.temperature,
+      imageUrl: request.imageUrl,
     });
     return createHash('sha256').update(content).digest('hex').substring(0, 32);
   }

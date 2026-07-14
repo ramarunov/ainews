@@ -135,6 +135,7 @@ export interface MediaFile {
   publicUrl: string | null;
   cdnUrl: string | null;
   altText?: string | null;
+  caption?: string | null;
   folder: string;
   createdAt: string;
 }

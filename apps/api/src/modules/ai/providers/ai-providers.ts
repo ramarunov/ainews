@@ -21,6 +21,10 @@ export interface CompletionRequest {
   maxTokens?: number;
   responseFormat?: 'text' | 'json';
   stream?: boolean;
+  // Vision input: attaches an image to the last user message. Only
+  // OpenAIProvider currently understands this (gpt-4o is multimodal);
+  // Anthropic/Google providers ignore it and answer from text context alone.
+  imageUrl?: string;
 }
 
 export interface CompletionResponse {
@@ -99,12 +103,23 @@ export class OpenAIProvider {
     const start = Date.now();
     const client = await this.getClient();
 
+    const messages = request.messages.map((m, i) => {
+      const isLastUserMessage =
+        m.role === 'user' && i === request.messages.length - 1 && request.imageUrl;
+      return {
+        role: m.role,
+        content: isLastUserMessage
+          ? [
+              { type: 'text' as const, text: m.content },
+              { type: 'image_url' as const, image_url: { url: request.imageUrl! } },
+            ]
+          : m.content,
+      };
+    });
+
     const response = await client.chat.completions.create({
       model,
-      messages: request.messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      })),
+      messages: messages as OpenAI.Chat.ChatCompletionMessageParam[],
       temperature: request.temperature ?? 0.7,
       max_tokens: request.maxTokens ?? 4096,
       ...(request.responseFormat === 'json' && {

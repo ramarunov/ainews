@@ -57,3 +57,27 @@ export function useDeleteMedia() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["media-list"] }),
   });
 }
+
+export function useUpdateMedia() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...input
+    }: {
+      id: string;
+      altText?: string;
+      caption?: string;
+    }) => apiClient.patch<MediaFile>(`/media/${id}`, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["media-list"] }),
+  });
+}
+
+export function useGenerateAltText() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.post<MediaFile>(`/media/${id}/generate-alt-text`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["media-list"] }),
+  });
+}
