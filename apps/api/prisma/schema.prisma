@@ -105,6 +105,7 @@ model Organization {
   plugins      Plugin[]
   themes       Theme[]
   redirects    Redirect[]
+  notFoundLogs NotFoundLog[]
   apiKeys      ApiKey[]
   webhooks     Webhook[]
   auditLogs    AuditLog[]
@@ -752,6 +753,27 @@ model Redirect {
   @@unique([organizationId, fromPath])
   @@index([organizationId, fromPath])
   @@map("redirects")
+}
+
+// Tracks paths on the public reader site that resolve to neither a
+// published article nor an active Redirect — the source data for the
+// "404 monitor" (SEO-014). One row per distinct path; hitCount/lastSeenAt
+// accumulate rather than creating a new row per miss.
+model NotFoundLog {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String       @db.Uuid
+  path           String       @db.VarChar(1000)
+  referrer       String?      @db.VarChar(1000)
+  hitCount       Int          @default(1)
+  firstSeenAt    DateTime     @default(now())
+  lastSeenAt     DateTime     @default(now())
+  resolved       Boolean      @default(false)
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, path])
+  @@index([organizationId, resolved, lastSeenAt(sort: Desc)])
+  @@map("not_found_logs")
 }
 
 // =============================================================================

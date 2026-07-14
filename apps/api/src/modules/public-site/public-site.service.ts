@@ -19,7 +19,7 @@ export class PublicSiteService {
    * later, deliberate pass, not guessed at here). One organization's
    * published content is public; which one is a deploy-time config choice.
    */
-  private getPublicOrgId(): string {
+  getPublicOrgId(): string {
     const orgId = this.config.get<string>('PUBLIC_SITE_ORG_ID', '');
     if (!orgId) {
       throw new NotFoundException('Public site is not configured');

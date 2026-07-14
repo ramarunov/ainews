@@ -354,3 +354,25 @@ export interface AuditLogEntry {
   createdAt: string;
   user: { id: string; displayName?: string | null; email: string } | null;
 }
+
+export interface Redirect {
+  id: string;
+  fromPath: string;
+  toUrl: string;
+  statusCode: number;
+  hitCount: string;
+  lastHitAt?: string | null;
+  note?: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface NotFoundLogEntry {
+  id: string;
+  path: string;
+  referrer?: string | null;
+  hitCount: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  resolved: boolean;
+}

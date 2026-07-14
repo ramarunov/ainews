@@ -1,7 +1,8 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import { getPublishedArticleBySlug } from "@/lib/public-api";
+import { headers } from "next/headers";
+import { notFound, redirect } from "next/navigation";
+import { getPublishedArticleBySlug, resolveRedirect } from "@/lib/public-api";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -34,7 +35,14 @@ export default async function NewsArticlePage({ params }: Props) {
   const { slug } = await params;
   const article = await getPublishedArticleBySlug(slug);
 
-  if (!article) notFound();
+  if (!article) {
+    const referrer = (await headers()).get("referer") ?? undefined;
+    const match = await resolveRedirect(`/news/${slug}`, referrer);
+    if (match && match.statusCode !== 410) {
+      redirect(match.toUrl);
+    }
+    notFound();
+  }
 
   return (
     <article className="mx-auto flex max-w-3xl flex-col gap-4 px-6 py-12">
