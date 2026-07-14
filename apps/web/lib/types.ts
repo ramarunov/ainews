@@ -130,6 +130,15 @@ export interface PublicArticleSeo {
   ogImageUrl?: string | null;
 }
 
+export interface PublicAuthor {
+  id: string;
+  displayName?: string | null;
+  firstName?: string;
+  lastName?: string;
+  avatarUrl?: string | null;
+  bio?: string | null;
+}
+
 export interface PublicArticle {
   id: string;
   title: string;
@@ -138,10 +147,37 @@ export interface PublicArticle {
   excerpt?: string | null;
   content?: string | null;
   publishedAt?: string | null;
-  primaryAuthor?: { displayName?: string | null } | null;
+  featuredImageUrl?: string | null;
+  featuredImageAlt?: string | null;
+  isBreaking?: boolean;
+  isFeatured?: boolean;
+  readingTime?: number;
+  primaryAuthor?: PublicAuthor | null;
   primaryCategory?: Category | null;
   articleTags?: { tag: Tag }[];
   seoData?: PublicArticleSeo | null;
+}
+
+export interface PublicSetting {
+  key: string;
+  value: unknown;
+  isPublic: boolean;
+}
+
+// Search results come back from SearchService (OpenSearch, or the DB
+// fallback when OpenSearch is unreachable) rather than ArticlesService's
+// fully-populated include set — no nested primaryCategory/primaryAuthor
+// objects, and OpenSearch's indexed documents don't store featuredImageUrl
+// at all. Kept as its own narrower type instead of pretending it's a full
+// PublicArticle.
+export interface PublicSearchResult {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt?: string | null;
+  content?: string | null;
+  publishedAt?: string | null;
+  featuredImageUrl?: string | null;
 }
 
 export interface CreateArticleInput {

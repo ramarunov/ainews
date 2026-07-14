@@ -15,7 +15,7 @@ const navItems = [
   { href: "/tags", label: "Tags", icon: Tags },
   { href: "/series", label: "Series", icon: Layers },
   { href: "/media", label: "Media", icon: ImageIcon },
-  { href: "/search", label: "Search", icon: Search },
+  { href: "/article-search", label: "Search", icon: Search },
 ];
 
 export default function DashboardLayout({

@@ -32,6 +32,7 @@ describe('ArticlesService', () => {
         createMany: jest.fn().mockResolvedValue({}),
       },
       articleView: { create: jest.fn() },
+      mediaFile: { findUnique: jest.fn() },
       $transaction: jest.fn().mockResolvedValue([]),
     };
     eventEmitter = { emit: jest.fn() };
@@ -75,6 +76,31 @@ describe('ArticlesService', () => {
         expect.objectContaining({ articleId: 'article-1', organizationId: 'org-1' }),
       );
       expect(result).toBe(created);
+    });
+
+    it('denormalizes featuredImageUrl from the MediaFile when featuredImageId is given', async () => {
+      prisma.article.findFirst.mockResolvedValue(null);
+      prisma.mediaFile.findUnique.mockResolvedValue({
+        publicUrl: 'https://cdn/photo.png',
+        cdnUrl: null,
+      });
+      prisma.article.create.mockResolvedValue({ id: 'article-img', title: 'X', content: '' });
+
+      await service.create(
+        { title: 'X', featuredImageId: 'media-1' } as any,
+        'author-1',
+        'org-1',
+      );
+
+      expect(prisma.mediaFile.findUnique).toHaveBeenCalledWith({
+        where: { id: 'media-1' },
+        select: { publicUrl: true, cdnUrl: true },
+      });
+      expect(prisma.article.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ featuredImageUrl: 'https://cdn/photo.png' }),
+        }),
+      );
     });
 
     it('appends a numeric suffix when the generated slug collides with an existing article', async () => {
@@ -160,6 +186,58 @@ describe('ArticlesService', () => {
       prisma.article.update.mockImplementation((args: any) =>
         Promise.resolve({ ...existingArticle, ...args.data, id: 'article-1' }),
       );
+    });
+
+    it('re-resolves featuredImageUrl from the new MediaFile when featuredImageId changes', async () => {
+      prisma.mediaFile.findUnique.mockResolvedValue({ publicUrl: null, cdnUrl: 'https://cdn.example/photo.png' });
+
+      await service.update(
+        'article-1',
+        { featuredImageId: 'media-2' } as any,
+        'author-1',
+        'org-1',
+      );
+
+      expect(prisma.mediaFile.findUnique).toHaveBeenCalledWith({
+        where: { id: 'media-2' },
+        select: { publicUrl: true, cdnUrl: true },
+      });
+      expect(prisma.article.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            featuredImageId: 'media-2',
+            featuredImageUrl: 'https://cdn.example/photo.png',
+          }),
+        }),
+      );
+    });
+
+    it('clears featuredImageUrl back to null when featuredImageId is cleared', async () => {
+      await service.update(
+        'article-1',
+        { featuredImageId: null } as any,
+        'author-1',
+        'org-1',
+      );
+
+      expect(prisma.mediaFile.findUnique).not.toHaveBeenCalled();
+      expect(prisma.article.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ featuredImageId: null, featuredImageUrl: null }),
+        }),
+      );
+    });
+
+    it('leaves featuredImageUrl untouched when featuredImageId is not part of the update', async () => {
+      await service.update(
+        'article-1',
+        { excerpt: 'new excerpt' } as any,
+        'author-1',
+        'org-1',
+      );
+
+      expect(prisma.mediaFile.findUnique).not.toHaveBeenCalled();
+      expect(prisma.article.update.mock.calls[0][0].data).not.toHaveProperty('featuredImageUrl');
     });
 
     it('regenerates the slug when the title changes and no explicit slug is given', async () => {

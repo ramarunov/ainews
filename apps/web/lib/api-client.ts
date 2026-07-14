@@ -97,7 +97,12 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   }
 
   if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+  // A controller returning exactly `null` (e.g. GET /settings/:key for a
+  // key that hasn't been set) makes Nest/Express send a genuinely empty
+  // body, not the literal text "null" - res.json() throws on that. Read as
+  // text first and only parse when there's actually something to parse.
+  const text = await res.text();
+  return (text ? JSON.parse(text) : null) as T;
 }
 
 export const apiClient = {

@@ -33,6 +33,9 @@ export class ArticlesService {
     const sanitizedContent = this.sanitizeContent(dto.content ?? '');
     const wordCount = this.countWords(sanitizedContent);
     const readingTime = Math.ceil(wordCount / 200); // ~200 WPM
+    const featuredImageUrl = dto.featuredImageId
+      ? await this.resolveFeaturedImageUrl(dto.featuredImageId)
+      : undefined;
 
     const article = await this.prisma.article.create({
       data: {
@@ -53,6 +56,7 @@ export class ArticlesService {
         isFeatured: dto.isFeatured ?? false,
         isPremium: dto.isPremium ?? false,
         featuredImageId: dto.featuredImageId,
+        featuredImageUrl,
         featuredImageAlt: dto.featuredImageAlt,
         sourceUrl: dto.sourceUrl,
         sourceName: dto.sourceName,
@@ -233,6 +237,19 @@ export class ArticlesService {
       (dto as any).publishedAt = new Date();
     }
 
+    // Denormalized alongside featuredImageId so consumers that only read
+    // article fields (SeoService's OG/structured-data generation, the
+    // public site) don't need a separate MediaFile lookup - and don't
+    // silently see a stale/missing image the way this field did before,
+    // when nothing ever actually wrote to it despite being read in several
+    // places. Cleared back to null when featuredImageId is cleared.
+    const featuredImageUrl =
+      dto.featuredImageId !== undefined
+        ? dto.featuredImageId
+          ? await this.resolveFeaturedImageUrl(dto.featuredImageId)
+          : null
+        : undefined;
+
     const updated = await this.prisma.article.update({
       where: { id },
       data: {
@@ -250,6 +267,7 @@ export class ArticlesService {
         }),
         ...(dto.featuredImageId !== undefined && {
           featuredImageId: dto.featuredImageId,
+          featuredImageUrl,
         }),
         ...(dto.featuredImageAlt !== undefined && {
           featuredImageAlt: dto.featuredImageAlt,
@@ -422,6 +440,14 @@ export class ArticlesService {
     }
 
     return slug;
+  }
+
+  private async resolveFeaturedImageUrl(mediaId: string): Promise<string | null> {
+    const media = await this.prisma.mediaFile.findUnique({
+      where: { id: mediaId },
+      select: { publicUrl: true, cdnUrl: true },
+    });
+    return media?.cdnUrl ?? media?.publicUrl ?? null;
   }
 
   private countWords(content: string): number {

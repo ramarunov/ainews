@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
   CardContent,
@@ -16,8 +18,101 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { useAiProviderStatus, useUpdateAiProviderKeys } from "@/hooks/use-system-settings";
+import { useSetting, useUpdateSetting } from "@/hooks/use-settings";
 import { useAuthStore } from "@/lib/auth-store";
 import { ApiError } from "@/lib/api-client";
+
+interface AdSlotValue {
+  enabled: boolean;
+  html: string;
+}
+
+const AD_SLOTS = [
+  { key: "ads.header", label: "Header Ad", description: "Shown below the hero section on the homepage." },
+  { key: "ads.sidebar", label: "Sidebar Ad", description: "Shown in the homepage sidebar." },
+  { key: "ads.in_article", label: "In-Article Ad", description: "Shown after the content on every article page." },
+] as const;
+
+function AdWidgetSlot({ label, description, settingKey }: { label: string; description: string; settingKey: string }) {
+  const { data: saved, isLoading } = useSetting<AdSlotValue>(settingKey);
+
+  if (isLoading) {
+    return <div className="h-24 animate-pulse rounded-md bg-muted" />;
+  }
+
+  return (
+    <AdWidgetSlotForm label={label} description={description} settingKey={settingKey} initial={saved ?? null} />
+  );
+}
+
+function AdWidgetSlotForm({
+  label,
+  description,
+  settingKey,
+  initial,
+}: {
+  label: string;
+  description: string;
+  settingKey: string;
+  initial: AdSlotValue | null;
+}) {
+  const updateSetting = useUpdateSetting(settingKey);
+  // Seeded once from `initial` at mount — AdWidgetSlot only renders this
+  // component after the query has already resolved, so there's no later
+  // async update to resync from (no effect needed).
+  const [html, setHtml] = useState(initial?.html ?? "");
+  const [enabled, setEnabled] = useState(initial?.enabled ?? false);
+
+  const handleSave = async () => {
+    try {
+      await updateSetting.mutateAsync({
+        value: { enabled, html },
+        isPublic: true,
+      });
+      toast.success(`${label} saved`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to save");
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2 border-t pt-4 first:border-t-0 first:pt-0">
+      <div className="flex items-center justify-between">
+        <div>
+          <Label htmlFor={settingKey}>{label}</Label>
+          <p className="text-xs text-muted-foreground">{description}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id={`${settingKey}-enabled`}
+            checked={enabled}
+            onCheckedChange={(v) => setEnabled(!!v)}
+          />
+          <Label htmlFor={`${settingKey}-enabled`} className="text-sm font-normal">
+            Enabled
+          </Label>
+        </div>
+      </div>
+      <Textarea
+        id={settingKey}
+        rows={4}
+        placeholder="Paste raw ad network HTML/script tag here…"
+        value={html}
+        onChange={(e) => setHtml(e.target.value)}
+        className="font-mono text-xs"
+      />
+      <Button
+        variant="outline"
+        size="sm"
+        className="self-end"
+        disabled={updateSetting.isPending}
+        onClick={handleSave}
+      >
+        {updateSetting.isPending ? "Saving…" : "Save"}
+      </Button>
+    </div>
+  );
+}
 
 const PROVIDERS = [
   { field: "openaiApiKey", statusKey: "openai", label: "OpenAI", placeholder: "sk-..." },
@@ -108,6 +203,27 @@ export default function SystemSettingsPage() {
               </div>
             );
           })}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Ad Widgets</CardTitle>
+          <CardDescription>
+            Raw HTML/script snippets for the public reader site. Paste an ad
+            network&apos;s tag (e.g. Google AdSense) and enable the slot to make
+            it live.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-6">
+          {AD_SLOTS.map((slot) => (
+            <AdWidgetSlot
+              key={slot.key}
+              settingKey={slot.key}
+              label={slot.label}
+              description={slot.description}
+            />
+          ))}
         </CardContent>
       </Card>
     </div>

@@ -2,13 +2,21 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ArticleStatus } from '@prisma/client';
 
+import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { ArticlesService } from '../articles/articles.service';
+import { CategoriesService } from '../categories/categories.service';
+import { SearchService } from '../search/search.service';
+import { SettingsService } from '../settings/settings.service';
 import { PublicArticlesQueryDto } from './dto/public-articles-query.dto';
 
 @Injectable()
 export class PublicSiteService {
   constructor(
+    private readonly prisma: PrismaService,
     private readonly articlesService: ArticlesService,
+    private readonly categoriesService: CategoriesService,
+    private readonly searchService: SearchService,
+    private readonly settingsService: SettingsService,
     private readonly config: ConfigService,
   ) {}
 
@@ -28,10 +36,46 @@ export class PublicSiteService {
   }
 
   async listPublished(query: PublicArticlesQueryDto) {
-    return this.articlesService.findAll(
-      { ...query, status: ArticleStatus.PUBLISHED, sortBy: 'publishedAt', sortOrder: 'desc' },
-      this.getPublicOrgId(),
+    const organizationId = this.getPublicOrgId();
+
+    let categoryId: string | undefined;
+    if (query.categorySlug) {
+      const category = await this.categoriesService.findBySlug(query.categorySlug, organizationId);
+      categoryId = category.id;
+    }
+
+    const requestedLimit = query.limit ?? 20;
+    // Fetch one extra when excluding an id (e.g. "related articles" for the
+    // article currently being read) so filtering it out still leaves a full
+    // page, rather than quietly returning one short.
+    const fetchLimit = query.excludeId ? requestedLimit + 1 : requestedLimit;
+
+    const result = await this.articlesService.findAll(
+      {
+        status: ArticleStatus.PUBLISHED,
+        categoryId,
+        authorId: query.authorId,
+        isBreaking: query.isBreaking,
+        isFeatured: query.isFeatured,
+        search: query.search,
+        page: query.page,
+        limit: fetchLimit,
+        sortBy: 'publishedAt',
+        sortOrder: 'desc',
+      },
+      organizationId,
     );
+
+    if (query.excludeId) {
+      return {
+        ...result,
+        data: (result.data as Array<{ id: string }>)
+          .filter((article) => article.id !== query.excludeId)
+          .slice(0, requestedLimit),
+      };
+    }
+
+    return result;
   }
 
   async findPublishedBySlug(slug: string) {
@@ -46,5 +90,40 @@ export class PublicSiteService {
     }
 
     return article;
+  }
+
+  async listCategories() {
+    const result = await this.categoriesService.findAll(
+      { flat: true, limit: 100 },
+      this.getPublicOrgId(),
+    );
+    return result.data;
+  }
+
+  async getAuthorProfile(id: string) {
+    const author = await this.prisma.user.findFirst({
+      where: { id, organizationId: this.getPublicOrgId(), deletedAt: null, isActive: true },
+      select: { id: true, displayName: true, firstName: true, lastName: true, avatarUrl: true, bio: true },
+    });
+
+    if (!author) {
+      throw new NotFoundException('Author not found');
+    }
+
+    return author;
+  }
+
+  async search(q: string, page = 1, limit = 20) {
+    return this.searchService.search(
+      q,
+      this.getPublicOrgId(),
+      { status: ArticleStatus.PUBLISHED },
+      page,
+      limit,
+    );
+  }
+
+  async getPublicSettings() {
+    return this.settingsService.list(this.getPublicOrgId(), true);
   }
 }
