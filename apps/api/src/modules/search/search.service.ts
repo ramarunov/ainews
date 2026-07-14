@@ -77,6 +77,25 @@ export class SearchService {
     filters: SearchFilters,
     page = 1,
     limit = 20,
+    userId?: string,
+  ) {
+    const result = await this.executeSearch(query, organizationId, filters, page, limit);
+
+    // Fire-and-forget: logging analytics must never fail or slow down the
+    // search response itself (same pattern as AuditLogService.record()).
+    this.logSearch(organizationId, query, result.meta.total, userId).catch((error) =>
+      console.error('[SearchService] Failed to log search analytics', error),
+    );
+
+    return result;
+  }
+
+  private async executeSearch(
+    query: string,
+    organizationId: string,
+    filters: SearchFilters,
+    page = 1,
+    limit = 20,
   ) {
     const take = Math.min(100, Math.max(1, limit));
     const from = (Math.max(1, page) - 1) * take;
@@ -182,7 +201,50 @@ export class SearchService {
     await this.removeFromIndex(payload.articleId);
   }
 
+  // ─── Search Analytics (SRCH-004) ────────────────────────────────────────────
+
+  async getAnalytics(organizationId: string, days = 30) {
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    const where = { organizationId, createdAt: { gte: since } };
+
+    const [totalSearches, topQueryGroups, zeroResultGroups] = await Promise.all([
+      this.prisma.searchLog.count({ where }),
+      this.prisma.searchLog.groupBy({
+        by: ['query'],
+        _count: { query: true },
+        where,
+        orderBy: { _count: { query: 'desc' } },
+        take: 10,
+      }),
+      this.prisma.searchLog.groupBy({
+        by: ['query'],
+        _count: { query: true },
+        where: { ...where, resultCount: 0 },
+        orderBy: { _count: { query: 'desc' } },
+        take: 10,
+      }),
+    ]);
+
+    return {
+      period: { days, since },
+      totalSearches,
+      topQueries: topQueryGroups.map((g) => ({ query: g.query, count: g._count.query })),
+      zeroResultQueries: zeroResultGroups.map((g) => ({ query: g.query, count: g._count.query })),
+    };
+  }
+
   // ─── Private Helpers ──────────────────────────────────────────────────────
+
+  private async logSearch(
+    organizationId: string,
+    query: string,
+    resultCount: number,
+    userId?: string,
+  ) {
+    await this.prisma.searchLog.create({
+      data: { organizationId, query, resultCount, userId },
+    });
+  }
 
   private async fetchArticleForIndex(articleId: string, organizationId: string) {
     return this.prisma.article.findFirst({

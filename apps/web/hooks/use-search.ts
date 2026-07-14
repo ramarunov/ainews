@@ -28,3 +28,17 @@ export function useArticleSearch(filters: SearchFilters) {
     enabled: filters.q.trim().length > 0,
   });
 }
+
+export interface SearchAnalytics {
+  period: { days: number; since: string };
+  totalSearches: number;
+  topQueries: Array<{ query: string; count: number }>;
+  zeroResultQueries: Array<{ query: string; count: number }>;
+}
+
+export function useSearchAnalytics(days = 30) {
+  return useQuery({
+    queryKey: ["search-analytics", days],
+    queryFn: () => apiClient.get<SearchAnalytics>(`/search/analytics?days=${days}`),
+  });
+}

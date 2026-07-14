@@ -20,7 +20,7 @@ export class SearchController {
   @ApiOperation({ summary: 'Full-text search across articles' })
   search(@Query() query: SearchQueryDto, @CurrentUser() user: any) {
     const { q, page, limit, ...filters } = query;
-    return this.searchService.search(q, user.organizationId, filters, page, limit);
+    return this.searchService.search(q, user.organizationId, filters, page, limit, user.id);
   }
 
   @Get('autocomplete')
@@ -28,5 +28,12 @@ export class SearchController {
   @ApiOperation({ summary: 'Autocomplete article titles' })
   autocomplete(@Query() query: AutocompleteQueryDto, @CurrentUser() user: any) {
     return this.searchService.autocomplete(query.q, user.organizationId, query.limit);
+  }
+
+  @Get('analytics')
+  @RequirePermissions('search:read')
+  @ApiOperation({ summary: 'Search analytics: volume, top queries, zero-result queries' })
+  getAnalytics(@Query('days') days: string | undefined, @CurrentUser() user: any) {
+    return this.searchService.getAnalytics(user.organizationId, days ? Number(days) : undefined);
   }
 }
