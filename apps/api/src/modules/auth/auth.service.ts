@@ -109,6 +109,89 @@ export class AuthService {
     return this.issueTokens(userWithRoles);
   }
 
+  // ─── OAuth (AUTH-002) ───────────────────────────────────────────────────────
+
+  /**
+   * Shared find-or-create for both Google and GitHub strategies. Three
+   * cases, same priority order a user would expect:
+   *  1. This exact provider account has signed in before -> just log in.
+   *  2. No OauthAccount yet, but a user with this email already exists
+   *     (e.g. they originally registered with a password) -> link the new
+   *     provider to that existing account rather than creating a duplicate.
+   *  3. Neither exists -> register a brand-new org + user, same "first
+   *     user of a new org is its admin" rule as email/password register().
+   */
+  async findOrCreateOauthUser(
+    provider: string,
+    providerId: string,
+    profile: { email: string; firstName: string; lastName: string; avatarUrl?: string },
+  ) {
+    if (!profile.email) {
+      throw new BadRequestException(`${provider} did not provide an email address for this account`);
+    }
+
+    const existingOauthAccount = await this.prisma.oauthAccount.findUnique({
+      where: { provider_providerId: { provider, providerId } },
+      include: { user: { include: { userRoles: { include: { role: true } } } } },
+    });
+
+    if (existingOauthAccount) {
+      return this.issueTokens(existingOauthAccount.user);
+    }
+
+    let user = await this.prisma.user.findFirst({
+      where: { email: profile.email.toLowerCase(), deletedAt: null },
+      include: { userRoles: { include: { role: true } } },
+    });
+
+    if (user) {
+      await this.prisma.oauthAccount.create({
+        data: { userId: user.id, provider, providerId, profile: profile as any },
+      });
+      return this.issueTokens(user);
+    }
+
+    const org = await this.prisma.organization.create({
+      data: {
+        name: `${profile.firstName} ${profile.lastName}'s Organization`,
+        slug: await this.generateOrgSlug(`${profile.firstName}-${profile.lastName}`),
+      },
+    });
+    await this.createDefaultRoles(org.id);
+
+    const created = await this.prisma.user.create({
+      data: {
+        organizationId: org.id,
+        email: profile.email.toLowerCase(),
+        firstName: profile.firstName,
+        lastName: profile.lastName,
+        displayName: `${profile.firstName} ${profile.lastName}`,
+        avatarUrl: profile.avatarUrl,
+        emailVerifiedAt: new Date(), // the OAuth provider already verified this email
+      },
+    });
+
+    const adminRole = await this.prisma.role.findFirst({
+      where: { organizationId: org.id, slug: 'admin' },
+    });
+    if (adminRole) {
+      await this.prisma.userRole.create({ data: { userId: created.id, roleId: adminRole.id } });
+    }
+
+    await this.prisma.oauthAccount.create({
+      data: { userId: created.id, provider, providerId, profile: profile as any },
+    });
+
+    this.eventEmitter.emit('user.registered', { userId: created.id, email: created.email });
+
+    user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: created.id },
+      include: { userRoles: { include: { role: true } } },
+    });
+
+    return this.issueTokens(user);
+  }
+
   // ─── Login ─────────────────────────────────────────────────────────────────
 
   async validateUser(email: string, password: string) {

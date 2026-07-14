@@ -64,6 +64,10 @@ describe('AuthService', () => {
         findUnique: jest.fn(),
         update: jest.fn().mockResolvedValue({}),
       },
+      oauthAccount: {
+        findUnique: jest.fn(),
+        create: jest.fn().mockResolvedValue({}),
+      },
       $transaction: jest.fn((ops: any[]) => Promise.all(ops)),
     };
 
@@ -315,6 +319,86 @@ describe('AuthService', () => {
       });
 
       await expect(service.verifyMfaToken('user-1', '123456')).resolves.toBe(false);
+    });
+  });
+
+  describe('findOrCreateOauthUser', () => {
+    const profile = {
+      email: 'oauth-user@example.com',
+      firstName: 'Oscar',
+      lastName: 'Auth',
+      avatarUrl: 'https://example.com/avatar.png',
+    };
+
+    it('logs in directly when this provider account has signed in before', async () => {
+      const existingUser = { id: 'user-1', email: profile.email, userRoles: [] };
+      prisma.oauthAccount.findUnique.mockResolvedValue({
+        id: 'oauth-1',
+        user: existingUser,
+      });
+
+      const result = await service.findOrCreateOauthUser('google', 'google-id-1', profile);
+
+      expect(prisma.user.create).not.toHaveBeenCalled();
+      expect(prisma.organization.create).not.toHaveBeenCalled();
+      expect(result.user.id).toBe('user-1');
+    });
+
+    it('links the provider to an existing user found by email instead of creating a duplicate', async () => {
+      prisma.oauthAccount.findUnique.mockResolvedValue(null);
+      const existingUser = { id: 'user-2', email: profile.email, userRoles: [] };
+      prisma.user.findFirst.mockResolvedValue(existingUser);
+
+      const result = await service.findOrCreateOauthUser('github', 'github-id-1', profile);
+
+      expect(prisma.oauthAccount.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            userId: 'user-2',
+            provider: 'github',
+            providerId: 'github-id-1',
+          }),
+        }),
+      );
+      expect(prisma.organization.create).not.toHaveBeenCalled();
+      expect(result.user.id).toBe('user-2');
+    });
+
+    it('creates a brand-new org + admin user when neither the oauth account nor the email exist', async () => {
+      prisma.oauthAccount.findUnique.mockResolvedValue(null);
+      prisma.user.findFirst.mockResolvedValueOnce(null); // no existing user by email
+      prisma.organization.create.mockResolvedValue({ id: 'org-new' });
+      prisma.user.create.mockResolvedValue({ id: 'user-new' });
+      prisma.user.findUniqueOrThrow.mockResolvedValue({
+        id: 'user-new',
+        email: profile.email,
+        userRoles: [{ role: { permissions: ['articles:read'] } }],
+      });
+
+      const result = await service.findOrCreateOauthUser('google', 'google-id-2', profile);
+
+      expect(prisma.organization.create).toHaveBeenCalled();
+      expect(prisma.user.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            organizationId: 'org-new',
+            email: profile.email,
+            emailVerifiedAt: expect.any(Date),
+          }),
+        }),
+      );
+      // The new org's admin role must actually be assigned - not just the
+      // org/user rows created with nothing linking them together.
+      expect(userRoles).toContainEqual(
+        expect.objectContaining({ userId: 'user-new' }),
+      );
+      expect(result.user.id).toBe('user-new');
+    });
+
+    it('rejects when the provider gives no email at all', async () => {
+      await expect(
+        service.findOrCreateOauthUser('google', 'google-id-3', { ...profile, email: '' }),
+      ).rejects.toThrow('did not provide an email');
     });
   });
 
