@@ -144,6 +144,7 @@ model User {
   organization      Organization   @relation(fields: [organizationId], references: [id])
   userRoles         UserRole[]
   refreshTokens     RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
   oauthAccounts     OauthAccount[]
   apiKeys           ApiKey[]
   articles          Article[]      @relation("PrimaryAuthor")
@@ -211,6 +212,24 @@ model RefreshToken {
 
   @@index([userId])
   @@map("refresh_tokens")
+}
+
+// SECURITY.md's password-reset requirement (1 hour token lifetime, rate
+// limited). Stores only a hash of the reset token, same reasoning as
+// RefreshToken/ApiKey - the raw token exists only in the emailed link and
+// is never persisted, so a DB leak alone can't be used to reset accounts.
+model PasswordResetToken {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String    @db.Uuid
+  tokenHash  String    @unique @db.VarChar(255)
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 model ApiKey {

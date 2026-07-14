@@ -17,6 +17,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { VerifyMfaDto } from './dto/verify-mfa.dto';
+import { ForgotPasswordDto, ResetPasswordDto } from './dto/password-reset.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -61,6 +62,28 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Invalid or expired refresh token' })
   async refresh(@Body() dto: RefreshTokenDto) {
     return this.authService.refreshAccessToken(dto.refreshToken);
+  }
+
+  // ─── Password Reset ────────────────────────────────────────────────────────
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 3, ttl: 3600000 } })
+  @ApiOperation({ summary: 'Request a password reset email' })
+  @ApiResponse({ status: 200, description: 'Always returns generic success (does not leak account existence)' })
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    await this.authService.requestPasswordReset(dto.email);
+    return { message: 'If that email is registered, a reset link has been sent' };
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 3600000 } })
+  @ApiOperation({ summary: 'Reset password using a token from the reset email' })
+  @ApiResponse({ status: 200, description: 'Password updated' })
+  @ApiResponse({ status: 400, description: 'Token invalid, expired, or already used' })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    await this.authService.resetPassword(dto.token, dto.newPassword);
+    return { message: 'Password updated successfully' };
   }
 
   // ─── Logout ────────────────────────────────────────────────────────────────

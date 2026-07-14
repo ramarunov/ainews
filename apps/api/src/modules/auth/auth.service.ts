@@ -21,10 +21,12 @@ import { UsersService } from '../users/users.service';
 import { RegisterDto } from './dto/register.dto';
 import { DEFAULT_ROLES } from '../../common/constants/default-roles';
 import { EncryptionService } from '../../common/crypto/encryption.service';
+import { EmailService } from '../../common/email/email.service';
 
 const LOGIN_ATTEMPTS_PREFIX = 'login_attempts:';
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION = 900; // 15 minutes in seconds
+const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour, per SECURITY.md
 
 @Injectable()
 export class AuthService {
@@ -36,6 +38,7 @@ export class AuthService {
     private readonly eventEmitter: EventEmitter2,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly encryption: EncryptionService,
+    private readonly emailService: EmailService,
   ) {}
 
   // ─── Registration ──────────────────────────────────────────────────────────
@@ -343,6 +346,85 @@ export class AuthService {
     }
 
     return authenticator.verify({ token, secret: this.encryption.decrypt(user.mfaSecret) });
+  }
+
+  // ─── Password Reset ─────────────────────────────────────────────────────────
+
+  /**
+   * Always returns the same generic result regardless of whether `email`
+   * belongs to an account — the caller-facing response must not leak
+   * account existence. The actual token + email are only ever generated
+   * when a matching, active user is found.
+   */
+  async requestPasswordReset(email: string): Promise<void> {
+    const user = await this.prisma.user.findFirst({
+      where: { email: email.toLowerCase(), deletedAt: null, isActive: true },
+    });
+
+    if (!user) return;
+
+    const rawToken = randomBytes(32).toString('hex');
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+
+    await this.prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        expiresAt: new Date(Date.now() + PASSWORD_RESET_TOKEN_TTL_MS),
+      },
+    });
+
+    const appUrl = this.config.get<string>('APP_URL', 'http://localhost:3100');
+    const resetUrl = `${appUrl}/reset-password?token=${rawToken}`;
+
+    // Fire-and-forget: an SMTP outage must not turn a password-reset
+    // request into a 500 (same convention as SearchService.logSearch()).
+    this.emailService
+      .send({
+        to: user.email,
+        subject: 'Reset your password',
+        html: `<p>Someone requested a password reset for your account.</p>
+<p><a href="${resetUrl}">Click here to reset your password</a> — this link expires in 1 hour.</p>
+<p>If you didn't request this, you can safely ignore this email.</p>`,
+        text: `Reset your password: ${resetUrl} (expires in 1 hour). If you didn't request this, ignore this email.`,
+      })
+      .catch((err) => console.error('[AuthService] Failed to send password reset email', err));
+  }
+
+  async resetPassword(rawToken: string, newPassword: string): Promise<void> {
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+
+    const resetToken = await this.prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
+    });
+
+    if (
+      !resetToken ||
+      resetToken.usedAt ||
+      resetToken.expiresAt < new Date()
+    ) {
+      throw new BadRequestException('This password reset link is invalid or has expired');
+    }
+
+    const rounds = this.config.get<number>('BCRYPT_ROUNDS', 12);
+    const passwordHash = await bcrypt.hash(newPassword, rounds);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: resetToken.userId },
+        data: { passwordHash },
+      }),
+      this.prisma.passwordResetToken.update({
+        where: { id: resetToken.id },
+        data: { usedAt: new Date() },
+      }),
+      // A compromised session shouldn't survive a password reset — same
+      // "revoke everything outstanding" principle as GDPR account erasure.
+      this.prisma.refreshToken.updateMany({
+        where: { userId: resetToken.userId, revokedAt: null },
+        data: { revokedAt: new Date(), revokeReason: 'password_reset' },
+      }),
+    ]);
   }
 
   // ─── Private Helpers ──────────────────────────────────────────────────────
