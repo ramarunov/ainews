@@ -71,6 +71,34 @@ export interface CreateTagInput {
   color?: string;
 }
 
+export interface ArticleSeries {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  articleCount?: number;
+  createdAt: string;
+}
+
+export interface ArticleSeriesArticle {
+  id: string;
+  title: string;
+  slug: string;
+  status: ArticleStatus;
+  seriesOrder: number | null;
+  publishedAt: string | null;
+}
+
+export interface ArticleSeriesDetail extends ArticleSeries {
+  articles: ArticleSeriesArticle[];
+}
+
+export interface CreateSeriesInput {
+  name: string;
+  slug?: string;
+  description?: string;
+}
+
 export interface Article {
   id: string;
   title: string;
@@ -86,6 +114,8 @@ export interface Article {
   primaryCategoryId?: string | null;
   primaryCategory?: Category | null;
   articleTags?: { tag: Tag }[];
+  seriesId?: string | null;
+  seriesOrder?: number | null;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string | null;

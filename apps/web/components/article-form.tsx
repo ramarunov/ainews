@@ -26,6 +26,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { useCategories, useTags } from "@/hooks/use-taxonomy";
+import { useAssignArticleToSeries, useSeriesList } from "@/hooks/use-series";
 import { useMediaFile, useUploadMedia } from "@/hooks/use-media";
 import { useCreateArticle, useUpdateArticle } from "@/hooks/use-articles";
 import { usePublishArticle } from "@/hooks/use-articles";
@@ -57,6 +58,8 @@ export function ArticleForm({ article }: { article?: Article }) {
 
   const { data: categories } = useCategories();
   const { data: tags } = useTags();
+  const { data: seriesList } = useSeriesList();
+  const assignToSeries = useAssignArticleToSeries();
   const { data: existingFeaturedImage } = useMediaFile(
     article?.featuredImageId ?? undefined,
   );
@@ -110,6 +113,43 @@ export function ArticleForm({ article }: { article?: Article }) {
   const [categoryValue, setCategoryValue] = useState<string | undefined>(
     article?.primaryCategoryId ?? undefined,
   );
+  const [seriesValue, setSeriesValue] = useState<string | undefined>(
+    article?.seriesId ?? undefined,
+  );
+  const [seriesOrderValue, setSeriesOrderValue] = useState<string>(
+    article?.seriesOrder != null ? String(article.seriesOrder) : "",
+  );
+
+  // Series membership is saved immediately (not part of the main form
+  // submit) since it needs an existing article id — same reason this
+  // control only renders once the article has been created at least once.
+  const handleSeriesChange = async (seriesId: string | undefined) => {
+    if (!article) return;
+    setSeriesValue(seriesId);
+    try {
+      await assignToSeries.mutateAsync({
+        articleId: article.id,
+        seriesId: seriesId ?? null,
+        seriesOrder: seriesOrderValue ? Number(seriesOrderValue) : undefined,
+      });
+      toast.success(seriesId ? "Added to series" : "Removed from series");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to update series");
+    }
+  };
+
+  const handleSeriesOrderBlur = async () => {
+    if (!article || !seriesValue) return;
+    try {
+      await assignToSeries.mutateAsync({
+        articleId: article.id,
+        seriesId: seriesValue,
+        seriesOrder: seriesOrderValue ? Number(seriesOrderValue) : undefined,
+      });
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to update series order");
+    }
+  };
 
   const toggleTag = (id: string) => {
     setSelectedTagIds((prev) =>
@@ -276,6 +316,40 @@ export function ArticleForm({ article }: { article?: Article }) {
                       )}
                     </div>
                   </div>
+
+                  {isEditing && (
+                    <div className="flex flex-col gap-2">
+                      <Label>Series</Label>
+                      <div className="flex gap-2">
+                        <Select
+                          value={seriesValue}
+                          onValueChange={(v) => handleSeriesChange(v ?? undefined)}
+                        >
+                          <SelectTrigger className="flex-1">
+                            <SelectValue placeholder="Not part of a series" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {seriesList?.map((s) => (
+                              <SelectItem key={s.id} value={s.id}>
+                                {s.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {seriesValue && (
+                          <Input
+                            type="number"
+                            min={0}
+                            className="w-24"
+                            placeholder="Order"
+                            value={seriesOrderValue}
+                            onChange={(e) => setSeriesOrderValue(e.target.value)}
+                            onBlur={handleSeriesOrderBlur}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="flex flex-col gap-2">
                     <Label>Featured image</Label>

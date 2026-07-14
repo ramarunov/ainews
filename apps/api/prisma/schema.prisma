@@ -98,6 +98,7 @@ model Organization {
   articles     Article[]
   categories   Category[]
   tags         Tag[]
+  articleSeries ArticleSeries[]
   mediaFiles   MediaFile[]
   newsSources  NewsSource[]
   newsItems    NewsItem[]
@@ -304,6 +305,27 @@ model Tag {
   @@map("tags")
 }
 
+// A named, ordered collection of articles (ART-014) — e.g. a multi-part
+// investigation or a recurring "Week in Review" series. Ordering within a
+// series lives on Article.seriesOrder, not here, since it's per-article.
+model ArticleSeries {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String    @db.Uuid
+  name           String    @db.VarChar(255)
+  slug           String    @db.VarChar(255)
+  description    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  articles       Article[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+  @@map("article_series")
+}
+
 // =============================================================================
 // ARTICLES
 // =============================================================================
@@ -353,6 +375,10 @@ model Article {
   sourceName        String?       @db.VarChar(255)
   newsItemId        String?       @db.Uuid
 
+  // Series / Collections (ART-014)
+  seriesId          String?       @db.Uuid
+  seriesOrder       Int?
+
   // Versioning
   currentRevisionId String?       @db.Uuid
   revisionCount     Int           @default(0)
@@ -373,6 +399,7 @@ model Article {
   featuredImage     MediaFile?    @relation(fields: [featuredImageId], references: [id])
   translationParent Article?      @relation("Translations", fields: [translationOf], references: [id])
   translations      Article[]     @relation("Translations")
+  series            ArticleSeries? @relation(fields: [seriesId], references: [id])
 
   revisions         ArticleRevision[]
   articleTags       ArticleTag[]
@@ -392,6 +419,7 @@ model Article {
   @@index([primaryCategoryId])
   @@index([organizationId, publishedAt(sort: Desc)])
   @@index([scheduledAt])
+  @@index([seriesId, seriesOrder])
   @@map("articles")
 }
 

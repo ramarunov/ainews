@@ -22,6 +22,7 @@ import { OrganizationsModule } from './modules/organizations/organizations.modul
 import { ArticlesModule } from './modules/articles/articles.module';
 import { CategoriesModule } from './modules/categories/categories.module';
 import { TagsModule } from './modules/tags/tags.module';
+import { SeriesModule } from './modules/series/series.module';
 import { MediaModule } from './modules/media/media.module';
 import { WorkflowModule } from './modules/workflow/workflow.module';
 import { SearchModule } from './modules/search/search.module';
@@ -158,6 +159,7 @@ import { MetricsInterceptor } from './modules/metrics/metrics.interceptor';
     ArticlesModule,
     CategoriesModule,
     TagsModule,
+    SeriesModule,
     MediaModule,
     WorkflowModule,
     SearchModule,

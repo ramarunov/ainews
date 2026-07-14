@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Newspaper, FolderTree, Tags, Image as ImageIcon, Search, History, UserCircle, LogOut, ShieldCheck, KanbanSquare, Radio, BarChart3, Users, Link2 } from "lucide-react";
+import { Newspaper, FolderTree, Tags, Layers, Image as ImageIcon, Search, History, UserCircle, LogOut, ShieldCheck, KanbanSquare, Radio, BarChart3, Users, Link2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { hasPermission, useAuthStore } from "@/lib/auth-store";
@@ -13,6 +13,7 @@ const navItems = [
   { href: "/articles", label: "Articles", icon: Newspaper },
   { href: "/categories", label: "Categories", icon: FolderTree },
   { href: "/tags", label: "Tags", icon: Tags },
+  { href: "/series", label: "Series", icon: Layers },
   { href: "/media", label: "Media", icon: ImageIcon },
   { href: "/search", label: "Search", icon: Search },
 ];
