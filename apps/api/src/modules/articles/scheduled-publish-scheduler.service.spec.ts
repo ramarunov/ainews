@@ -1,0 +1,96 @@
+/** @jest-environment jsdom */
+// jsdom, not the default node environment: this file transitively imports
+// ArticlesService, which imports isomorphic-dompurify — that package
+// needs a real `window` (see articles.service.spec.ts for the full story).
+import { ScheduledPublishSchedulerService } from './scheduled-publish-scheduler.service';
+
+describe('ScheduledPublishSchedulerService', () => {
+  let service: ScheduledPublishSchedulerService;
+  let prisma: any;
+  let articlesService: any;
+  let schedulerRegistry: any;
+  let config: any;
+
+  beforeEach(() => {
+    prisma = {
+      organization: { findMany: jest.fn() },
+      article: { findMany: jest.fn() },
+    };
+    articlesService = { publish: jest.fn() };
+    schedulerRegistry = { addInterval: jest.fn() };
+    config = { get: jest.fn((_key: string, fallback: any) => fallback) };
+    service = new ScheduledPublishSchedulerService(schedulerRegistry, config, prisma, articlesService);
+  });
+
+  describe('onModuleInit', () => {
+    it('registers a named interval with the scheduler registry', () => {
+      service.onModuleInit();
+
+      expect(schedulerRegistry.addInterval).toHaveBeenCalledWith(
+        'scheduled-publish-sweep',
+        expect.anything(),
+      );
+
+      clearInterval(schedulerRegistry.addInterval.mock.calls[0][1]);
+    });
+  });
+
+  describe('publishDueArticles', () => {
+    it('publishes every SCHEDULED article whose scheduledAt has passed, scoped per organization', async () => {
+      prisma.organization.findMany.mockResolvedValue([{ id: 'org-1' }, { id: 'org-2' }]);
+      prisma.article.findMany
+        .mockResolvedValueOnce([{ id: 'article-1', primaryAuthorId: 'author-1' }])
+        .mockResolvedValueOnce([{ id: 'article-2', primaryAuthorId: 'author-2' }]);
+      articlesService.publish.mockResolvedValue({});
+
+      const published = await service.publishDueArticles();
+
+      expect(published).toBe(2);
+      expect(articlesService.publish).toHaveBeenCalledWith('article-1', 'author-1', 'org-1');
+      expect(articlesService.publish).toHaveBeenCalledWith('article-2', 'author-2', 'org-2');
+    });
+
+    it('only queries SCHEDULED, non-deleted articles whose scheduledAt has already passed', async () => {
+      prisma.organization.findMany.mockResolvedValue([{ id: 'org-1' }]);
+      prisma.article.findMany.mockResolvedValue([]);
+
+      await service.publishDueArticles();
+
+      expect(prisma.article.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            status: 'SCHEDULED',
+            deletedAt: null,
+            scheduledAt: { lte: expect.any(Date) },
+          }),
+        }),
+      );
+    });
+
+    it('does not let one article failing to publish stop the rest from being processed', async () => {
+      prisma.organization.findMany.mockResolvedValue([{ id: 'org-1' }]);
+      prisma.article.findMany.mockResolvedValue([
+        { id: 'article-1', primaryAuthorId: 'author-1' },
+        { id: 'article-2', primaryAuthorId: 'author-2' },
+      ]);
+      articlesService.publish
+        .mockRejectedValueOnce(new Error('DB hiccup'))
+        .mockResolvedValueOnce({});
+
+      const published = await service.publishDueArticles();
+
+      expect(published).toBe(1);
+      expect(articlesService.publish).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns 0 and publishes nothing when no articles are due', async () => {
+      prisma.organization.findMany.mockResolvedValue([{ id: 'org-1' }]);
+      prisma.article.findMany.mockResolvedValue([]);
+
+      const published = await service.publishDueArticles();
+
+      expect(published).toBe(0);
+      expect(articlesService.publish).not.toHaveBeenCalled();
+    });
+  });
+});
