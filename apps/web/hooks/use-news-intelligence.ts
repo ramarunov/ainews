@@ -100,3 +100,43 @@ export function useCreateDraftFromItem() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["news-items"] }),
   });
 }
+
+export interface NewsClusterEntity {
+  text: string;
+  type: string;
+  confidence: number;
+}
+
+export interface NewsCluster {
+  id: string;
+  title: string | null;
+  summary: string | null;
+  itemCount: number;
+  trendScore: string;
+  entities: NewsClusterEntity[];
+  firstSeenAt: string;
+  lastUpdatedAt: string;
+}
+
+export interface NewsClusterDetail extends NewsCluster {
+  newsItems: NewsItem[];
+}
+
+export function useNewsClusters(page = 1, limit = 20) {
+  return useQuery({
+    queryKey: ["news-clusters", page, limit],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<NewsCluster>>(
+        `/news-intelligence/clusters?page=${page}&limit=${limit}`,
+      ),
+    staleTime: 15_000,
+  });
+}
+
+export function useNewsClusterDetail(id: string | undefined) {
+  return useQuery({
+    queryKey: ["news-clusters", id],
+    queryFn: () => apiClient.get<NewsClusterDetail>(`/news-intelligence/clusters/${id}`),
+    enabled: !!id,
+  });
+}

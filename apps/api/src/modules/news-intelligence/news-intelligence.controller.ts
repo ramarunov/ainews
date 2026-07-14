@@ -86,6 +86,31 @@ export class NewsIntelligenceController {
     return this.newsIntelligenceService.enqueueAndAwaitIngest(id, user.organizationId);
   }
 
+  // ─── Clusters (NEWS-005) ───────────────────────────────────────────────────
+
+  @Get('clusters')
+  @RequirePermissions('news:read')
+  @ApiOperation({ summary: 'List story clusters (grouped related news items)' })
+  findAllClusters(
+    @Query('page') page: string | undefined,
+    @Query('limit') limit: string | undefined,
+    @CurrentUser() user: any,
+  ) {
+    return this.newsIntelligenceService.findAllClusters(
+      user.organizationId,
+      page ? Number(page) : undefined,
+      limit ? Number(limit) : undefined,
+    );
+  }
+
+  @Get('clusters/:id')
+  @RequirePermissions('news:read')
+  @ApiOperation({ summary: 'Get a cluster with its news items' })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  findOneCluster(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
+    return this.newsIntelligenceService.findOneCluster(id, user.organizationId);
+  }
+
   // ─── Items ─────────────────────────────────────────────────────────────────
 
   @Post('items')

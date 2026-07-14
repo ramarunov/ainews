@@ -16,6 +16,7 @@ import {
   NewsItemQueryDto,
 } from './dto/news-intelligence.dto';
 import { NEWS_INGESTION_QUEUE } from './news-intelligence.constants';
+import { NewsClusteringService } from './news-clustering.service';
 
 export interface IngestSourceJobData {
   sourceId: string;
@@ -27,6 +28,7 @@ export class NewsIntelligenceService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly clusteringService: NewsClusteringService,
     @InjectQueue(NEWS_INGESTION_QUEUE) private readonly ingestionQueue: Queue<IngestSourceJobData>,
   ) {}
 
@@ -166,7 +168,7 @@ export class NewsIntelligenceService {
         }
 
         try {
-          await this.prisma.newsItem.create({
+          const created = await this.prisma.newsItem.create({
             data: {
               organizationId,
               sourceId: source.id,
@@ -183,6 +185,12 @@ export class NewsIntelligenceService {
             },
           });
           itemsCreated++;
+
+          // Best-effort: a clustering/entity-extraction failure must not
+          // abort ingestion of the rest of the feed.
+          await this.clusteringService
+            .processItem(created.id, organizationId)
+            .catch((err) => console.error(`[NewsIntelligenceService] Clustering failed for item ${created.id}`, err));
         } catch (err: any) {
           if (err?.code === 'P2002') {
             itemsSkipped++;
@@ -229,7 +237,7 @@ export class NewsIntelligenceService {
       throw new BadRequestException('A news item with this URL already exists');
     }
 
-    return this.prisma.newsItem.create({
+    const created = await this.prisma.newsItem.create({
       data: {
         organizationId,
         sourceId: source.id,
@@ -246,6 +254,15 @@ export class NewsIntelligenceService {
         status: NewsItemStatus.NEW,
       },
     });
+
+    // Fire-and-forget: this is a synchronous HTTP request, unlike the
+    // ingestion path's background job - clustering must not add AI
+    // latency to the response.
+    this.clusteringService
+      .processItem(created.id, organizationId)
+      .catch((err) => console.error(`[NewsIntelligenceService] Clustering failed for item ${created.id}`, err));
+
+    return created;
   }
 
   // ─── Items ─────────────────────────────────────────────────────────────────
@@ -312,6 +329,48 @@ export class NewsIntelligenceService {
       where: { id },
       data: { status: NewsItemStatus.IGNORED },
     });
+  }
+
+  // ─── Clusters (NEWS-005) ────────────────────────────────────────────────────
+
+  async findAllClusters(organizationId: string, page = 1, limit = 20) {
+    const skip = (Math.max(1, page) - 1) * Math.min(100, limit);
+    const take = Math.min(100, limit);
+
+    const where: Prisma.NewsClusterWhereInput = { organizationId };
+
+    const [clusters, total] = await Promise.all([
+      this.prisma.newsCluster.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { lastUpdatedAt: 'desc' },
+      }),
+      this.prisma.newsCluster.count({ where }),
+    ]);
+
+    return {
+      data: clusters,
+      meta: { total, page: Math.max(1, page), limit: take, totalPages: Math.ceil(total / take) },
+    };
+  }
+
+  async findOneCluster(id: string, organizationId: string) {
+    const cluster = await this.prisma.newsCluster.findFirst({
+      where: { id, organizationId },
+      include: {
+        newsItems: {
+          where: { organizationId },
+          orderBy: { publishedAt: 'desc' },
+        },
+      },
+    });
+
+    if (!cluster) {
+      throw new NotFoundException('Cluster not found');
+    }
+
+    return cluster;
   }
 
   // ─── One-click Draft (NEWS-010) ────────────────────────────────────────────

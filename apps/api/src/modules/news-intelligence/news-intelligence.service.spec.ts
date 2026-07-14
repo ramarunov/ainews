@@ -6,6 +6,7 @@ describe('NewsIntelligenceService', () => {
   let prisma: any;
   let eventEmitter: any;
   let queue: any;
+  let clusteringService: any;
 
   beforeEach(() => {
     prisma = {
@@ -13,7 +14,8 @@ describe('NewsIntelligenceService', () => {
     };
     eventEmitter = { emit: jest.fn() };
     queue = { add: jest.fn() };
-    service = new NewsIntelligenceService(prisma, eventEmitter, queue);
+    clusteringService = { processItem: jest.fn().mockResolvedValue(undefined) };
+    service = new NewsIntelligenceService(prisma, eventEmitter, clusteringService, queue);
   });
 
   describe('enqueueAndAwaitIngest', () => {

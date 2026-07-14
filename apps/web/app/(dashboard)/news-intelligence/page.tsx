@@ -49,6 +49,8 @@ import {
   useIgnoreNewsItem,
   useIngestNewsSource,
   useCreateDraftFromItem,
+  useNewsClusterDetail,
+  useNewsClusters,
   useNewsItems,
   useNewsSources,
   useUpdateNewsSource,
@@ -378,6 +380,130 @@ function ItemsTab({ canWrite }: { canWrite: boolean }) {
   );
 }
 
+function ClusterDetailDialog({
+  clusterId,
+  onOpenChange,
+}: {
+  clusterId: string | null;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { data, isLoading } = useNewsClusterDetail(clusterId ?? undefined);
+
+  return (
+    <Dialog open={!!clusterId} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{data?.title ?? "Cluster"}</DialogTitle>
+        </DialogHeader>
+        {isLoading && <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>}
+        {data && (
+          <div className="flex flex-col gap-4">
+            {data.entities.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {data.entities.map((entity) => (
+                  <Badge key={entity.text} variant="outline">
+                    {entity.text}
+                  </Badge>
+                ))}
+              </div>
+            )}
+            <ul className="flex flex-col gap-2">
+              {data.newsItems.map((item) => (
+                <li key={item.id} className="text-sm">
+                  <a href={item.url} target="_blank" rel="noreferrer" className="hover:underline">
+                    {item.title}
+                  </a>
+                  <span className="ml-2 text-xs text-muted-foreground">{item.sourceName}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function ClustersTab() {
+  const [page, setPage] = useState(1);
+  const { data, isLoading } = useNewsClusters(page, 20);
+  const [viewingId, setViewingId] = useState<string | null>(null);
+
+  const clusters = data?.data ?? [];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Story Clusters</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading && <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>}
+        {!isLoading && clusters.length === 0 && (
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            No clusters yet — ingest some news sources and related stories will group here
+            automatically.
+          </p>
+        )}
+        {clusters.length > 0 && (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Story</TableHead>
+                <TableHead>Items</TableHead>
+                <TableHead>Key entities</TableHead>
+                <TableHead>Last updated</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {clusters.map((cluster) => (
+                <TableRow key={cluster.id}>
+                  <TableCell className="font-medium">
+                    <button
+                      type="button"
+                      className="text-left hover:underline"
+                      onClick={() => setViewingId(cluster.id)}
+                    >
+                      {cluster.title ?? "Untitled cluster"}
+                    </button>
+                  </TableCell>
+                  <TableCell>{cluster.itemCount}</TableCell>
+                  <TableCell className="max-w-64 truncate text-muted-foreground">
+                    {cluster.entities.map((e) => e.text).join(", ") || "—"}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {new Date(cluster.lastUpdatedAt).toLocaleString()}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+        {data && data.meta.totalPages > 1 && (
+          <div className="flex justify-end gap-2 pt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+            >
+              Previous
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= data.meta.totalPages}
+              onClick={() => setPage((p) => p + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        )}
+      </CardContent>
+      <ClusterDetailDialog clusterId={viewingId} onOpenChange={() => setViewingId(null)} />
+    </Card>
+  );
+}
+
 export default function NewsIntelligencePage() {
   const user = useAuthStore((s) => s.user);
   const canManageSources = hasPermission(user, "news:manage-sources");
@@ -396,12 +522,16 @@ export default function NewsIntelligencePage() {
         <TabsList>
           <TabsTrigger value="sources">Sources</TabsTrigger>
           <TabsTrigger value="items">News Feed</TabsTrigger>
+          <TabsTrigger value="clusters">Clusters</TabsTrigger>
         </TabsList>
         <TabsContent value="sources" className="pt-4">
           <SourcesTab canManage={canManageSources} />
         </TabsContent>
         <TabsContent value="items" className="pt-4">
           <ItemsTab canWrite={canWrite} />
+        </TabsContent>
+        <TabsContent value="clusters" className="pt-4">
+          <ClustersTab />
         </TabsContent>
       </Tabs>
     </div>
