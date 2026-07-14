@@ -402,13 +402,32 @@ function SourcesTab({ canManage }: { canManage: boolean }) {
 function ItemsTab({ canWrite }: { canWrite: boolean }) {
   const router = useRouter();
   const [status, setStatus] = useState<NewsItemStatus | "ALL">("NEW");
+  const [sourceId, setSourceId] = useState<string>("ALL");
+  const [page, setPage] = useState(1);
+  const { data: sources } = useNewsSources();
   const { data, isLoading } = useNewsItems({
     status: status === "ALL" ? undefined : status,
+    sourceId: sourceId === "ALL" ? undefined : sourceId,
+    page,
     limit: 30,
   });
   const ignoreItem = useIgnoreNewsItem();
   const createDraft = useCreateDraftFromItem();
   const [creatingId, setCreatingId] = useState<string | null>(null);
+
+  // A feed with older articles (e.g. a lower-volume RSS source) can get
+  // pushed off the default "newest first, no source filter" view entirely
+  // once enough sources are feeding in — the item is really there, just on
+  // a page these controls previously had no way to reach.
+  const handleStatusChange = (value: NewsItemStatus | "ALL") => {
+    setStatus(value);
+    setPage(1);
+  };
+
+  const handleSourceChange = (value: string | null) => {
+    setSourceId(value ?? "ALL");
+    setPage(1);
+  };
 
   const handleIgnore = async (id: string) => {
     try {
@@ -436,19 +455,34 @@ function ItemsTab({ canWrite }: { canWrite: boolean }) {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-base">News Feed</CardTitle>
-        <Select value={status} onValueChange={(v) => setStatus(v as NewsItemStatus | "ALL")}>
-          <SelectTrigger className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">All statuses</SelectItem>
-            {ITEM_STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>
-                {s}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex gap-2">
+          <Select value={sourceId} onValueChange={handleSourceChange}>
+            <SelectTrigger className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All sources</SelectItem>
+              {(sources ?? []).map((s) => (
+                <SelectItem key={s.id} value={s.id}>
+                  {s.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={status} onValueChange={(v) => handleStatusChange(v as NewsItemStatus | "ALL")}>
+            <SelectTrigger className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All statuses</SelectItem>
+              {ITEM_STATUSES.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </CardHeader>
       <CardContent>
         {isLoading && <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>}
@@ -503,6 +537,31 @@ function ItemsTab({ canWrite }: { canWrite: boolean }) {
             </div>
           ))}
         </div>
+        {data && data.meta.totalPages > 1 && (
+          <div className="flex items-center justify-between pt-4">
+            <p className="text-sm text-muted-foreground">
+              Page {data.meta.page} of {data.meta.totalPages} · {data.meta.total} total
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page >= data.meta.totalPages}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
