@@ -57,6 +57,7 @@ import {
 } from "@/hooks/use-news-intelligence";
 import { ApiError } from "@/lib/api-client";
 import { hasPermission, useAuthStore } from "@/lib/auth-store";
+import { cn } from "@/lib/utils";
 import type { NewsItemStatus, NewsSourceType } from "@/lib/types";
 
 const SOURCE_TYPES: NewsSourceType[] = ["RSS", "ATOM", "NEWSAPI", "GNEWS", "WEBSITE", "MANUAL"];
@@ -69,9 +70,41 @@ const sourceSchema = z.object({
 
 type SourceFormValues = z.infer<typeof sourceSchema>;
 
+// Google News (news.google.com) is a different product from the "GNEWS"
+// source type above (gnews.io, a paid API requiring its own key, not yet
+// wired up). Google publishes its own results as plain public RSS feeds
+// with no API key needed, so a "Google News" source is really just an RSS
+// source with a specially-constructed URL — no backend changes needed,
+// the existing RSS ingestion path handles it as-is.
+const GOOGLE_NEWS_TOPICS = [
+  { value: "TOP", label: "Top Stories" },
+  { value: "WORLD", label: "World" },
+  { value: "NATION", label: "Nation" },
+  { value: "BUSINESS", label: "Business" },
+  { value: "TECHNOLOGY", label: "Technology" },
+  { value: "ENTERTAINMENT", label: "Entertainment" },
+  { value: "SPORTS", label: "Sports" },
+  { value: "SCIENCE", label: "Science" },
+  { value: "HEALTH", label: "Health" },
+] as const;
+
+function buildGoogleNewsUrl(topic: string, keyword: string): string {
+  const params = "hl=en-US&gl=US&ceid=US:en";
+  if (keyword.trim()) {
+    return `https://news.google.com/rss/search?q=${encodeURIComponent(keyword.trim())}&${params}`;
+  }
+  if (topic && topic !== "TOP") {
+    return `https://news.google.com/rss/headlines/section/topic/${topic}?${params}`;
+  }
+  return `https://news.google.com/rss?${params}`;
+}
+
 function AddSourceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const createSource = useCreateNewsSource();
   const [type, setType] = useState<NewsSourceType>("RSS");
+  const [mode, setMode] = useState<"custom" | "google-news">("custom");
+  const [gnTopic, setGnTopic] = useState("TOP");
+  const [gnKeyword, setGnKeyword] = useState("");
   const {
     register,
     handleSubmit,
@@ -82,56 +115,151 @@ function AddSourceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
     defaultValues: { name: "", url: "" },
   });
 
+  const resetAll = () => {
+    reset({ name: "", url: "" });
+    setType("RSS");
+    setMode("custom");
+    setGnTopic("TOP");
+    setGnKeyword("");
+  };
+
   const onSubmit = async (values: SourceFormValues) => {
     try {
       await createSource.mutateAsync({ ...values, type });
       toast.success("News source added");
       onOpenChange(false);
-      reset();
-      setType("RSS");
+      resetAll();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to add source");
+    }
+  };
+
+  const handleAddGoogleNews = async () => {
+    const topicLabel = GOOGLE_NEWS_TOPICS.find((t) => t.value === gnTopic)?.label ?? "Top Stories";
+    const name = gnKeyword.trim()
+      ? `Google News: "${gnKeyword.trim()}"`
+      : `Google News: ${topicLabel}`;
+    try {
+      await createSource.mutateAsync({
+        name,
+        url: buildGoogleNewsUrl(gnTopic, gnKeyword),
+        type: "RSS",
+      });
+      toast.success("Google News source added");
+      onOpenChange(false);
+      resetAll();
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed to add source");
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        onOpenChange(o);
+        if (!o) resetAll();
+      }}
+    >
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Add a news source</DialogTitle>
         </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="source-name">Name</Label>
-            <Input id="source-name" placeholder="e.g. TechCrunch RSS" {...register("name")} />
-            {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+
+        <div className="flex gap-1 rounded-md bg-muted p-1">
+          <button
+            type="button"
+            onClick={() => setMode("custom")}
+            className={cn(
+              "flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors",
+              mode === "custom" ? "bg-background shadow-sm" : "text-muted-foreground",
+            )}
+          >
+            Custom Feed
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("google-news")}
+            className={cn(
+              "flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors",
+              mode === "google-news" ? "bg-background shadow-sm" : "text-muted-foreground",
+            )}
+          >
+            Google News
+          </button>
+        </div>
+
+        {mode === "custom" ? (
+          <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 pt-2">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="source-name">Name</Label>
+              <Input id="source-name" placeholder="e.g. TechCrunch RSS" {...register("name")} />
+              {errors.name && <p className="text-sm text-destructive">{errors.name.message}</p>}
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label>Type</Label>
+              <Select value={type} onValueChange={(v) => setType(v as NewsSourceType)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SOURCE_TYPES.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="source-url">Feed URL</Label>
+              <Input id="source-url" placeholder="https://example.com/feed" {...register("url")} />
+              {errors.url && <p className="text-sm text-destructive">{errors.url.message}</p>}
+            </div>
+            <DialogFooter>
+              <Button type="submit" disabled={createSource.isPending}>
+                {createSource.isPending ? "Adding…" : "Add Source"}
+              </Button>
+            </DialogFooter>
+          </form>
+        ) : (
+          <div className="flex flex-col gap-4 pt-2">
+            <div className="flex flex-col gap-2">
+              <Label>Topic</Label>
+              <Select value={gnTopic} onValueChange={(v) => setGnTopic(v ?? "TOP")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {GOOGLE_NEWS_TOPICS.map((t) => (
+                    <SelectItem key={t.value} value={t.value}>
+                      {t.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="gn-keyword">Or search by keyword (overrides topic)</Label>
+              <Input
+                id="gn-keyword"
+                placeholder="e.g. artificial intelligence"
+                value={gnKeyword}
+                onChange={(e) => setGnKeyword(e.target.value)}
+              />
+            </div>
+            <p className="break-all text-xs text-muted-foreground">
+              Pulls Google News&apos; public RSS feed directly — no API key needed.
+              <br />
+              {buildGoogleNewsUrl(gnTopic, gnKeyword)}
+            </p>
+            <DialogFooter>
+              <Button type="button" disabled={createSource.isPending} onClick={handleAddGoogleNews}>
+                {createSource.isPending ? "Adding…" : "Add Google News Source"}
+              </Button>
+            </DialogFooter>
           </div>
-          <div className="flex flex-col gap-2">
-            <Label>Type</Label>
-            <Select value={type} onValueChange={(v) => setType(v as NewsSourceType)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SOURCE_TYPES.map((t) => (
-                  <SelectItem key={t} value={t}>
-                    {t}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="source-url">Feed URL</Label>
-            <Input id="source-url" placeholder="https://example.com/feed" {...register("url")} />
-            {errors.url && <p className="text-sm text-destructive">{errors.url.message}</p>}
-          </div>
-          <DialogFooter>
-            <Button type="submit" disabled={createSource.isPending}>
-              {createSource.isPending ? "Adding…" : "Add Source"}
-            </Button>
-          </DialogFooter>
-        </form>
+        )}
       </DialogContent>
     </Dialog>
   );
