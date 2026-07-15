@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BullModule } from '@nestjs/bull';
@@ -187,6 +187,13 @@ import { MetricsInterceptor } from './modules/metrics/metrics.interceptor';
   ],
   providers: [
     AuditLogService,
+    // SECURITY.md documents per-route rate limits (login 5/15min, etc. via
+    // the @Throttle() decorators already on auth/ai controllers), but those
+    // decorators do nothing unless ThrottlerGuard is actually bound
+    // somewhere - it never was. Binding it globally here is what makes both
+    // the per-route overrides AND the default 100/60s fallback (registered
+    // above) actually apply to every endpoint.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     // Order matters: OrgContextInterceptor must run first so its RLS
     // context wraps AuditInterceptor's own downstream audit-log write too.
     { provide: APP_INTERCEPTOR, useClass: OrgContextInterceptor },

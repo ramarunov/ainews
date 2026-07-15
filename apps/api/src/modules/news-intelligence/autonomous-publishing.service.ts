@@ -1,15 +1,23 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ArticleStatus, NewsItemStatus, Prisma } from '@prisma/client';
+import type { Redis } from 'ioredis';
 import slugify from 'slugify';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { REDIS_CLIENT } from '../../infrastructure/redis/redis.module';
 import { sanitizeArticleHtml } from '../../common/sanitize-html';
 import { AIWriterService } from '../ai/ai-writer.service';
 import { SystemSettingsService } from '../system-settings/system-settings.service';
 import { SettingsService } from '../settings/settings.service';
 import { CategoriesService } from '../categories/categories.service';
 import { ArticlesService } from '../articles/articles.service';
+
+const CLUSTER_LOCK_PREFIX = 'autonomous-pipeline:lock:cluster:';
+// Safety-net expiry, not the normal release path (that's the try/finally
+// below) - only matters if the process crashes mid-cluster, so it just
+// needs to clear well before the next scheduler tick (default 10 min).
+const CLUSTER_LOCK_TTL_SECONDS = 300;
 
 export const AUTONOMOUS_PIPELINE_SETTINGS = {
   enabled: 'news.autonomous_pipeline.enabled',
@@ -55,6 +63,7 @@ export class AutonomousPublishingService {
     private readonly settings: SettingsService,
     private readonly categoriesService: CategoriesService,
     private readonly articlesService: ArticlesService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
   async runCycle(organizationId: string): Promise<{ processed: number; published: number; flagged: number }> {
@@ -115,6 +124,18 @@ export class AutonomousPublishingService {
     let flagged = 0;
 
     for (const cluster of clusters) {
+      // Claims the cluster before doing any work, so two overlapping
+      // scheduler ticks (or a slow-running previous cycle) can't both pick
+      // up the same cluster - the eligibility query above is a plain read
+      // with no row locking, so without this a duplicate article was a
+      // real, reproducible outcome (confirmed live during testing).
+      const lockKey = `${CLUSTER_LOCK_PREFIX}${cluster.id}`;
+      const acquired = await this.redis.set(lockKey, '1', 'EX', CLUSTER_LOCK_TTL_SECONDS, 'NX');
+      if (!acquired) {
+        this.logger.debug(`Cluster ${cluster.id} is already being processed elsewhere - skipping.`);
+        continue;
+      }
+
       try {
         const outcome = await this.processCluster(
           cluster,
@@ -126,6 +147,8 @@ export class AutonomousPublishingService {
         if (outcome === 'flagged') flagged++;
       } catch (err: any) {
         this.logger.error(`Autonomous pipeline failed for cluster ${cluster.id}: ${err?.message ?? err}`);
+      } finally {
+        await this.redis.del(lockKey).catch(() => undefined);
       }
     }
 
@@ -297,7 +320,16 @@ export class AutonomousPublishingService {
     try {
       const category = await this.categoriesService.findBySlug(slugify(categoryHint, { lower: true }), organizationId);
       return category.id;
-    } catch {
+    } catch (err) {
+      // No matching category is an expected, silent outcome (most
+      // categoryHints won't have an exact slug match) - but anything else
+      // (DB hiccup, RLS context issue, etc.) is a real problem that was
+      // previously invisible, silently producing an uncategorized article.
+      if (!(err instanceof NotFoundException)) {
+        this.logger.warn(
+          `Category resolution failed unexpectedly for hint "${categoryHint}" in org ${organizationId}: ${(err as Error)?.message ?? err}`,
+        );
+      }
       return null;
     }
   }

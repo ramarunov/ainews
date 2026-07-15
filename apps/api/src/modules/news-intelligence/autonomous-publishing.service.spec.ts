@@ -18,6 +18,7 @@ for (const name of ['fetch', 'Request', 'Response', 'Headers', 'FormData', 'Blob
   (global as any)[name] = (global as any)[name] || class {};
 }
 
+import { Logger, NotFoundException } from '@nestjs/common';
 import { ArticleStatus, NewsItemStatus } from '@prisma/client';
 import {
   AutonomousPublishingService,
@@ -33,6 +34,7 @@ describe('AutonomousPublishingService', () => {
   let settings: any;
   let categoriesService: any;
   let articlesService: any;
+  let redis: any;
 
   const ORG_ID = 'org-1';
   const AUTHOR_ID = 'user-ai-newsroom';
@@ -95,8 +97,14 @@ describe('AutonomousPublishingService', () => {
         return Promise.resolve(null);
       }),
     };
-    categoriesService = { findBySlug: jest.fn().mockRejectedValue(new Error('not found')) };
+    categoriesService = {
+      findBySlug: jest.fn().mockRejectedValue(new NotFoundException('Category not found')),
+    };
     articlesService = { update: jest.fn().mockResolvedValue({}) };
+    redis = {
+      set: jest.fn().mockResolvedValue('OK'),
+      del: jest.fn().mockResolvedValue(1),
+    };
 
     service = new AutonomousPublishingService(
       prisma,
@@ -106,6 +114,7 @@ describe('AutonomousPublishingService', () => {
       settings,
       categoriesService,
       articlesService,
+      redis,
     );
   });
 
@@ -234,6 +243,67 @@ describe('AutonomousPublishingService', () => {
       AUTHOR_ID,
       ORG_ID,
     );
+  });
+
+  describe('cluster locking (concurrent-run protection)', () => {
+    it('claims the cluster with a Redis lock before processing, and releases it afterwards', async () => {
+      await service.runCycle(ORG_ID);
+
+      expect(redis.set).toHaveBeenCalledWith(
+        'autonomous-pipeline:lock:cluster:cluster-1',
+        '1',
+        'EX',
+        300,
+        'NX',
+      );
+      expect(redis.del).toHaveBeenCalledWith('autonomous-pipeline:lock:cluster:cluster-1');
+    });
+
+    it('skips a cluster another process already claimed, without touching it at all', async () => {
+      redis.set.mockResolvedValue(null); // NX lock already held elsewhere
+
+      const result = await service.runCycle(ORG_ID);
+
+      expect(result).toEqual({ processed: 1, published: 0, flagged: 0 });
+      expect(prisma.article.create).not.toHaveBeenCalled();
+      expect(aiWriter.generateDraft).not.toHaveBeenCalled();
+      expect(redis.del).not.toHaveBeenCalled();
+    });
+
+    it('still releases the lock when processing the cluster throws', async () => {
+      aiWriter.generateDraft.mockRejectedValue(new Error('boom'));
+
+      await service.runCycle(ORG_ID);
+
+      expect(redis.del).toHaveBeenCalledWith('autonomous-pipeline:lock:cluster:cluster-1');
+    });
+  });
+
+  describe('resolveCategory error handling', () => {
+    it('does not log a warning when a category simply has no matching slug', async () => {
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      categoriesService.findBySlug.mockRejectedValue(new NotFoundException('Category not found'));
+
+      await service.runCycle(ORG_ID);
+
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('logs a warning when category resolution fails for an unexpected reason', async () => {
+      const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      categoriesService.findBySlug.mockRejectedValue(new Error('connection reset'));
+      const clusterWithCategoryHint = {
+        ...cluster,
+        newsItems: [{ ...cluster.newsItems[0], source: { categoryHint: 'Politik' } }],
+      };
+      prisma.newsCluster.findMany.mockResolvedValue([clusterWithCategoryHint]);
+
+      await service.runCycle(ORG_ID);
+
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('connection reset'));
+      warnSpy.mockRestore();
+    });
   });
 
   it('does not attempt title localization when no output language is configured', async () => {
