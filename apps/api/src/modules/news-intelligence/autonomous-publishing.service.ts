@@ -12,6 +12,7 @@ import { SystemSettingsService } from '../system-settings/system-settings.servic
 import { SettingsService } from '../settings/settings.service';
 import { CategoriesService } from '../categories/categories.service';
 import { ArticlesService } from '../articles/articles.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const CLUSTER_LOCK_PREFIX = 'autonomous-pipeline:lock:cluster:';
 // Safety-net expiry, not the normal release path (that's the try/finally
@@ -63,6 +64,7 @@ export class AutonomousPublishingService {
     private readonly settings: SettingsService,
     private readonly categoriesService: CategoriesService,
     private readonly articlesService: ArticlesService,
+    private readonly notificationsService: NotificationsService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
@@ -307,6 +309,25 @@ export class AutonomousPublishingService {
           status: pass ? NewsItemStatus.PUBLISHED : NewsItemStatus.DRAFTED,
         },
       });
+
+      const finalTitle = localizedTitle ?? title;
+      // Fire-and-forget: a notification failure must never undo a
+      // successful publish/flag decision (this runs after every write
+      // above has already committed, unlike the try/catch's own cleanup
+      // path, which only ever deletes a shell that never got this far).
+      this.notificationsService
+        .create(
+          authorUserId,
+          pass ? 'ai_article_published' : 'ai_article_flagged',
+          pass ? `AI published: ${finalTitle}` : `AI draft needs review: ${finalTitle}`,
+          pass
+            ? undefined
+            : `Fact-check: ${hallucination.recommendation.replaceAll('_', ' ')}. Quality score: ${qualityScore.overall}/100.`,
+          { articleId: shell.id },
+        )
+        .catch((err) =>
+          this.logger.error(`Failed to notify ${authorUserId} about article ${shell.id}: ${err?.message ?? err}`),
+        );
 
       return pass ? 'published' : 'flagged';
     } catch (err) {

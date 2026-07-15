@@ -34,6 +34,7 @@ describe('AutonomousPublishingService', () => {
   let settings: any;
   let categoriesService: any;
   let articlesService: any;
+  let notificationsService: any;
   let redis: any;
 
   const ORG_ID = 'org-1';
@@ -101,6 +102,7 @@ describe('AutonomousPublishingService', () => {
       findBySlug: jest.fn().mockRejectedValue(new NotFoundException('Category not found')),
     };
     articlesService = { update: jest.fn().mockResolvedValue({}) };
+    notificationsService = { create: jest.fn().mockResolvedValue({}) };
     redis = {
       set: jest.fn().mockResolvedValue('OK'),
       del: jest.fn().mockResolvedValue(1),
@@ -114,6 +116,7 @@ describe('AutonomousPublishingService', () => {
       settings,
       categoriesService,
       articlesService,
+      notificationsService,
       redis,
     );
   });
@@ -217,6 +220,40 @@ describe('AutonomousPublishingService', () => {
         data: expect.objectContaining({ articleId: 'article-1', analysisType: 'autonomous_gate' }),
       }),
     );
+    expect(prisma.article.delete).not.toHaveBeenCalled();
+    expect(notificationsService.create).toHaveBeenCalledWith(
+      AUTHOR_ID,
+      'ai_article_published',
+      expect.stringContaining('AI published:'),
+      undefined,
+      { articleId: 'article-1' },
+    );
+  });
+
+  it('notifies the configured author when an article is flagged for review, with the reason in the body', async () => {
+    aiWriter.checkHallucinations.mockResolvedValue({
+      overallConfidence: 0.2,
+      claims: [],
+      recommendation: 'REVIEW_BEFORE_PUBLISH',
+    });
+
+    await service.runCycle(ORG_ID);
+
+    expect(notificationsService.create).toHaveBeenCalledWith(
+      AUTHOR_ID,
+      'ai_article_flagged',
+      expect.stringContaining('AI draft needs review:'),
+      expect.stringContaining('REVIEW BEFORE PUBLISH'),
+      { articleId: 'article-1' },
+    );
+  });
+
+  it('does not undo a successful publish/flag decision if sending the notification fails', async () => {
+    notificationsService.create.mockRejectedValue(new Error('notification service down'));
+
+    const result = await service.runCycle(ORG_ID);
+
+    expect(result).toEqual({ processed: 1, published: 1, flagged: 0 });
     expect(prisma.article.delete).not.toHaveBeenCalled();
   });
 

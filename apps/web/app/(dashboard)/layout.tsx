@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Newspaper, FolderTree, Tags, Layers, Image as ImageIcon, Search, History, UserCircle, LogOut, ShieldCheck, KanbanSquare, Radio, BarChart3, Users, Link2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "@/components/notification-bell";
 import { hasPermission, useAuthStore } from "@/lib/auth-store";
 import { cn } from "@/lib/utils";
 
@@ -48,11 +49,14 @@ export default function DashboardLayout({
   return (
     <div className="flex flex-1">
       <aside className="flex w-64 flex-col border-r bg-muted/20">
-        <div className="border-b px-6 py-4">
-          <p className="font-semibold">AI News CMS</p>
-          <p className="truncate text-xs text-muted-foreground">
-            {user?.displayName ?? user?.email}
-          </p>
+        <div className="flex items-center justify-between gap-2 border-b px-6 py-4">
+          <div className="min-w-0">
+            <p className="font-semibold">AI News CMS</p>
+            <p className="truncate text-xs text-muted-foreground">
+              {user?.displayName ?? user?.email}
+            </p>
+          </div>
+          <NotificationBell />
         </div>
         <nav className="flex flex-1 flex-col gap-1 p-3">
           {navItems.map(({ href, label, icon: Icon }) => (

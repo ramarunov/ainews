@@ -465,6 +465,16 @@ export interface Redirect {
   createdAt: string;
 }
 
+export interface Notification {
+  id: string;
+  type: string;
+  title: string;
+  body?: string | null;
+  data: { articleId?: string } & Record<string, unknown>;
+  readAt?: string | null;
+  createdAt: string;
+}
+
 export interface NotFoundLogEntry {
   id: string;
   path: string;

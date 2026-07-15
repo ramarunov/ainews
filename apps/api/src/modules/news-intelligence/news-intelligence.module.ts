@@ -14,6 +14,7 @@ import { SystemSettingsModule } from '../system-settings/system-settings.module'
 import { SettingsModule } from '../settings/settings.module';
 import { CategoriesModule } from '../categories/categories.module';
 import { ArticlesModule } from '../articles/articles.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { ArticlesModule } from '../articles/articles.module';
     SettingsModule,
     CategoriesModule,
     ArticlesModule,
+    NotificationsModule,
   ],
   providers: [
     NewsIntelligenceService,

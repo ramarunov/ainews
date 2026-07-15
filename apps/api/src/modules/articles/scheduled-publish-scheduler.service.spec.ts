@@ -8,6 +8,7 @@ describe('ScheduledPublishSchedulerService', () => {
   let service: ScheduledPublishSchedulerService;
   let prisma: any;
   let articlesService: any;
+  let notificationsService: any;
   let schedulerRegistry: any;
   let config: any;
 
@@ -17,9 +18,16 @@ describe('ScheduledPublishSchedulerService', () => {
       article: { findMany: jest.fn() },
     };
     articlesService = { publish: jest.fn() };
+    notificationsService = { create: jest.fn().mockResolvedValue({}) };
     schedulerRegistry = { addInterval: jest.fn() };
     config = { get: jest.fn((_key: string, fallback: any) => fallback) };
-    service = new ScheduledPublishSchedulerService(schedulerRegistry, config, prisma, articlesService);
+    service = new ScheduledPublishSchedulerService(
+      schedulerRegistry,
+      config,
+      prisma,
+      articlesService,
+      notificationsService,
+    );
   });
 
   describe('onModuleInit', () => {
@@ -91,6 +99,36 @@ describe('ScheduledPublishSchedulerService', () => {
 
       expect(published).toBe(0);
       expect(articlesService.publish).not.toHaveBeenCalled();
+    });
+
+    it("notifies the article's author once their scheduled article goes live", async () => {
+      prisma.organization.findMany.mockResolvedValue([{ id: 'org-1' }]);
+      prisma.article.findMany.mockResolvedValue([
+        { id: 'article-1', title: 'Big Story', primaryAuthorId: 'author-1' },
+      ]);
+      articlesService.publish.mockResolvedValue({});
+
+      await service.publishDueArticles();
+
+      expect(notificationsService.create).toHaveBeenCalledWith(
+        'author-1',
+        'scheduled_article_published',
+        expect.stringContaining('Big Story'),
+        undefined,
+        { articleId: 'article-1' },
+      );
+    });
+
+    it('does not notify for an article that failed to publish', async () => {
+      prisma.organization.findMany.mockResolvedValue([{ id: 'org-1' }]);
+      prisma.article.findMany.mockResolvedValue([
+        { id: 'article-1', title: 'Broken Story', primaryAuthorId: 'author-1' },
+      ]);
+      articlesService.publish.mockRejectedValue(new Error('DB hiccup'));
+
+      await service.publishDueArticles();
+
+      expect(notificationsService.create).not.toHaveBeenCalled();
     });
   });
 });

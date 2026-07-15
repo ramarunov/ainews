@@ -6,6 +6,7 @@ import { ArticleStatus } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { runWithOrgContext } from '../../infrastructure/prisma/org-context';
 import { ArticlesService } from './articles.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const INTERVAL_NAME = 'scheduled-publish-sweep';
 
@@ -24,6 +25,7 @@ export class ScheduledPublishSchedulerService implements OnModuleInit {
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     private readonly articlesService: ArticlesService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   onModuleInit() {
@@ -51,7 +53,7 @@ export class ScheduledPublishSchedulerService implements OnModuleInit {
             scheduledAt: { lte: now },
             deletedAt: null,
           },
-          select: { id: true, primaryAuthorId: true },
+          select: { id: true, title: true, primaryAuthorId: true },
         }),
       );
 
@@ -61,6 +63,17 @@ export class ScheduledPublishSchedulerService implements OnModuleInit {
             this.articlesService.publish(article.id, article.primaryAuthorId, org.id),
           );
           published++;
+          this.notificationsService
+            .create(
+              article.primaryAuthorId,
+              'scheduled_article_published',
+              `Your scheduled article is now live: ${article.title}`,
+              undefined,
+              { articleId: article.id },
+            )
+            .catch((err) =>
+              this.logger.error(`Failed to notify ${article.primaryAuthorId} about article ${article.id}`, err),
+            );
         } catch (err) {
           this.logger.error(`Failed to auto-publish article ${article.id}`, err);
         }
