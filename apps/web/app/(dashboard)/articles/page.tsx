@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -72,6 +73,8 @@ export default function ArticlesPage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<ArticleStatus | "ALL">("ALL");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkActionPending, setBulkActionPending] = useState(false);
 
   const { data, isLoading, isError } = useArticles({
     page,
@@ -97,6 +100,51 @@ export default function ArticlesPage() {
       toast.error(err instanceof ApiError ? err.message : "Action failed");
     }
   };
+
+  const toggleSelected = (id: string, checked: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = (checked: boolean) => {
+    setSelectedIds(checked ? new Set(data?.data.map((a) => a.id) ?? []) : new Set());
+  };
+
+  // Archiving reuses the existing unpublish endpoint - it already just sets
+  // status to ARCHIVED without soft-deleting, which is exactly "archive"
+  // regardless of the article's current status, not only when PUBLISHED.
+  const handleBulkAction = async (action: "archive" | "delete") => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+
+    setBulkActionPending(true);
+    try {
+      const mutation = action === "archive" ? unpublishMutation : deleteMutation;
+      const results = await Promise.allSettled(ids.map((id) => mutation.mutateAsync(id)));
+      const failed = results.filter((r) => r.status === "rejected").length;
+      const succeeded = ids.length - failed;
+
+      if (failed === 0) {
+        toast.success(
+          action === "archive"
+            ? `${succeeded} article(s) archived`
+            : `${succeeded} article(s) deleted`,
+        );
+      } else {
+        toast.error(`${succeeded} succeeded, ${failed} failed`);
+      }
+      setSelectedIds(new Set());
+    } finally {
+      setBulkActionPending(false);
+    }
+  };
+
+  const allOnPageSelected =
+    (data?.data.length ?? 0) > 0 && data!.data.every((a) => selectedIds.has(a.id));
 
   return (
     <div className="flex flex-col gap-6">
@@ -139,6 +187,35 @@ export default function ArticlesPage() {
           </Select>
           <CardTitle className="sr-only">Articles</CardTitle>
         </CardHeader>
+        {selectedIds.size > 0 && (
+          <div className="flex items-center gap-3 border-b bg-muted/50 px-6 py-3">
+            <p className="text-sm font-medium">{selectedIds.size} selected</p>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={bulkActionPending}
+              onClick={() => handleBulkAction("archive")}
+            >
+              Archive
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={bulkActionPending}
+              onClick={() => handleBulkAction("delete")}
+            >
+              Delete
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={bulkActionPending}
+              onClick={() => setSelectedIds(new Set())}
+            >
+              Clear selection
+            </Button>
+          </div>
+        )}
         <CardContent>
           {isLoading && (
             <p className="py-8 text-center text-sm text-muted-foreground">
@@ -160,6 +237,13 @@ export default function ArticlesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-10">
+                      <Checkbox
+                        checked={allOnPageSelected}
+                        onCheckedChange={(v) => toggleSelectAll(!!v)}
+                        aria-label="Select all on this page"
+                      />
+                    </TableHead>
                     <TableHead>Title</TableHead>
                     <TableHead>Category</TableHead>
                     <TableHead>Status</TableHead>
@@ -170,6 +254,13 @@ export default function ArticlesPage() {
                 <TableBody>
                   {data.data.map((article) => (
                     <TableRow key={article.id}>
+                      <TableCell>
+                        <Checkbox
+                          checked={selectedIds.has(article.id)}
+                          onCheckedChange={(v) => toggleSelected(article.id, !!v)}
+                          aria-label={`Select ${article.title}`}
+                        />
+                      </TableCell>
                       <TableCell className="font-medium">
                         <Link
                           href={`/articles/${article.id}`}
