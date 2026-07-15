@@ -27,6 +27,7 @@ import {
 import { useAiProviderStatus, useUpdateAiProviderKeys } from "@/hooks/use-system-settings";
 import { useSetting, useUpdateSetting } from "@/hooks/use-settings";
 import { useOrgMembers } from "@/hooks/use-org-users";
+import { useAutonomousPipelineUsage } from "@/hooks/use-news-intelligence";
 import { useAuthStore } from "@/lib/auth-store";
 import { ApiError } from "@/lib/api-client";
 
@@ -125,6 +126,8 @@ function AdWidgetSlotForm({
 const AUTONOMOUS_ENABLED_KEY = "news.autonomous_pipeline.enabled";
 const AUTONOMOUS_AUTHOR_KEY = "news.autonomous_pipeline.author_user_id";
 const AUTONOMOUS_LANGUAGE_KEY = "news.autonomous_pipeline.output_language";
+const AUTONOMOUS_DAILY_LIMIT_KEY = "news.autonomous_pipeline.daily_limit";
+const AUTONOMOUS_HOURLY_LIMIT_KEY = "news.autonomous_pipeline.hourly_limit";
 
 const SAME_AS_SOURCE = "same";
 const OUTPUT_LANGUAGES = [
@@ -133,10 +136,89 @@ const OUTPUT_LANGUAGES = [
   { value: "id", label: "Indonesian (Bahasa Indonesia)" },
 ] as const;
 
+function PublishQuotaFields({
+  enabled,
+  dailyLimitInitial,
+  hourlyLimitInitial,
+}: {
+  enabled: boolean;
+  dailyLimitInitial: number | null;
+  hourlyLimitInitial: number | null;
+}) {
+  const updateDailyLimit = useUpdateSetting(AUTONOMOUS_DAILY_LIMIT_KEY);
+  const updateHourlyLimit = useUpdateSetting(AUTONOMOUS_HOURLY_LIMIT_KEY);
+  const { data: usage } = useAutonomousPipelineUsage(enabled);
+  // Seeded once at mount from already-resolved settings data, same as
+  // AdWidgetSlotForm - plain inputs, no later async update to resync from.
+  const [dailyLimit, setDailyLimit] = useState(dailyLimitInitial != null ? String(dailyLimitInitial) : "");
+  const [hourlyLimit, setHourlyLimit] = useState(hourlyLimitInitial != null ? String(hourlyLimitInitial) : "");
+
+  const handleSave = async () => {
+    try {
+      await Promise.all([
+        updateDailyLimit.mutateAsync({ value: dailyLimit ? Number(dailyLimit) : null }),
+        updateHourlyLimit.mutateAsync({ value: hourlyLimit ? Number(hourlyLimit) : null }),
+      ]);
+      toast.success("Publish quota saved");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to save");
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2 border-t pt-4">
+      <Label>Publish quota</Label>
+      <p className="text-xs text-muted-foreground">
+        Caps how many articles the pipeline auto-publishes, so it can&apos;t
+        flood the site (or the AI bill). Once a cap is hit, the pipeline
+        pauses and resumes automatically next hour/day. Blank = unlimited.
+      </p>
+      <div className="flex gap-2">
+        <div className="flex flex-1 items-center gap-2">
+          <Input
+            type="number"
+            min={0}
+            placeholder="e.g. 50"
+            value={dailyLimit}
+            onChange={(e) => setDailyLimit(e.target.value)}
+          />
+          <span className="text-xs whitespace-nowrap text-muted-foreground">per day</span>
+        </div>
+        <div className="flex flex-1 items-center gap-2">
+          <Input
+            type="number"
+            min={0}
+            placeholder="e.g. 5"
+            value={hourlyLimit}
+            onChange={(e) => setHourlyLimit(e.target.value)}
+          />
+          <span className="text-xs whitespace-nowrap text-muted-foreground">per hour</span>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={updateDailyLimit.isPending || updateHourlyLimit.isPending}
+          onClick={handleSave}
+        >
+          Save
+        </Button>
+      </div>
+      {enabled && usage && (
+        <p className="text-xs text-muted-foreground">
+          {usage.publishedToday}{usage.dailyLimit != null ? `/${usage.dailyLimit}` : ""} published today ·{" "}
+          {usage.publishedThisHour}{usage.hourlyLimit != null ? `/${usage.hourlyLimit}` : ""} this hour
+        </p>
+      )}
+    </div>
+  );
+}
+
 function AutonomousPublishingCard({ aiConfigured }: { aiConfigured: boolean }) {
   const { data: enabledSaved, isLoading: enabledLoading } = useSetting<boolean>(AUTONOMOUS_ENABLED_KEY);
   const { data: authorSaved, isLoading: authorLoading } = useSetting<string>(AUTONOMOUS_AUTHOR_KEY);
   const { data: languageSaved, isLoading: languageLoading } = useSetting<string>(AUTONOMOUS_LANGUAGE_KEY);
+  const { data: dailyLimitSaved, isLoading: dailyLimitLoading } = useSetting<number>(AUTONOMOUS_DAILY_LIMIT_KEY);
+  const { data: hourlyLimitSaved, isLoading: hourlyLimitLoading } = useSetting<number>(AUTONOMOUS_HOURLY_LIMIT_KEY);
   const { data: members, isLoading: membersLoading } = useOrgMembers({ isActive: true, limit: 100 });
   const updateEnabled = useUpdateSetting(AUTONOMOUS_ENABLED_KEY);
   const updateAuthor = useUpdateSetting(AUTONOMOUS_AUTHOR_KEY);
@@ -146,7 +228,7 @@ function AutonomousPublishingCard({ aiConfigured }: { aiConfigured: boolean }) {
   // on - Select only resolves its trigger's display label from SelectItems
   // present at mount, so rendering it before `members` has loaded would
   // permanently show the placeholder even after the real value arrives.
-  if (enabledLoading || authorLoading || languageLoading || membersLoading) {
+  if (enabledLoading || authorLoading || languageLoading || dailyLimitLoading || hourlyLimitLoading || membersLoading) {
     return <div className="h-32 animate-pulse rounded-md bg-muted" />;
   }
 
@@ -280,6 +362,12 @@ function AutonomousPublishingCard({ aiConfigured }: { aiConfigured: boolean }) {
             </SelectContent>
           </Select>
         </div>
+
+        <PublishQuotaFields
+          enabled={enabled}
+          dailyLimitInitial={dailyLimitSaved ?? null}
+          hourlyLimitInitial={hourlyLimitSaved ?? null}
+        />
       </CardContent>
     </Card>
   );

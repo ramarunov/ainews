@@ -16,6 +16,23 @@ export function useNewsSources() {
   });
 }
 
+export interface AutonomousPipelineUsage {
+  publishedToday: number;
+  publishedThisHour: number;
+  dailyLimit: number | null;
+  hourlyLimit: number | null;
+}
+
+export function useAutonomousPipelineUsage(enabled: boolean) {
+  return useQuery({
+    queryKey: ["autonomous-pipeline-usage"],
+    queryFn: () => apiClient.get<AutonomousPipelineUsage>("/news-intelligence/autonomous-pipeline/usage"),
+    enabled,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
 export function useCreateNewsSource() {
   const queryClient = useQueryClient();
   return useMutation({

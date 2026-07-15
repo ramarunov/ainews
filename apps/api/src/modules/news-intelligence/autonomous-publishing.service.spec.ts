@@ -63,6 +63,7 @@ describe('AutonomousPublishingService', () => {
         create: jest.fn().mockResolvedValue({ id: 'article-1' }),
         delete: jest.fn().mockResolvedValue({}),
         findFirst: jest.fn().mockResolvedValue(null),
+        count: jest.fn().mockResolvedValue(0),
       },
       articleAiAnalysis: { create: jest.fn().mockResolvedValue({}) },
       newsItem: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
@@ -125,6 +126,56 @@ describe('AutonomousPublishingService', () => {
 
     expect(result).toEqual({ processed: 0, published: 0, flagged: 0 });
     expect(prisma.newsCluster.findMany).not.toHaveBeenCalled();
+  });
+
+  it('skips the cycle once the daily publish quota is reached', async () => {
+    settings.get.mockImplementation((_orgId: string, key: string) => {
+      if (key === AUTONOMOUS_PIPELINE_SETTINGS.enabled) return Promise.resolve(true);
+      if (key === AUTONOMOUS_PIPELINE_SETTINGS.authorUserId) return Promise.resolve(AUTHOR_ID);
+      if (key === AUTONOMOUS_PIPELINE_SETTINGS.dailyLimit) return Promise.resolve(5);
+      return Promise.resolve(null);
+    });
+    prisma.article.count.mockResolvedValue(5); // already at the daily limit
+
+    const result = await service.runCycle(ORG_ID);
+
+    expect(result).toEqual({ processed: 0, published: 0, flagged: 0 });
+    expect(prisma.newsCluster.findMany).not.toHaveBeenCalled();
+  });
+
+  it('skips the cycle once the hourly publish quota is reached', async () => {
+    settings.get.mockImplementation((_orgId: string, key: string) => {
+      if (key === AUTONOMOUS_PIPELINE_SETTINGS.enabled) return Promise.resolve(true);
+      if (key === AUTONOMOUS_PIPELINE_SETTINGS.authorUserId) return Promise.resolve(AUTHOR_ID);
+      if (key === AUTONOMOUS_PIPELINE_SETTINGS.hourlyLimit) return Promise.resolve(2);
+      return Promise.resolve(null);
+    });
+    // First count() call is "today" (under its unlimited quota), second is "this hour" (at limit).
+    prisma.article.count.mockResolvedValueOnce(2).mockResolvedValueOnce(2);
+
+    const result = await service.runCycle(ORG_ID);
+
+    expect(result).toEqual({ processed: 0, published: 0, flagged: 0 });
+    expect(prisma.newsCluster.findMany).not.toHaveBeenCalled();
+  });
+
+  it('caps the cluster batch by remaining quota rather than the configured max-per-cycle', async () => {
+    settings.get.mockImplementation((_orgId: string, key: string) => {
+      if (key === AUTONOMOUS_PIPELINE_SETTINGS.enabled) return Promise.resolve(true);
+      if (key === AUTONOMOUS_PIPELINE_SETTINGS.authorUserId) return Promise.resolve(AUTHOR_ID);
+      if (key === AUTONOMOUS_PIPELINE_SETTINGS.dailyLimit) return Promise.resolve(10);
+      return Promise.resolve(null);
+    });
+    prisma.article.count.mockResolvedValue(9); // only 1 left in today's budget
+    config.get.mockImplementation((key: string, def: any) =>
+      key === 'AUTONOMOUS_PIPELINE_MAX_PER_CYCLE' ? 3 : def,
+    );
+
+    await service.runCycle(ORG_ID);
+
+    expect(prisma.newsCluster.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ take: 1 }),
+    );
   });
 
   it('publishes automatically when the quality gate passes', async () => {

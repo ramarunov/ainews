@@ -15,6 +15,7 @@ import {
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse, ApiParam } from '@nestjs/swagger';
 
 import { NewsIntelligenceService } from './news-intelligence.service';
+import { AutonomousPublishingService } from './autonomous-publishing.service';
 import {
   CreateNewsSourceDto,
   UpdateNewsSourceDto,
@@ -33,7 +34,10 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller({ path: 'news-intelligence', version: '1' })
 export class NewsIntelligenceController {
-  constructor(private readonly newsIntelligenceService: NewsIntelligenceService) {}
+  constructor(
+    private readonly newsIntelligenceService: NewsIntelligenceService,
+    private readonly autonomousPublishingService: AutonomousPublishingService,
+  ) {}
 
   // ─── Sources ───────────────────────────────────────────────────────────────
 
@@ -158,5 +162,14 @@ export class NewsIntelligenceController {
   @ApiOperation({ summary: 'One-click create an article draft from a news item' })
   createDraftFromItem(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
     return this.newsIntelligenceService.createDraftFromItem(id, user.id, user.organizationId);
+  }
+
+  // ─── Autonomous Publishing ─────────────────────────────────────────────────
+
+  @Get('autonomous-pipeline/usage')
+  @RequirePermissions('news:read')
+  @ApiOperation({ summary: 'Current daily/hourly publish quota usage for the autonomous pipeline' })
+  getAutonomousPipelineUsage(@CurrentUser() user: any) {
+    return this.autonomousPublishingService.getUsageStats(user.organizationId);
   }
 }

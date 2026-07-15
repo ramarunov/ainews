@@ -17,7 +17,19 @@ export const AUTONOMOUS_PIPELINE_SETTINGS = {
   // ISO 639-1 code (e.g. 'id'). Unset/null means "write in whatever
   // language the sources are in" (no translation instruction is added).
   outputLanguage: 'news.autonomous_pipeline.output_language',
+  // Both unset/null means unlimited. Counted against Article.publishedAt
+  // for isAiAssisted articles only - articles a human published manually
+  // don't count against the autonomous pipeline's own quota.
+  dailyLimit: 'news.autonomous_pipeline.daily_limit',
+  hourlyLimit: 'news.autonomous_pipeline.hourly_limit',
 } as const;
+
+export interface AutonomousPipelineUsage {
+  publishedToday: number;
+  publishedThisHour: number;
+  dailyLimit: number | null;
+  hourlyLimit: number | null;
+}
 
 /**
  * Discover -> AI rewrite -> quality-gated publish, with zero schema
@@ -64,9 +76,28 @@ export class AutonomousPublishingService {
       return { processed: 0, published: 0, flagged: 0 };
     }
 
+    const usage = await this.getUsageStats(organizationId);
+    const dailyRemaining = usage.dailyLimit != null ? usage.dailyLimit - usage.publishedToday : Infinity;
+    const hourlyRemaining = usage.hourlyLimit != null ? usage.hourlyLimit - usage.publishedThisHour : Infinity;
+    const remainingBudget = Math.min(dailyRemaining, hourlyRemaining);
+
+    if (remainingBudget <= 0) {
+      this.logger.debug(
+        `Autonomous pipeline for org ${organizationId} is at its publish quota (${usage.publishedToday}/${usage.dailyLimit ?? '∞'} today, ${usage.publishedThisHour}/${usage.hourlyLimit ?? '∞'} this hour) - skipping cycle.`,
+      );
+      return { processed: 0, published: 0, flagged: 0 };
+    }
+
     const minSources = this.config.get<number>('AUTONOMOUS_PIPELINE_MIN_SOURCES', 1);
     const stabilizationMinutes = this.config.get<number>('AUTONOMOUS_PIPELINE_STABILIZATION_MINUTES', 20);
     const maxPerCycle = this.config.get<number>('AUTONOMOUS_PIPELINE_MAX_PER_CYCLE', 3);
+    // Cap the batch by remaining publish budget too, so a cycle never
+    // pulls more candidate clusters than it could actually publish before
+    // the next quota check - unpublishable overflow would just sit as
+    // extra IN_REVIEW load for no benefit (or, if under quota next cycle,
+    // double-count against a budget that's meant to pace publishing, not
+    // drafting).
+    const take = Number.isFinite(remainingBudget) ? Math.min(maxPerCycle, remainingBudget) : maxPerCycle;
 
     const clusters = await this.prisma.newsCluster.findMany({
       where: {
@@ -76,7 +107,7 @@ export class AutonomousPublishingService {
         newsItems: { none: { articleId: { not: null } } },
       },
       orderBy: { trendScore: 'desc' },
-      take: maxPerCycle,
+      take,
       include: { newsItems: { include: { source: true } } },
     });
 
@@ -105,6 +136,31 @@ export class AutonomousPublishingService {
     }
 
     return { processed: clusters.length, published, flagged };
+  }
+
+  // Read-only: powers the usage readout on the Autonomous Publishing
+  // settings card, and doubles as the rate-limit check inside runCycle().
+  async getUsageStats(organizationId: string): Promise<AutonomousPipelineUsage> {
+    const now = new Date();
+    const startOfDay = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    const startOfHour = new Date(now);
+    startOfHour.setUTCMinutes(0, 0, 0);
+
+    const [dailyLimitRaw, hourlyLimitRaw, publishedToday, publishedThisHour] = await Promise.all([
+      this.settings.get(organizationId, AUTONOMOUS_PIPELINE_SETTINGS.dailyLimit),
+      this.settings.get(organizationId, AUTONOMOUS_PIPELINE_SETTINGS.hourlyLimit),
+      this.prisma.article.count({
+        where: { organizationId, isAiAssisted: true, status: ArticleStatus.PUBLISHED, publishedAt: { gte: startOfDay } },
+      }),
+      this.prisma.article.count({
+        where: { organizationId, isAiAssisted: true, status: ArticleStatus.PUBLISHED, publishedAt: { gte: startOfHour } },
+      }),
+    ]);
+
+    const dailyLimit = typeof dailyLimitRaw === 'number' ? dailyLimitRaw : null;
+    const hourlyLimit = typeof hourlyLimitRaw === 'number' ? hourlyLimitRaw : null;
+
+    return { publishedToday, publishedThisHour, dailyLimit, hourlyLimit };
   }
 
   private async processCluster(
