@@ -24,7 +24,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useAiProviderStatus, useUpdateAiProviderKeys } from "@/hooks/use-system-settings";
+import {
+  useAiProviderStatus,
+  useUpdateAiProviderKeys,
+  useAiServicesEnabled,
+  useSetAiServicesEnabled,
+} from "@/hooks/use-system-settings";
 import { useSetting, useUpdateSetting } from "@/hooks/use-settings";
 import { useOrgMembers } from "@/hooks/use-org-users";
 import { useAutonomousPipelineUsage } from "@/hooks/use-news-intelligence";
@@ -394,6 +399,9 @@ export default function SystemSettingsPage() {
   const updateKeys = useUpdateAiProviderKeys();
   const [drafts, setDrafts] = useState<Record<string, string>>({});
 
+  const { data: aiServicesStatus, isLoading: aiServicesLoading } = useAiServicesEnabled(isSuperadmin);
+  const setAiServicesEnabled = useSetAiServicesEnabled();
+
   if (!isSuperadmin) return null;
 
   const handleSave = async (field: string, label: string) => {
@@ -409,6 +417,19 @@ export default function SystemSettingsPage() {
     }
   };
 
+  const handleToggleAiServices = async (checked: boolean) => {
+    try {
+      await setAiServicesEnabled.mutateAsync(checked);
+      toast.success(
+        checked
+          ? "AI services re-enabled"
+          : "AI services disabled — every AI-backed feature will refuse calls until turned back on",
+      );
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to save");
+    }
+  };
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -417,6 +438,38 @@ export default function SystemSettingsPage() {
           Platform-wide configuration, visible only to superadmins.
         </p>
       </div>
+
+      <Card className={aiServicesStatus?.enabled === false ? "border-destructive" : undefined}>
+        <CardHeader>
+          <CardTitle className="text-base">AI Services</CardTitle>
+          <CardDescription>
+            Emergency on/off switch for every AI-backed feature (autonomous
+            publishing, AI Tools in the article editor, alt-text generation,
+            news clustering). Turning this off does not remove your
+            configured API keys below — it just makes every AI call refuse
+            immediately until switched back on.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="ai-services-enabled">
+                {aiServicesStatus?.enabled === false ? "AI services are OFF" : "AI services are ON"}
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Off = every AI feature across the whole deployment stops working immediately.
+              </p>
+            </div>
+            {!aiServicesLoading && (
+              <Checkbox
+                id="ai-services-enabled"
+                checked={aiServicesStatus?.enabled ?? true}
+                onCheckedChange={(v) => handleToggleAiServices(!!v)}
+              />
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

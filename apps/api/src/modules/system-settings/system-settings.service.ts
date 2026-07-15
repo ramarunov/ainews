@@ -3,7 +3,11 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { EncryptionService } from '../../common/crypto/encryption.service';
 import { UpdateAiProviderKeysDto } from './dto/system-settings.dto';
-import { AI_PROVIDER_SETTING_KEYS, AiProviderKeyField } from './system-settings.constants';
+import {
+  AI_PROVIDER_SETTING_KEYS,
+  AI_SERVICES_ENABLED_KEY,
+  AiProviderKeyField,
+} from './system-settings.constants';
 
 @Injectable()
 export class SystemSettingsService {
@@ -53,5 +57,21 @@ export class SystemSettingsService {
     if (!row) return null;
 
     return this.encryption.decrypt(row.value);
+  }
+
+  /** Master kill switch for every AI call path. Defaults to enabled if never toggled. */
+  async isAiServicesEnabled(): Promise<boolean> {
+    const row = await this.prisma.systemSetting.findUnique({ where: { key: AI_SERVICES_ENABLED_KEY } });
+    return row?.value !== 'false';
+  }
+
+  async setAiServicesEnabled(enabled: boolean, updatedBy: string) {
+    await this.prisma.systemSetting.upsert({
+      where: { key: AI_SERVICES_ENABLED_KEY },
+      create: { key: AI_SERVICES_ENABLED_KEY, value: String(enabled), updatedBy },
+      update: { value: String(enabled), updatedBy },
+    });
+
+    return { enabled };
   }
 }

@@ -26,3 +26,22 @@ export function useUpdateAiProviderKeys() {
     },
   });
 }
+
+export function useAiServicesEnabled(enabled = true) {
+  return useQuery({
+    queryKey: ["system-settings", "ai-services-enabled"],
+    queryFn: () => apiClient.get<{ enabled: boolean }>("/system-settings/ai-services-enabled"),
+    enabled,
+  });
+}
+
+export function useSetAiServicesEnabled() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (enabled: boolean) =>
+      apiClient.put<{ enabled: boolean }>("/system-settings/ai-services-enabled", { enabled }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["system-settings", "ai-services-enabled"], data);
+    },
+  });
+}

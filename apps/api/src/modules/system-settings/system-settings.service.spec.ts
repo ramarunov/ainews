@@ -1,6 +1,6 @@
 import { SystemSettingsService } from './system-settings.service';
 import { EncryptionService } from '../../common/crypto/encryption.service';
-import { AI_PROVIDER_SETTING_KEYS } from './system-settings.constants';
+import { AI_PROVIDER_SETTING_KEYS, AI_SERVICES_ENABLED_KEY } from './system-settings.constants';
 
 describe('SystemSettingsService', () => {
   let service: SystemSettingsService;
@@ -76,6 +76,41 @@ describe('SystemSettingsService', () => {
       await expect(service.getDecryptedValue('ai.openai_api_key')).resolves.toBe(
         'sk-round-trip',
       );
+    });
+  });
+
+  describe('isAiServicesEnabled', () => {
+    it('defaults to enabled when the flag was never toggled', async () => {
+      prisma.systemSetting.findUnique.mockResolvedValue(null);
+
+      await expect(service.isAiServicesEnabled()).resolves.toBe(true);
+    });
+
+    it('is disabled only when explicitly set to "false"', async () => {
+      prisma.systemSetting.findUnique.mockResolvedValue({ value: 'false' });
+
+      await expect(service.isAiServicesEnabled()).resolves.toBe(false);
+    });
+
+    it('is enabled when explicitly set to "true"', async () => {
+      prisma.systemSetting.findUnique.mockResolvedValue({ value: 'true' });
+
+      await expect(service.isAiServicesEnabled()).resolves.toBe(true);
+    });
+  });
+
+  describe('setAiServicesEnabled', () => {
+    it('stores the flag as a plain (unencrypted) string, not via the API-key encryption path', async () => {
+      prisma.systemSetting.upsert.mockResolvedValue({});
+
+      const result = await service.setAiServicesEnabled(false, 'user-1');
+
+      expect(prisma.systemSetting.upsert).toHaveBeenCalledWith({
+        where: { key: AI_SERVICES_ENABLED_KEY },
+        create: { key: AI_SERVICES_ENABLED_KEY, value: 'false', updatedBy: 'user-1' },
+        update: { value: 'false', updatedBy: 'user-1' },
+      });
+      expect(result).toEqual({ enabled: false });
     });
   });
 });

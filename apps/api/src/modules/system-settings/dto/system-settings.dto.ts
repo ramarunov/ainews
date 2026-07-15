@@ -1,4 +1,4 @@
-import { IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, MinLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdateAiProviderKeysDto {
@@ -19,4 +19,10 @@ export class UpdateAiProviderKeysDto {
   @IsString()
   @MinLength(1)
   googleAiApiKey?: string;
+}
+
+export class SetAiServicesEnabledDto {
+  @ApiProperty()
+  @IsBoolean()
+  enabled: boolean;
 }

@@ -19,6 +19,7 @@ import {
 } from './providers/ai-providers';
 import { REDIS_CLIENT } from '../../infrastructure/redis/redis.module';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { SystemSettingsService } from '../system-settings/system-settings.service';
 
 const AI_CACHE_PREFIX = 'ai:cache:';
 const AI_CACHE_TTL = 3600; // 1 hour
@@ -36,6 +37,7 @@ export class AIGatewayService {
     private readonly google: GoogleAIProvider,
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly systemSettings: SystemSettingsService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
@@ -53,6 +55,15 @@ export class AIGatewayService {
       useCache?: boolean;
     } = {},
   ): Promise<CompletionResponse> {
+    // Every AI call path (autonomous pipeline, manual AI Tools, clustering
+    // entity extraction, alt-text, GEO) funnels through here - this is the
+    // one choke point for the emergency kill switch, checked before cache/
+    // circuit-breaker/provider logic so a disabled admin toggle fails fast
+    // and cheaply rather than partway through.
+    if (!(await this.systemSettings.isAiServicesEnabled())) {
+      throw new ServiceUnavailableException('AI services are currently disabled by an administrator');
+    }
+
     const { useCache = true, provider: preferredProvider } = options;
 
     // Cache check (skip for temperature > 0.5 or stream requests)
@@ -121,6 +132,9 @@ export class AIGatewayService {
    * Generate embeddings for semantic search/similarity
    */
   async embed(text: string): Promise<EmbeddingResponse> {
+    if (!(await this.systemSettings.isAiServicesEnabled())) {
+      throw new ServiceUnavailableException('AI services are currently disabled by an administrator');
+    }
     return this.openai.embed(text);
   }
 
