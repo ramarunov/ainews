@@ -37,6 +37,7 @@ import { RichTextEditor } from "@/components/rich-text-editor";
 import { SeoPanel } from "@/components/seo-panel";
 import { GeoPanel } from "@/components/geo-panel";
 import { AiToolsPanel } from "@/components/ai-tools-panel";
+import { AiPipelinePanel } from "@/components/ai-pipeline-panel";
 import { MediaPickerDialog } from "@/components/media-picker-dialog";
 
 const articleSchema = z.object({
@@ -274,6 +275,9 @@ export function ArticleForm({ article }: { article?: Article }) {
                   <TabsTrigger value="seo">SEO</TabsTrigger>
                   <TabsTrigger value="geo">GEO</TabsTrigger>
                   <TabsTrigger value="ai">AI Tools</TabsTrigger>
+                  {article?.isAiAssisted && (
+                    <TabsTrigger value="ai-pipeline">AI Pipeline</TabsTrigger>
+                  )}
                 </TabsList>
 
                 <TabsContent value="details" className="flex flex-col gap-4 pt-4">
@@ -474,6 +478,12 @@ export function ArticleForm({ article }: { article?: Article }) {
                     </p>
                   )}
                 </TabsContent>
+
+                {article?.isAiAssisted && (
+                  <TabsContent value="ai-pipeline" className="pt-4">
+                    <AiPipelinePanel articleId={article.id} />
+                  </TabsContent>
+                )}
               </Tabs>
             </CardContent>
           </Card>

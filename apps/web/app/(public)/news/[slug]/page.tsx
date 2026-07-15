@@ -6,6 +6,7 @@ import { notFound, redirect } from "next/navigation";
 import { ArticleCard } from "@/components/public/article-card";
 import { ShareButtons } from "@/components/public/share-buttons";
 import { AdSlot } from "@/components/public/ad-slot";
+import { Badge } from "@/components/ui/badge";
 import {
   getPublicSettings,
   getPublishedArticleBySlug,
@@ -112,6 +113,11 @@ export default async function NewsArticlePage({ params }: Props) {
           )}
           {article.readingTime && (
             <span className="text-muted-foreground">{article.readingTime} min read</span>
+          )}
+          {article.isAiAssisted && (
+            <Badge variant="outline" title="Drafted with AI assistance">
+              AI-assisted
+            </Badge>
           )}
         </div>
         <ShareButtons url={`${SITE_URL}/news/${article.slug}`} title={article.title} />

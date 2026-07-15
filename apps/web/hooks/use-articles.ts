@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import type {
   Article,
+  ArticleAiAnalysis,
   ArticleStatus,
   CreateArticleInput,
   PaginatedResponse,
@@ -36,6 +37,14 @@ export function useArticle(id: string | undefined) {
   return useQuery({
     queryKey: ["articles", id],
     queryFn: () => apiClient.get<Article>(`/articles/${id}`),
+    enabled: !!id,
+  });
+}
+
+export function useArticleAiAnalyses(id: string | undefined) {
+  return useQuery({
+    queryKey: ["articles", id, "ai-analyses"],
+    queryFn: () => apiClient.get<ArticleAiAnalysis[]>(`/articles/${id}/ai-analyses`),
     enabled: !!id,
   });
 }

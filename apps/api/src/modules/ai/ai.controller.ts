@@ -179,8 +179,9 @@ export class AIController {
   async checkHallucinations(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CheckHallucinationsDto,
+    @CurrentUser() user: any,
   ) {
-    return this.aiWriter.checkHallucinations(dto.content);
+    return this.aiWriter.checkHallucinations(dto.content, undefined, user.organizationId, id);
   }
 
   @Post('articles/:id/quality-score')
@@ -189,8 +190,16 @@ export class AIController {
   async qualityScore(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: QualityScoreDto,
+    @CurrentUser() user: any,
   ) {
-    return this.aiWriter.calculateQualityScore(dto.content, dto.title);
+    return this.aiWriter.calculateQualityScore(
+      dto.content,
+      dto.title,
+      undefined,
+      undefined,
+      user.organizationId,
+      id,
+    );
   }
 
   @Post('articles/:id/entities')

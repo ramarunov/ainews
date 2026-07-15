@@ -8,6 +8,7 @@ import Parser from 'rss-parser';
 import slugify from 'slugify';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { sanitizeArticleHtml } from '../../common/sanitize-html';
 import {
   CreateNewsSourceDto,
   UpdateNewsSourceDto,
@@ -17,6 +18,7 @@ import {
 } from './dto/news-intelligence.dto';
 import { NEWS_INGESTION_QUEUE } from './news-intelligence.constants';
 import { NewsClusteringService } from './news-clustering.service';
+import { ArticleExtractionService } from './article-extraction.service';
 
 export interface IngestSourceJobData {
   sourceId: string;
@@ -29,6 +31,7 @@ export class NewsIntelligenceService {
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
     private readonly clusteringService: NewsClusteringService,
+    private readonly extractionService: ArticleExtractionService,
     @InjectQueue(NEWS_INGESTION_QUEUE) private readonly ingestionQueue: Queue<IngestSourceJobData>,
   ) {}
 
@@ -168,12 +171,29 @@ export class NewsIntelligenceService {
         }
 
         try {
+          const feedContent = item.contentSnippet ?? item.content ?? null;
+          let content = feedContent ? sanitizeArticleHtml(feedContent) : null;
+          let excerpt: string | undefined;
+
+          // Best-effort: publishers often truncate RSS content to a teaser
+          // to drive traffic to their own site. When that looks like what
+          // happened, fetch the original article and extract the full body
+          // via Readability, falling back to the RSS snippet on any failure.
+          if (this.extractionService.isLikelyTruncated(feedContent)) {
+            const extracted = await this.extractionService.extractFromUrl(item.link);
+            if (extracted) {
+              content = extracted.content;
+              excerpt = extracted.excerpt ?? undefined;
+            }
+          }
+
           const created = await this.prisma.newsItem.create({
             data: {
               organizationId,
               sourceId: source.id,
               title: item.title ?? 'Untitled',
-              content: item.contentSnippet ?? item.content ?? null,
+              content,
+              excerpt,
               url: item.link,
               urlHash,
               authorName: item.creator ?? item.author ?? null,
@@ -242,7 +262,7 @@ export class NewsIntelligenceService {
         organizationId,
         sourceId: source.id,
         title: dto.title,
-        content: dto.content,
+        content: dto.content ? sanitizeArticleHtml(dto.content) : dto.content,
         excerpt: dto.excerpt,
         url: dto.url,
         urlHash,
@@ -389,7 +409,10 @@ export class NewsIntelligenceService {
     }
 
     const slug = await this.generateSlug(newsItem.title, organizationId);
-    const content = newsItem.content ?? '';
+    // NewsItem.content is sanitized at ingestion time, but re-sanitize here
+    // too since Article.content renders unescaped on the public site and
+    // must never trust a single upstream write path.
+    const content = sanitizeArticleHtml(newsItem.content ?? '');
     const wordCount = this.countWords(content);
     const readingTime = Math.ceil(wordCount / 200);
 

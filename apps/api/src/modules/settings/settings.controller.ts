@@ -1,5 +1,6 @@
-import { Controller, Get, Put, Delete, Body, Param, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Put, Delete, Body, Param, Res, UseGuards, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import type { Response } from 'express';
 
 import { SettingsService } from './settings.service';
 import { SetSettingDto } from './dto/setting.dto';
@@ -25,8 +26,14 @@ export class SettingsController {
   @Get(':key')
   @RequirePermissions('settings:read')
   @ApiOperation({ summary: 'Get a setting by key' })
-  get(@Param('key') key: string, @CurrentUser() user: any) {
-    return this.settingsService.get(user.organizationId, key);
+  async get(@Param('key') key: string, @CurrentUser() user: any, @Res() res: Response) {
+    // A Setting's JSON value can be a bare string/number/boolean/null - Nest's
+    // default response handling calls Express's res.send() for non-object
+    // return values, which sends primitives unquoted as text/html instead of
+    // valid JSON (booleans/numbers happen to still parse; strings don't).
+    // res.json() always encodes correctly regardless of the value's type.
+    const value = await this.settingsService.get(user.organizationId, key);
+    res.json(value);
   }
 
   @Put(':key')

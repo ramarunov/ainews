@@ -2,22 +2,11 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ArticleStatus, Prisma } from '@prisma/client';
 import slugify from 'slugify';
-import DOMPurify from 'isomorphic-dompurify';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { withOrgTransaction } from '../../infrastructure/prisma/rls-extension';
+import { sanitizeArticleHtml } from '../../common/sanitize-html';
 import { CreateArticleDto, UpdateArticleDto, ArticleQueryDto } from './dto/article.dto';
-
-const ALLOWED_CONTENT_TAGS = [
-  'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-  'p', 'br', 'hr',
-  'strong', 'b', 'em', 'i', 's', 'u', 'code', 'mark',
-  'a', 'img',
-  'ul', 'ol', 'li',
-  'blockquote', 'pre',
-  'table', 'thead', 'tbody', 'tr', 'th', 'td',
-];
-const ALLOWED_CONTENT_ATTR = ['href', 'src', 'alt', 'title', 'target', 'rel'];
 
 @Injectable()
 export class ArticlesService {
@@ -185,6 +174,17 @@ export class ArticlesService {
     }
 
     return article;
+  }
+
+  // Read-only: lets an editor see why an AI-drafted article auto-published
+  // or got flagged for review (autonomous publishing pipeline audit trail).
+  async listAiAnalyses(id: string, organizationId: string) {
+    await this.findOne(id, organizationId);
+
+    return this.prisma.articleAiAnalysis.findMany({
+      where: { articleId: id },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   async findBySlug(slug: string, organizationId: string) {
@@ -459,15 +459,8 @@ export class ArticlesService {
       .filter(Boolean).length;
   }
 
-  // Strict allowlist matching exactly what the Tiptap editor's StarterKit +
-  // link/image extensions can produce — strips <script>, event handler
-  // attributes (onerror, onclick, ...), <iframe>, and anything else not on
-  // the list, per SECURITY.md's XSS prevention requirement.
   private sanitizeContent(html: string): string {
-    return DOMPurify.sanitize(html, {
-      ALLOWED_TAGS: ALLOWED_CONTENT_TAGS,
-      ALLOWED_ATTR: ALLOWED_CONTENT_ATTR,
-    });
+    return sanitizeArticleHtml(html);
   }
 
   private async createRevision(

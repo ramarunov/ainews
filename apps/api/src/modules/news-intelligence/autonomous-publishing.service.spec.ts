@@ -1,0 +1,233 @@
+/**
+ * @jest-environment jsdom
+ *
+ * Imports common/sanitize-html -> isomorphic-dompurify, which needs a real
+ * `window` (via jsdom) even when unused by the code path under test here.
+ * See articles.service.spec.ts for the same requirement.
+ *
+ * Also transitively imports AIWriterService -> ai-gateway.service ->
+ * providers/ai-providers -> the real openai SDK, which probes for Web
+ * Fetch API globals (fetch/Request/Response/...) at *module load* time
+ * (even with jest.mock('openai'), automocking still requires loading the
+ * real module to inspect its shape) and throws under jest-environment-jsdom,
+ * which doesn't expose these. AIWriterService is always mocked in these
+ * tests (a plain object, never instantiated) so these are load-bearing
+ * stubs only, never actually invoked.
+ */
+for (const name of ['fetch', 'Request', 'Response', 'Headers', 'FormData', 'Blob', 'ReadableStream']) {
+  (global as any)[name] = (global as any)[name] || class {};
+}
+
+import { ArticleStatus, NewsItemStatus } from '@prisma/client';
+import {
+  AutonomousPublishingService,
+  AUTONOMOUS_PIPELINE_SETTINGS,
+} from './autonomous-publishing.service';
+
+describe('AutonomousPublishingService', () => {
+  let service: AutonomousPublishingService;
+  let prisma: any;
+  let config: any;
+  let aiWriter: any;
+  let systemSettings: any;
+  let settings: any;
+  let categoriesService: any;
+  let articlesService: any;
+
+  const ORG_ID = 'org-1';
+  const AUTHOR_ID = 'user-ai-newsroom';
+
+  const cluster = {
+    id: 'cluster-1',
+    title: 'Big Story',
+    trendScore: 5,
+    newsItems: [
+      {
+        id: 'item-1',
+        title: 'Big Story breaks',
+        content: 'Full article body from source A.',
+        excerpt: null,
+        url: 'https://a.example.com/big-story',
+        publishedAt: new Date('2026-01-01T00:00:00Z'),
+        fetchedAt: new Date('2026-01-01T00:05:00Z'),
+        sourceName: 'Source A',
+        source: { categoryHint: null },
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    prisma = {
+      newsCluster: { findMany: jest.fn().mockResolvedValue([cluster]) },
+      article: {
+        create: jest.fn().mockResolvedValue({ id: 'article-1' }),
+        delete: jest.fn().mockResolvedValue({}),
+        findFirst: jest.fn().mockResolvedValue(null),
+      },
+      articleAiAnalysis: { create: jest.fn().mockResolvedValue({}) },
+      newsItem: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+    };
+    config = { get: jest.fn((_key: string, def: any) => def) };
+    aiWriter = {
+      generateDraft: jest.fn().mockResolvedValue('<p>AI written article body.</p>'),
+      checkHallucinations: jest.fn().mockResolvedValue({
+        overallConfidence: 0.9,
+        claims: [],
+        recommendation: 'SAFE_TO_PUBLISH',
+      }),
+      calculateQualityScore: jest.fn().mockResolvedValue({
+        overall: 90,
+        breakdown: {},
+        issues: [],
+        recommendations: [],
+        canPublish: true,
+      }),
+    };
+    systemSettings = {
+      getAiProviderStatus: jest.fn().mockResolvedValue({ openai: true, anthropic: false, google: false }),
+    };
+    settings = {
+      get: jest.fn((_orgId: string, key: string) => {
+        if (key === AUTONOMOUS_PIPELINE_SETTINGS.enabled) return Promise.resolve(true);
+        if (key === AUTONOMOUS_PIPELINE_SETTINGS.authorUserId) return Promise.resolve(AUTHOR_ID);
+        return Promise.resolve(null);
+      }),
+    };
+    categoriesService = { findBySlug: jest.fn().mockRejectedValue(new Error('not found')) };
+    articlesService = { update: jest.fn().mockResolvedValue({}) };
+
+    service = new AutonomousPublishingService(
+      prisma,
+      config,
+      aiWriter,
+      systemSettings,
+      settings,
+      categoriesService,
+      articlesService,
+    );
+  });
+
+  it('no-ops without calling any AI service when the org has not opted in', async () => {
+    settings.get.mockResolvedValue(null);
+
+    const result = await service.runCycle(ORG_ID);
+
+    expect(result).toEqual({ processed: 0, published: 0, flagged: 0 });
+    expect(prisma.newsCluster.findMany).not.toHaveBeenCalled();
+    expect(aiWriter.generateDraft).not.toHaveBeenCalled();
+  });
+
+  it('no-ops when no AI provider key is configured platform-wide', async () => {
+    systemSettings.getAiProviderStatus.mockResolvedValue({ openai: false, anthropic: false, google: false });
+
+    const result = await service.runCycle(ORG_ID);
+
+    expect(result).toEqual({ processed: 0, published: 0, flagged: 0 });
+    expect(prisma.newsCluster.findMany).not.toHaveBeenCalled();
+  });
+
+  it('publishes automatically when the quality gate passes', async () => {
+    const result = await service.runCycle(ORG_ID);
+
+    expect(result).toEqual({ processed: 1, published: 1, flagged: 0 });
+    expect(prisma.article.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          organizationId: ORG_ID,
+          primaryAuthorId: AUTHOR_ID,
+          isAiAssisted: true,
+          newsItemId: 'item-1',
+          status: ArticleStatus.DRAFT,
+        }),
+      }),
+    );
+    expect(articlesService.update).toHaveBeenCalledWith(
+      'article-1',
+      expect.objectContaining({ status: ArticleStatus.PUBLISHED }),
+      AUTHOR_ID,
+      ORG_ID,
+    );
+    expect(prisma.newsItem.updateMany).toHaveBeenCalledWith({
+      where: { clusterId: 'cluster-1' },
+      data: { articleId: 'article-1', status: NewsItemStatus.PUBLISHED },
+    });
+    expect(prisma.articleAiAnalysis.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ articleId: 'article-1', analysisType: 'autonomous_gate' }),
+      }),
+    );
+    expect(prisma.article.delete).not.toHaveBeenCalled();
+  });
+
+  it('routes to human review instead of publishing when the hallucination check fails', async () => {
+    aiWriter.checkHallucinations.mockResolvedValue({
+      overallConfidence: 0.2,
+      claims: [{ text: 'suspicious stat', confidence: 0.1, flag: 'DISPUTED', reason: 'no source' }],
+      recommendation: 'DO_NOT_PUBLISH',
+    });
+
+    const result = await service.runCycle(ORG_ID);
+
+    expect(result).toEqual({ processed: 1, published: 0, flagged: 1 });
+    expect(articlesService.update).toHaveBeenCalledWith(
+      'article-1',
+      expect.objectContaining({ status: ArticleStatus.IN_REVIEW }),
+      AUTHOR_ID,
+      ORG_ID,
+    );
+    expect(prisma.newsItem.updateMany).toHaveBeenCalledWith({
+      where: { clusterId: 'cluster-1' },
+      data: { articleId: 'article-1', status: NewsItemStatus.DRAFTED },
+    });
+  });
+
+  it('routes to human review when the quality score says canPublish is false', async () => {
+    aiWriter.calculateQualityScore.mockResolvedValue({
+      overall: 40,
+      breakdown: {},
+      issues: ['Thin content'],
+      recommendations: ['Add more detail'],
+      canPublish: false,
+    });
+
+    const result = await service.runCycle(ORG_ID);
+
+    expect(result).toEqual({ processed: 1, published: 0, flagged: 1 });
+  });
+
+  it('does not leave an orphan article shell when generateDraft throws', async () => {
+    aiWriter.generateDraft.mockRejectedValue(new Error('AI service is temporarily unavailable'));
+
+    const result = await service.runCycle(ORG_ID);
+
+    expect(result).toEqual({ processed: 1, published: 0, flagged: 0 });
+    expect(prisma.article.create).not.toHaveBeenCalled();
+    expect(prisma.article.delete).not.toHaveBeenCalled();
+  });
+
+  it('deletes the article shell if the quality-gate calls throw after creation', async () => {
+    aiWriter.checkHallucinations.mockRejectedValue(new Error('provider timeout'));
+
+    const result = await service.runCycle(ORG_ID);
+
+    expect(result).toEqual({ processed: 1, published: 0, flagged: 0 });
+    expect(prisma.article.create).toHaveBeenCalled();
+    expect(prisma.article.delete).toHaveBeenCalledWith({ where: { id: 'article-1' } });
+    expect(articlesService.update).not.toHaveBeenCalled();
+  });
+
+  it('skips a cluster that already produced an article without needing app-level filtering (query-level exclusion assumed)', async () => {
+    // The eligibility query itself excludes already-drafted clusters (asserted via the
+    // findMany where-clause), so this test just confirms runCycle passes the right shape.
+    await service.runCycle(ORG_ID);
+
+    expect(prisma.newsCluster.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          organizationId: ORG_ID,
+          newsItems: { none: { articleId: { not: null } } },
+        }),
+      }),
+    );
+  });
+});

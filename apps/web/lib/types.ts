@@ -109,6 +109,7 @@ export interface Article {
   status: ArticleStatus;
   isBreaking: boolean;
   isFeatured: boolean;
+  isAiAssisted?: boolean;
   featuredImageId?: string | null;
   featuredImageUrl?: string | null;
   primaryCategoryId?: string | null;
@@ -119,6 +120,35 @@ export interface Article {
   createdAt: string;
   updatedAt: string;
   publishedAt?: string | null;
+}
+
+export interface ArticleAiAnalysis {
+  id: string;
+  articleId: string;
+  analysisType: string;
+  provider: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: string;
+  result: {
+    hallucination?: {
+      overallConfidence: number;
+      claims: Array<{ text: string; confidence: number; flag: string; reason: string }>;
+      recommendation: string;
+    };
+    qualityScore?: {
+      overall: number;
+      breakdown: Record<string, number>;
+      issues: string[];
+      recommendations: string[];
+      canPublish: boolean;
+    };
+    decision?: string;
+  };
+  confidence?: string | null;
+  durationMs?: number | null;
+  createdAt: string;
 }
 
 export interface PublicArticleSeo {
@@ -151,6 +181,7 @@ export interface PublicArticle {
   featuredImageAlt?: string | null;
   isBreaking?: boolean;
   isFeatured?: boolean;
+  isAiAssisted?: boolean;
   readingTime?: number;
   primaryAuthor?: PublicAuthor | null;
   primaryCategory?: Category | null;

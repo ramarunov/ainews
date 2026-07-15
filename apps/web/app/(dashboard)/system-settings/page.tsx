@@ -11,6 +11,13 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -19,6 +26,7 @@ import {
 } from "@/components/ui/card";
 import { useAiProviderStatus, useUpdateAiProviderKeys } from "@/hooks/use-system-settings";
 import { useSetting, useUpdateSetting } from "@/hooks/use-settings";
+import { useOrgMembers } from "@/hooks/use-org-users";
 import { useAuthStore } from "@/lib/auth-store";
 import { ApiError } from "@/lib/api-client";
 
@@ -114,6 +122,115 @@ function AdWidgetSlotForm({
   );
 }
 
+const AUTONOMOUS_ENABLED_KEY = "news.autonomous_pipeline.enabled";
+const AUTONOMOUS_AUTHOR_KEY = "news.autonomous_pipeline.author_user_id";
+
+function AutonomousPublishingCard({ aiConfigured }: { aiConfigured: boolean }) {
+  const { data: enabledSaved, isLoading: enabledLoading } = useSetting<boolean>(AUTONOMOUS_ENABLED_KEY);
+  const { data: authorSaved, isLoading: authorLoading } = useSetting<string>(AUTONOMOUS_AUTHOR_KEY);
+  const { data: members, isLoading: membersLoading } = useOrgMembers({ isActive: true, limit: 100 });
+  const updateEnabled = useUpdateSetting(AUTONOMOUS_ENABLED_KEY);
+  const updateAuthor = useUpdateSetting(AUTONOMOUS_AUTHOR_KEY);
+
+  // Gate the first paint on every query the Select's value/options depend
+  // on - Select only resolves its trigger's display label from SelectItems
+  // present at mount, so rendering it before `members` has loaded would
+  // permanently show the placeholder even after the real value arrives.
+  if (enabledLoading || authorLoading || membersLoading) {
+    return <div className="h-32 animate-pulse rounded-md bg-muted" />;
+  }
+
+  const enabled = enabledSaved ?? false;
+  const authorUserId = authorSaved ?? "";
+
+  const handleToggle = async (checked: boolean) => {
+    try {
+      await updateEnabled.mutateAsync({ value: checked });
+      toast.success(checked ? "Autonomous publishing enabled" : "Autonomous publishing disabled");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to save");
+    }
+  };
+
+  const handleAuthorChange = async (userId: string | null) => {
+    if (!userId) return;
+    try {
+      await updateAuthor.mutateAsync({ value: userId });
+      toast.success("AI byline author saved");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to save");
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Autonomous Publishing</CardTitle>
+        <CardDescription>
+          Let AI discover clustered news stories, write a new article in your
+          brand voice, and publish it automatically when it passes an
+          automatic fact-check and quality gate. Anything that doesn&apos;t
+          pass is routed to human review instead of being published blind.
+          Off by default.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-5">
+        <div className="flex items-center gap-2">
+          <span className="text-sm">AI provider</span>
+          <Badge variant={aiConfigured ? "default" : "outline"}>
+            {aiConfigured ? "Configured" : "Not configured — pipeline will no-op"}
+          </Badge>
+        </div>
+
+        <div className="flex items-center justify-between border-t pt-4">
+          <div>
+            <Label htmlFor="autonomous-enabled">Enable autonomous pipeline</Label>
+            <p className="text-xs text-muted-foreground">
+              Runs on a periodic sweep across all your ingested news clusters.
+            </p>
+          </div>
+          <Checkbox
+            id="autonomous-enabled"
+            checked={enabled}
+            onCheckedChange={(v) => handleToggle(!!v)}
+          />
+        </div>
+
+        <div className="flex flex-col gap-2 border-t pt-4">
+          <Label htmlFor="autonomous-author">AI byline / author</Label>
+          <p className="text-xs text-muted-foreground">
+            Autonomously published articles are attributed to this account.
+          </p>
+          <Select value={authorUserId || undefined} onValueChange={handleAuthorChange}>
+            <SelectTrigger id="autonomous-author">
+              {/* Resolved from the already-loaded `members` list directly,
+                  rather than relying on Select's own item-label lookup,
+                  which only registers labels for items rendered while the
+                  popup has been opened at least once - the trigger would
+                  otherwise show the placeholder for a value that was set
+                  before this select was ever opened (e.g. loaded from a
+                  saved setting). */}
+              <SelectValue placeholder="Select an author…">
+                {(value: string) =>
+                  members?.data.find((m) => m.id === value)?.displayName ||
+                  "Select an author…"
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {members?.data.map((member) => (
+                <SelectItem key={member.id} value={member.id}>
+                  {member.displayName || `${member.firstName ?? ""} ${member.lastName ?? ""}`.trim() || member.email}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 const PROVIDERS = [
   { field: "openaiApiKey", statusKey: "openai", label: "OpenAI", placeholder: "sk-..." },
   { field: "anthropicApiKey", statusKey: "anthropic", label: "Anthropic", placeholder: "sk-ant-..." },
@@ -205,6 +322,8 @@ export default function SystemSettingsPage() {
           })}
         </CardContent>
       </Card>
+
+      <AutonomousPublishingCard aiConfigured={Boolean(status?.openai || status?.anthropic || status?.google)} />
 
       <Card>
         <CardHeader>

@@ -1,3 +1,23 @@
+/**
+ * @jest-environment jsdom
+ * @jest-environment-options {"customExportConditions": ["node", "node-addons"]}
+ *
+ * Transitively imports NewsIntelligenceService -> common/sanitize-html ->
+ * isomorphic-dompurify, which needs a real `window` (via jsdom) even when
+ * unused by the code path under test here. See articles.service.spec.ts
+ * for the same requirement and its own note. The customExportConditions
+ * override keeps package "exports" resolution on the node path — jsdom's
+ * default ("browser") makes @nestjs/bull's chain (bull -> ioredis ->
+ * msgpackr) resolve to an ESM build ts-jest can't parse.
+ */
+import { TextEncoder, TextDecoder } from 'node:util';
+
+// jsdom's test environment doesn't provide TextEncoder/TextDecoder, which
+// the jsdom *package* (pulled in transitively via ArticleExtractionService)
+// needs at import time via whatwg-url. Must run before that import.
+(global as any).TextEncoder = (global as any).TextEncoder || TextEncoder;
+(global as any).TextDecoder = (global as any).TextDecoder || TextDecoder;
+
 import { NewsIngestionProcessor } from './news-ingestion.processor';
 import { orgContextStorage } from '../../infrastructure/prisma/org-context';
 

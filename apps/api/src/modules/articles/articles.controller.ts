@@ -61,6 +61,17 @@ export class ArticlesController {
     return this.articlesService.findOne(id, user.organizationId);
   }
 
+  @Get(':id/ai-analyses')
+  @RequirePermissions('articles:read')
+  @ApiOperation({ summary: 'List AI analysis records for an article (autonomous pipeline audit trail)' })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  listAiAnalyses(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.articlesService.listAiAnalyses(id, user.organizationId);
+  }
+
   @Get('slug/:slug')
   @RequirePermissions('articles:read')
   @ApiOperation({ summary: 'Get article by slug' })

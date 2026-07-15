@@ -91,13 +91,14 @@ Requirements:
 - Do NOT use phrases like "In conclusion" or "To summarize"
 - Write ${options.targetLength ?? 1000} words approximately`;
 
-    return this.gateway.prompt(systemPrompt, userPrompt, {
+    const draft = await this.gateway.prompt(systemPrompt, userPrompt, {
       temperature: 0.7,
       maxTokens: 4096,
       organizationId: options.organizationId,
       articleId: options.articleId,
       analysisType: 'draft_generation',
     });
+    return this.stripCodeFence(draft);
   }
 
   async rewriteParagraph(options: EditorOptions): Promise<string> {
@@ -109,13 +110,23 @@ ${options.content}
 
 Instruction: ${options.instruction}`;
 
-    return this.gateway.prompt(systemPrompt, userPrompt, {
+    const rewritten = await this.gateway.prompt(systemPrompt, userPrompt, {
       temperature: 0.6,
       maxTokens: 2048,
       organizationId: options.organizationId,
       articleId: options.articleId,
       analysisType: 'paragraph_rewrite',
     });
+    return this.stripCodeFence(rewritten);
+  }
+
+  // Despite being told to "return only the article/text, no explanations",
+  // LLMs frequently wrap HTML output in a markdown code fence anyway (e.g.
+  // "```html\n<p>...</p>\n```"). DOMPurify treats backticks as plain text,
+  // so this would otherwise survive sanitization and render literally.
+  private stripCodeFence(text: string): string {
+    const match = text.trim().match(/^```(?:\w+)?\s*\n?([\s\S]*?)\n?```$/);
+    return match ? match[1] : text;
   }
 
   async generateTitles(options: TitleOptions): Promise<string[]> {
@@ -197,13 +208,15 @@ Be accurate. Do not add information not in the article.`,
   async checkHallucinations(
     content: string,
     sources: Array<{ title: string; excerpt: string }> = [],
+    organizationId?: string,
+    articleId?: string,
   ): Promise<HallucinationResult> {
     const sourcesText = sources.length
       ? `\nProvided sources:\n${sources.map((s) => `- ${s.title}: ${s.excerpt}`).join('\n')}`
       : '\nNo external sources provided.';
 
     return this.gateway.jsonPrompt<HallucinationResult>(
-      `You are a fact-checking AI. Analyze the article for potential hallucinations, 
+      `You are a fact-checking AI. Analyze the article for potential hallucinations,
 unverifiable claims, suspicious statistics, and invented quotes.
 
 For each factual claim:
@@ -217,7 +230,7 @@ Return JSON: {
   "recommendation": "SAFE_TO_PUBLISH|REVIEW_BEFORE_PUBLISH|DO_NOT_PUBLISH"
 }`,
       `Article content:\n${content.substring(0, 4000)}${sourcesText}`,
-      { temperature: 0.1, analysisType: 'hallucination_check' },
+      { temperature: 0.1, analysisType: 'hallucination_check', organizationId, articleId },
     );
   }
 
@@ -226,6 +239,8 @@ Return JSON: {
     title: string,
     seoScore?: number,
     geoScore?: number,
+    organizationId?: string,
+    articleId?: string,
   ): Promise<QualityScoreResult> {
     return this.gateway.jsonPrompt<QualityScoreResult>(
       `You are an editorial quality assessor. Score this article on multiple dimensions.
@@ -233,7 +248,7 @@ Each dimension is scored 0-100. The "overall" is the weighted average.
 
 Weights:
 - writingQuality: 25%
-- factualAccuracy: 25% 
+- factualAccuracy: 25%
 - seoOptimization: 15%
 - geoOptimization: 15%
 - completeness: 10%
@@ -256,7 +271,7 @@ Return JSON: {
       `Title: ${title}\n\nContent:\n${content.substring(0, 4000)}\n\n${
         seoScore != null ? `Pre-calculated SEO score: ${seoScore}/100\n` : ''
       }${geoScore != null ? `Pre-calculated GEO score: ${geoScore}/100\n` : ''}`,
-      { temperature: 0.2, analysisType: 'quality_score' },
+      { temperature: 0.2, analysisType: 'quality_score', organizationId, articleId },
     );
   }
 
