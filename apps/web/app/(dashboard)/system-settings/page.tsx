@@ -124,24 +124,35 @@ function AdWidgetSlotForm({
 
 const AUTONOMOUS_ENABLED_KEY = "news.autonomous_pipeline.enabled";
 const AUTONOMOUS_AUTHOR_KEY = "news.autonomous_pipeline.author_user_id";
+const AUTONOMOUS_LANGUAGE_KEY = "news.autonomous_pipeline.output_language";
+
+const SAME_AS_SOURCE = "same";
+const OUTPUT_LANGUAGES = [
+  { value: SAME_AS_SOURCE, label: "Same as source (default)" },
+  { value: "en", label: "English" },
+  { value: "id", label: "Indonesian (Bahasa Indonesia)" },
+] as const;
 
 function AutonomousPublishingCard({ aiConfigured }: { aiConfigured: boolean }) {
   const { data: enabledSaved, isLoading: enabledLoading } = useSetting<boolean>(AUTONOMOUS_ENABLED_KEY);
   const { data: authorSaved, isLoading: authorLoading } = useSetting<string>(AUTONOMOUS_AUTHOR_KEY);
+  const { data: languageSaved, isLoading: languageLoading } = useSetting<string>(AUTONOMOUS_LANGUAGE_KEY);
   const { data: members, isLoading: membersLoading } = useOrgMembers({ isActive: true, limit: 100 });
   const updateEnabled = useUpdateSetting(AUTONOMOUS_ENABLED_KEY);
   const updateAuthor = useUpdateSetting(AUTONOMOUS_AUTHOR_KEY);
+  const updateLanguage = useUpdateSetting(AUTONOMOUS_LANGUAGE_KEY);
 
   // Gate the first paint on every query the Select's value/options depend
   // on - Select only resolves its trigger's display label from SelectItems
   // present at mount, so rendering it before `members` has loaded would
   // permanently show the placeholder even after the real value arrives.
-  if (enabledLoading || authorLoading || membersLoading) {
+  if (enabledLoading || authorLoading || languageLoading || membersLoading) {
     return <div className="h-32 animate-pulse rounded-md bg-muted" />;
   }
 
   const enabled = enabledSaved ?? false;
   const authorUserId = authorSaved ?? "";
+  const outputLanguage = languageSaved ?? "";
 
   const handleToggle = async (checked: boolean) => {
     try {
@@ -157,6 +168,20 @@ function AutonomousPublishingCard({ aiConfigured }: { aiConfigured: boolean }) {
     try {
       await updateAuthor.mutateAsync({ value: userId });
       toast.success("AI byline author saved");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to save");
+    }
+  };
+
+  const handleLanguageChange = async (language: string | null) => {
+    if (!language) return;
+    try {
+      await updateLanguage.mutateAsync({ value: language === SAME_AS_SOURCE ? "" : language });
+      toast.success(
+        language === SAME_AS_SOURCE
+          ? "Will write in whatever language the sources are in"
+          : "Output language saved",
+      );
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed to save");
     }
@@ -221,6 +246,35 @@ function AutonomousPublishingCard({ aiConfigured }: { aiConfigured: boolean }) {
               {members?.data.map((member) => (
                 <SelectItem key={member.id} value={member.id}>
                   {member.displayName || `${member.firstName ?? ""} ${member.lastName ?? ""}`.trim() || member.email}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-2 border-t pt-4">
+          <Label htmlFor="autonomous-language">Output language</Label>
+          <p className="text-xs text-muted-foreground">
+            Rewrites and translates in one pass — e.g. an English-language
+            source can be published as a native Indonesian article.
+          </p>
+          <Select
+            value={outputLanguage || SAME_AS_SOURCE}
+            onValueChange={handleLanguageChange}
+          >
+            <SelectTrigger id="autonomous-language">
+              {/* See the author Select above for why this can't rely on
+                  Select's own item-label lookup. */}
+              <SelectValue>
+                {(value: string) =>
+                  OUTPUT_LANGUAGES.find((l) => l.value === value)?.label ?? value
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {OUTPUT_LANGUAGES.map((lang) => (
+                <SelectItem key={lang.value} value={lang.value}>
+                  {lang.label}
                 </SelectItem>
               ))}
             </SelectContent>

@@ -70,6 +70,7 @@ describe('AutonomousPublishingService', () => {
     config = { get: jest.fn((_key: string, def: any) => def) };
     aiWriter = {
       generateDraft: jest.fn().mockResolvedValue('<p>AI written article body.</p>'),
+      generateTitles: jest.fn().mockResolvedValue(['Localized Headline']),
       checkHallucinations: jest.fn().mockResolvedValue({
         overallConfidence: 0.9,
         claims: [],
@@ -157,6 +158,43 @@ describe('AutonomousPublishingService', () => {
       }),
     );
     expect(prisma.article.delete).not.toHaveBeenCalled();
+  });
+
+  it('translates the article and headline when an output language is configured', async () => {
+    settings.get.mockImplementation((_orgId: string, key: string) => {
+      if (key === AUTONOMOUS_PIPELINE_SETTINGS.enabled) return Promise.resolve(true);
+      if (key === AUTONOMOUS_PIPELINE_SETTINGS.authorUserId) return Promise.resolve(AUTHOR_ID);
+      if (key === AUTONOMOUS_PIPELINE_SETTINGS.outputLanguage) return Promise.resolve('id');
+      return Promise.resolve(null);
+    });
+
+    const result = await service.runCycle(ORG_ID);
+
+    expect(result).toEqual({ processed: 1, published: 1, flagged: 0 });
+    expect(aiWriter.generateDraft).toHaveBeenCalledWith(
+      expect.objectContaining({ outputLanguage: 'id' }),
+    );
+    expect(aiWriter.generateTitles).toHaveBeenCalledWith(
+      expect.objectContaining({ content: '<p>AI written article body.</p>', count: 1, outputLanguage: 'id' }),
+    );
+    expect(articlesService.update).toHaveBeenCalledWith(
+      'article-1',
+      expect.objectContaining({ title: 'Localized Headline', language: 'id' }),
+      AUTHOR_ID,
+      ORG_ID,
+    );
+  });
+
+  it('does not attempt title localization when no output language is configured', async () => {
+    await service.runCycle(ORG_ID);
+
+    expect(aiWriter.generateTitles).not.toHaveBeenCalled();
+    expect(articlesService.update).toHaveBeenCalledWith(
+      'article-1',
+      expect.not.objectContaining({ title: expect.anything() }),
+      AUTHOR_ID,
+      ORG_ID,
+    );
   });
 
   it('routes to human review instead of publishing when the hallucination check fails', async () => {

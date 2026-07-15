@@ -14,6 +14,9 @@ import { ArticlesService } from '../articles/articles.service';
 export const AUTONOMOUS_PIPELINE_SETTINGS = {
   enabled: 'news.autonomous_pipeline.enabled',
   authorUserId: 'news.autonomous_pipeline.author_user_id',
+  // ISO 639-1 code (e.g. 'id'). Unset/null means "write in whatever
+  // language the sources are in" (no translation instruction is added).
+  outputLanguage: 'news.autonomous_pipeline.output_language',
 } as const;
 
 /**
@@ -43,9 +46,10 @@ export class AutonomousPublishingService {
   ) {}
 
   async runCycle(organizationId: string): Promise<{ processed: number; published: number; flagged: number }> {
-    const [enabled, authorUserId] = await Promise.all([
+    const [enabled, authorUserId, outputLanguage] = await Promise.all([
       this.settings.get(organizationId, AUTONOMOUS_PIPELINE_SETTINGS.enabled),
       this.settings.get(organizationId, AUTONOMOUS_PIPELINE_SETTINGS.authorUserId),
+      this.settings.get(organizationId, AUTONOMOUS_PIPELINE_SETTINGS.outputLanguage),
     ]);
 
     if (!enabled || !authorUserId) {
@@ -81,7 +85,12 @@ export class AutonomousPublishingService {
 
     for (const cluster of clusters) {
       try {
-        const outcome = await this.processCluster(cluster, organizationId, authorUserId as string);
+        const outcome = await this.processCluster(
+          cluster,
+          organizationId,
+          authorUserId as string,
+          (outputLanguage as string | null) ?? undefined,
+        );
         if (outcome === 'published') published++;
         if (outcome === 'flagged') flagged++;
       } catch (err: any) {
@@ -116,6 +125,7 @@ export class AutonomousPublishingService {
     },
     organizationId: string,
     authorUserId: string,
+    outputLanguage: string | undefined,
   ): Promise<'published' | 'flagged'> {
     const items = [...cluster.newsItems].sort((a, b) => {
       const aTime = (a.publishedAt ?? a.fetchedAt).getTime();
@@ -138,6 +148,7 @@ export class AutonomousPublishingService {
       sources,
       tone: 'authoritative',
       organizationId,
+      outputLanguage,
     });
     const content = sanitizeArticleHtml(rawContent);
 
@@ -162,6 +173,15 @@ export class AutonomousPublishingService {
     });
 
     try {
+      // When translating, the title passed to generateDraft above was only
+      // used as a topic anchor (still in the source language) - derive a
+      // real headline in the target language from the now-translated body
+      // rather than leaving the source-language title on a translated
+      // article. generateTitles() naturally matches the content's language.
+      const localizedTitle = outputLanguage
+        ? (await this.aiWriter.generateTitles({ content, count: 1, organizationId, articleId: shell.id, outputLanguage }))[0]
+        : undefined;
+
       const [hallucination, qualityScore] = await Promise.all([
         this.aiWriter.checkHallucinations(
           content,
@@ -177,7 +197,12 @@ export class AutonomousPublishingService {
 
       await this.articlesService.update(
         shell.id,
-        { content, status: pass ? ArticleStatus.PUBLISHED : ArticleStatus.IN_REVIEW },
+        {
+          content,
+          status: pass ? ArticleStatus.PUBLISHED : ArticleStatus.IN_REVIEW,
+          ...(localizedTitle && { title: localizedTitle }),
+          ...(outputLanguage && { language: outputLanguage }),
+        },
         authorUserId,
         organizationId,
       );

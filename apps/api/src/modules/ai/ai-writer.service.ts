@@ -12,7 +12,17 @@ export interface WriterOptions {
   organizationId?: string;
   articleId?: string;
   brandVoice?: string;
+  // ISO 639-1 code (e.g. 'id', 'en'). When set, the article is written in
+  // this language regardless of what language the sources are in - the
+  // model translates and rewrites in one pass rather than writing in the
+  // sources' language and translating separately.
+  outputLanguage?: string;
 }
+
+export const LANGUAGE_NAMES: Record<string, string> = {
+  en: 'English',
+  id: 'Indonesian (Bahasa Indonesia)',
+};
 
 export interface EditorOptions {
   content: string;
@@ -27,6 +37,11 @@ export interface TitleOptions {
   count?: number;
   organizationId?: string;
   articleId?: string;
+  // See WriterOptions.outputLanguage - headline generation is a short
+  // enough prompt that the model doesn't reliably infer the language from
+  // the content alone the way full-article generation does, so this needs
+  // to be stated explicitly too.
+  outputLanguage?: string;
 }
 
 export interface QualityScoreResult {
@@ -70,12 +85,18 @@ export class AIWriterService {
       ? `\n\nOutline to follow:\n${options.outline.map((item, i) => `${i + 1}. ${item}`).join('\n')}`
       : '';
 
+    const languageName = options.outputLanguage ? LANGUAGE_NAMES[options.outputLanguage] ?? options.outputLanguage : undefined;
+
     const systemPrompt = `You are a professional news journalist and content writer. ${options.brandVoice ? `Brand voice: ${options.brandVoice}.` : ''}
-Write in ${options.tone ?? 'authoritative'} tone. 
+Write in ${options.tone ?? 'authoritative'} tone.
 Always write factually. Never hallucinate facts, statistics, or quotes.
 Format the article with proper HTML headings (h2, h3), paragraphs, and where appropriate, lists.
 Target length: approximately ${options.targetLength ?? 1000} words.
-Target audience: ${options.targetAudience ?? 'general news readers'}.`;
+Target audience: ${options.targetAudience ?? 'general news readers'}.${
+      languageName
+        ? ` Write the entire article in ${languageName}, regardless of what language the title or source material below is written in - translate and localize naturally, don't just transliterate.`
+        : ''
+    }`;
 
     const userPrompt = `Write a complete, high-quality news article with the following title: "${options.title}"
 ${options.focusKeyword ? `\nFocus keyword: ${options.focusKeyword}` : ''}
@@ -131,11 +152,15 @@ Instruction: ${options.instruction}`;
 
   async generateTitles(options: TitleOptions): Promise<string[]> {
     const count = options.count ?? 10;
+    const languageName = options.outputLanguage
+      ? LANGUAGE_NAMES[options.outputLanguage] ?? options.outputLanguage
+      : undefined;
 
     const result = await this.gateway.jsonPrompt<{ titles: string[] }>(
       `You are an expert headline writer specializing in high-CTR news headlines.
 Generate ${count} compelling title variants for the given content.
 ${options.focusKeyword ? `The focus keyword "${options.focusKeyword}" should appear in at least 5 of the titles.` : ''}
+${languageName ? `Write every title in ${languageName}, regardless of what language the content excerpt below happens to be in.` : ''}
 Return a JSON object with a "titles" array containing exactly ${count} title strings.`,
       `Content excerpt:
 ${options.content.substring(0, 2000)}
