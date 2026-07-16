@@ -77,6 +77,43 @@ export interface CreateApiKeyInput {
   rateLimit?: number;
 }
 
+export interface Webhook {
+  id: string;
+  name: string;
+  url: string;
+  events: string[];
+  isActive: boolean;
+  lastTriggeredAt?: string | null;
+  failureCount: number;
+  createdAt: string;
+}
+
+export interface CreatedWebhook extends Webhook {
+  secret: string;
+}
+
+export interface CreateWebhookInput {
+  name: string;
+  url: string;
+  events: string[];
+}
+
+export interface UpdateWebhookInput {
+  name?: string;
+  url?: string;
+  events?: string[];
+  isActive?: boolean;
+}
+
+export interface WebhookDelivery {
+  id: string;
+  event: string;
+  statusCode: number | null;
+  success: boolean;
+  duration: number | null;
+  attemptedAt: string;
+}
+
 export interface Category {
   id: string;
   name: string;

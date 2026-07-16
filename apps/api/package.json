@@ -21,6 +21,7 @@
         "db:generate": "prisma generate",
         "db:backup": "ts-node -r tsconfig-paths/register scripts/backup-db.ts",
         "db:restore": "ts-node -r tsconfig-paths/register scripts/restore-db.ts",
+        "backfill:embeddings": "ts-node -r tsconfig-paths/register scripts/backfill-embeddings.ts",
         "clean": "rm -rf dist"
     },
     "dependencies": {

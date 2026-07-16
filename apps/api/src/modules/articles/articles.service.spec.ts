@@ -537,4 +537,49 @@ describe('ArticlesService', () => {
       });
     });
   });
+
+  describe('getCalendar', () => {
+    it('queries the correct UTC month boundaries and matches on scheduledAt OR (PUBLISHED + publishedAt)', async () => {
+      prisma.article.findMany.mockResolvedValue([]);
+
+      await service.getCalendar('org-1', 2026, 7);
+
+      expect(prisma.article.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            organizationId: 'org-1',
+            deletedAt: null,
+            OR: [
+              { scheduledAt: { gte: new Date(Date.UTC(2026, 6, 1)), lt: new Date(Date.UTC(2026, 7, 1)) } },
+              {
+                AND: [
+                  { status: ArticleStatus.PUBLISHED },
+                  { publishedAt: { gte: new Date(Date.UTC(2026, 6, 1)), lt: new Date(Date.UTC(2026, 7, 1)) } },
+                ],
+              },
+            ],
+          },
+        }),
+      );
+    });
+
+    it('rolls over correctly at a year boundary (December -> next January)', async () => {
+      prisma.article.findMany.mockResolvedValue([]);
+
+      await service.getCalendar('org-1', 2026, 12);
+
+      const call = prisma.article.findMany.mock.calls[0][0];
+      expect(call.where.OR[0].scheduledAt.gte).toEqual(new Date(Date.UTC(2026, 11, 1)));
+      expect(call.where.OR[0].scheduledAt.lt).toEqual(new Date(Date.UTC(2027, 0, 1)));
+    });
+
+    it('returns the articles found for that month', async () => {
+      const articles = [{ id: 'a1', title: 'Scheduled piece', status: ArticleStatus.SCHEDULED }];
+      prisma.article.findMany.mockResolvedValue(articles);
+
+      const result = await service.getCalendar('org-1', 2026, 7);
+
+      expect(result).toEqual(articles);
+    });
+  });
 });

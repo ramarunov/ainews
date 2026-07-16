@@ -5,6 +5,7 @@ import { ArticleStatus, Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { OPENSEARCH_CLIENT } from '../../infrastructure/opensearch/opensearch.module';
+import { AIGatewayService } from '../ai/ai-gateway.service';
 
 const ARTICLES_INDEX = 'articles';
 
@@ -20,6 +21,7 @@ export class SearchService {
   constructor(
     @Inject(OPENSEARCH_CLIENT) private readonly opensearch: Client,
     private readonly prisma: PrismaService,
+    private readonly aiGateway: AIGatewayService,
   ) {}
 
   // ─── Indexing ──────────────────────────────────────────────────────────────
@@ -180,6 +182,56 @@ export class SearchService {
       console.error('[SearchService] OpenSearch autocomplete failed, falling back to database', error);
       return this.fallbackAutocomplete(prefix, organizationId, take);
     }
+  }
+
+  /**
+   * Nearest-neighbor search over article_geo.contentEmbedding (pgvector,
+   * cosine distance via the `<=>` operator) rather than OpenSearch's
+   * keyword/BM25 matching in search() above - finds articles that are
+   * conceptually related even when they don't share any of the query's
+   * literal words. Only articles that have actually been through
+   * GeoService.generateAndStoreEmbedding (first publish) are candidates;
+   * older articles published before this feature existed won't have an
+   * embedding yet until backfilled (see scripts/backfill-embeddings.ts).
+   */
+  async semanticSearch(query: string, organizationId: string, limit = 10) {
+    const take = Math.min(50, Math.max(1, limit));
+    const { embedding } = await this.aiGateway.embed(query);
+    const vectorLiteral = `[${embedding.join(',')}]`;
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        title: string;
+        slug: string;
+        excerpt: string | null;
+        publishedAt: Date | null;
+        distance: number;
+      }>
+    >`
+      SELECT a.id, a.title, a.slug, a.excerpt, a."publishedAt",
+             (g."contentEmbedding" <=> ${vectorLiteral}::vector) AS distance
+      FROM articles a
+      JOIN article_geo g ON g."articleId" = a.id
+      WHERE a."organizationId" = ${organizationId}::uuid
+        AND a.status = 'PUBLISHED'
+        AND a."deletedAt" IS NULL
+        AND g."contentEmbedding" IS NOT NULL
+      ORDER BY distance ASC
+      LIMIT ${take}
+    `;
+
+    return rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      slug: row.slug,
+      excerpt: row.excerpt,
+      publishedAt: row.publishedAt,
+      // Cosine distance (0 = identical, 2 = opposite) is the natural unit
+      // for ORDER BY, but "similarity" (1 = identical, higher is better)
+      // reads correctly to a caller expecting a relevance-style score.
+      similarity: 1 - row.distance,
+    }));
   }
 
   // ─── Event Listeners ───────────────────────────────────────────────────────

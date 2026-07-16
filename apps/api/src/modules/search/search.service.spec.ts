@@ -4,6 +4,7 @@ describe('SearchService', () => {
   let service: SearchService;
   let opensearch: any;
   let prisma: any;
+  let aiGateway: any;
 
   beforeEach(() => {
     opensearch = { search: jest.fn(), delete: jest.fn(), index: jest.fn() };
@@ -14,8 +15,10 @@ describe('SearchService', () => {
         groupBy: jest.fn(),
       },
       article: { findMany: jest.fn(), count: jest.fn() },
+      $queryRaw: jest.fn(),
     };
-    service = new SearchService(opensearch, prisma);
+    aiGateway = { embed: jest.fn() };
+    service = new SearchService(opensearch, prisma, aiGateway);
   });
 
   describe('search (analytics logging)', () => {
@@ -78,6 +81,38 @@ describe('SearchService', () => {
           where: expect.objectContaining({ resultCount: 0 }),
         }),
       );
+    });
+  });
+
+  describe('semanticSearch', () => {
+    it('embeds the query text and orders results by cosine distance ascending', async () => {
+      aiGateway.embed.mockResolvedValue({ embedding: [0.1, 0.2, 0.3], model: 'text-embedding-3-large', usage: {} });
+      prisma.$queryRaw.mockResolvedValue([
+        { id: 'a1', title: 'Closest match', slug: 'closest-match', excerpt: null, publishedAt: null, distance: 0.1 },
+        { id: 'a2', title: 'Further match', slug: 'further-match', excerpt: null, publishedAt: null, distance: 0.4 },
+      ]);
+
+      const result = await service.semanticSearch('self-driving car regulation', 'org-1');
+
+      expect(aiGateway.embed).toHaveBeenCalledWith('self-driving car regulation');
+      expect(result).toEqual([
+        { id: 'a1', title: 'Closest match', slug: 'closest-match', excerpt: null, publishedAt: null, similarity: 0.9 },
+        { id: 'a2', title: 'Further match', slug: 'further-match', excerpt: null, publishedAt: null, similarity: 0.6 },
+      ]);
+    });
+
+    it('clamps limit between 1 and 50', async () => {
+      aiGateway.embed.mockResolvedValue({ embedding: [0.1], model: 'x', usage: {} });
+      prisma.$queryRaw.mockResolvedValue([]);
+
+      await service.semanticSearch('query', 'org-1', 500);
+
+      // $queryRaw is invoked as a tagged template - a plain mock (not
+      // Prisma's real Sql-wrapping) receives (stringsArray, ...values), in
+      // the same order they're interpolated in the template: vectorLiteral,
+      // organizationId, then take (the LIMIT clause) last.
+      const call = prisma.$queryRaw.mock.calls[0];
+      expect(call[call.length - 1]).toBe(50);
     });
   });
 });

@@ -51,6 +51,10 @@ export interface EmbeddingResponse {
 
 export type AIProviderName = 'openai' | 'anthropic' | 'google' | 'openrouter' | 'ollama';
 
+// Matches article_geo.contentEmbedding's `vector(1536)` column - see
+// migrations/20260716110000_article_geo_embedding_dimension.
+export const EMBEDDING_DIMENSIONS = 1536;
+
 // ─── Provider Cost Table (per 1M tokens, USD) ────────────────────────────────
 
 const COST_TABLE: Record<string, { input: number; output: number }> = {
@@ -154,6 +158,12 @@ export class OpenAIProvider {
     const response = await client.embeddings.create({
       model,
       input: text.substring(0, 8000), // Limit input length
+      // Only the -3- generation models support truncating their output via
+      // this parameter (the legacy ada-002 model errors if it's passed at
+      // all). 1536 keeps the stored vector under pgvector's ~2000-dimension
+      // index cap (see article_geo.contentEmbedding) regardless of whether
+      // the configured model's native size is 1536 (-small) or 3072 (-large).
+      ...(model.startsWith('text-embedding-3-') ? { dimensions: EMBEDDING_DIMENSIONS } : {}),
     });
 
     const inputTokens = response.usage?.prompt_tokens ?? 0;

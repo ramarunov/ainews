@@ -1,5 +1,28 @@
 import * as Joi from 'joi';
 
+// The exact placeholder values shipped in .env.example - if any of these
+// cryptographic secrets are still set to their documented "change this"
+// default in production, that's not a dev convenience anymore, it's every
+// deployment of this app sharing the same publicly-committed key. Refusing
+// to boot is the only safe response; a warning alone is too easy to miss.
+const PLACEHOLDER_SECRETS: Record<string, string> = {
+  JWT_SECRET: 'change-this-to-a-very-long-random-secret-at-least-64-chars',
+  JWT_REFRESH_SECRET: 'change-this-to-another-very-long-random-secret',
+  SESSION_SECRET: 'change-this-session-secret',
+  ENCRYPTION_KEY: 'change-this-32-char-encryption-key!!',
+  CSRF_SECRET: 'change-this-csrf-secret',
+  WEBHOOK_SECRET: 'change-this-webhook-secret',
+};
+
+function rejectPlaceholderInProduction(field: keyof typeof PLACEHOLDER_SECRETS) {
+  return Joi.string().when('NODE_ENV', {
+    is: 'production',
+    then: Joi.invalid(PLACEHOLDER_SECRETS[field]).messages({
+      'any.invalid': `${field} is still the .env.example placeholder value - set a real secret before running in production`,
+    }),
+  });
+}
+
 export const configValidationSchema = Joi.object({
   NODE_ENV: Joi.string()
     .valid('development', 'staging', 'production', 'test')
@@ -18,11 +41,27 @@ export const configValidationSchema = Joi.object({
 
   OPENSEARCH_URL: Joi.string().default('http://localhost:9200'),
 
-  JWT_SECRET: Joi.string().min(32).required(),
+  JWT_SECRET: Joi.string().min(32).required().concat(rejectPlaceholderInProduction('JWT_SECRET')),
   JWT_ACCESS_EXPIRES_IN: Joi.string().default('15m'),
-  JWT_REFRESH_SECRET: Joi.string().min(32).required(),
+  JWT_REFRESH_SECRET: Joi.string()
+    .min(32)
+    .required()
+    .concat(rejectPlaceholderInProduction('JWT_REFRESH_SECRET')),
   JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
   BCRYPT_ROUNDS: Joi.number().min(10).max(16).default(12),
+
+  SESSION_SECRET: Joi.string().concat(rejectPlaceholderInProduction('SESSION_SECRET')),
+  ENCRYPTION_KEY: Joi.string()
+    .min(32)
+    .required()
+    .concat(rejectPlaceholderInProduction('ENCRYPTION_KEY')),
+  CSRF_SECRET: Joi.string().concat(rejectPlaceholderInProduction('CSRF_SECRET')),
+  WEBHOOK_SECRET: Joi.string().concat(rejectPlaceholderInProduction('WEBHOOK_SECRET')),
+
+  // Sentry is a soft observability requirement, not a security-critical
+  // secret - missing it in production is worth a boot-time warning (see
+  // main.ts), not a hard refusal to start the way a leaked crypto key is.
+  SENTRY_DSN: Joi.string().allow('').default(''),
 
   S3_ENDPOINT: Joi.string().required(),
   S3_REGION: Joi.string().required(),

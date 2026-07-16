@@ -6,10 +6,14 @@ import {
   IsUUID,
   IsArray,
   IsDateString,
+  IsInt,
+  Min,
+  Max,
   MaxLength,
   MinLength,
   IsUrl,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
 import { ArticleStatus } from '@prisma/client';
 
@@ -175,4 +179,16 @@ export class ArticleQueryDto {
   @IsOptional()
   @IsString()
   sortOrder?: 'asc' | 'desc' = 'desc';
+}
+
+export class ArticleCalendarQueryDto {
+  @IsInt()
+  @Type(() => Number)
+  year: number;
+
+  @IsInt()
+  @Min(1)
+  @Max(12)
+  @Type(() => Number)
+  month: number;
 }

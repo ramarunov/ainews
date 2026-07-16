@@ -33,6 +33,25 @@ export function useArticles(filters: ArticleFilters) {
   });
 }
 
+export interface CalendarArticle {
+  id: string;
+  title: string;
+  slug: string;
+  status: ArticleStatus;
+  scheduledAt: string | null;
+  publishedAt: string | null;
+  primaryAuthor: { id: string; displayName?: string | null } | null;
+  primaryCategory: { id: string; name: string } | null;
+}
+
+export function useArticleCalendar(year: number, month: number) {
+  return useQuery({
+    queryKey: ["articles", "calendar", year, month],
+    queryFn: () =>
+      apiClient.get<CalendarArticle[]>(`/articles/calendar?year=${year}&month=${month}`),
+  });
+}
+
 export function useArticle(id: string | undefined) {
   return useQuery({
     queryKey: ["articles", id],

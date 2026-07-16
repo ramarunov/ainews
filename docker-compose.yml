@@ -154,12 +154,43 @@ services:
     networks:
       - ainews_network
 
+  # ─── Prometheus (scrapes the API's /metrics, evaluates alert-rules.yml) ────
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: ainews_prometheus
+    restart: unless-stopped
+    # Lets the container reach the API, which runs directly on the host
+    # (pnpm dev), not as a container in this compose stack.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ./infrastructure/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infrastructure/prometheus/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - ainews_network
+
+  # ─── Alertmanager ───────────────────────────────────────────────────────────
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: ainews_alertmanager
+    restart: unless-stopped
+    volumes:
+      - ./infrastructure/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "9093:9093"
+    networks:
+      - ainews_network
+
 volumes:
   postgres_data:
   redis_data:
   opensearch_data:
   minio_data:
   redis_insight_data:
+  prometheus_data:
 
 networks:
   ainews_network:

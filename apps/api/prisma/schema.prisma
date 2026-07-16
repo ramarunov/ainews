@@ -546,7 +546,7 @@ model ArticleGeo {
   questionsAnswered     Json                    @default("[]")
   citations             Json                    @default("[]")
   eeatSignals           Json                    @default("{}")
-  contentEmbedding      Unsupported("vector")?
+  contentEmbedding      Unsupported("vector(1536)")?
   createdAt             DateTime                @default(now())
   updatedAt             DateTime                @updatedAt
 

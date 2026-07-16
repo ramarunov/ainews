@@ -156,6 +156,43 @@ export class ArticlesService {
     };
   }
 
+  // ─── Calendar ──────────────────────────────────────────────────────────────
+
+  /**
+   * Powers the editorial calendar view - articles slotted by whichever date
+   * is relevant to their current state: SCHEDULED articles by scheduledAt,
+   * PUBLISHED ones by publishedAt. A DRAFT with a scheduledAt in the past
+   * (never actually got published, e.g. the auto-publish sweep skipped it)
+   * intentionally still shows up on its scheduled day - that's useful
+   * information for an editor looking at the calendar, not a bug to filter out.
+   */
+  async getCalendar(organizationId: string, year: number, month: number) {
+    const start = new Date(Date.UTC(year, month - 1, 1));
+    const end = new Date(Date.UTC(year, month, 1));
+
+    return this.prisma.article.findMany({
+      where: {
+        organizationId,
+        deletedAt: null,
+        OR: [
+          { scheduledAt: { gte: start, lt: end } },
+          { AND: [{ status: ArticleStatus.PUBLISHED }, { publishedAt: { gte: start, lt: end } }] },
+        ],
+      },
+      select: {
+        id: true,
+        title: true,
+        slug: true,
+        status: true,
+        scheduledAt: true,
+        publishedAt: true,
+        primaryAuthor: { select: { id: true, displayName: true } },
+        primaryCategory: { select: { id: true, name: true } },
+      },
+      orderBy: [{ scheduledAt: 'asc' }, { publishedAt: 'asc' }],
+    });
+  }
+
   // ─── Find One ──────────────────────────────────────────────────────────────
 
   async findOne(id: string, organizationId: string) {

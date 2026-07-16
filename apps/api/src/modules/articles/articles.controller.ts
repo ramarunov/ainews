@@ -22,7 +22,7 @@ import {
 } from '@nestjs/swagger';
 
 import { ArticlesService } from './articles.service';
-import { CreateArticleDto, UpdateArticleDto, ArticleQueryDto } from './dto/article.dto';
+import { CreateArticleDto, UpdateArticleDto, ArticleQueryDto, ArticleCalendarQueryDto } from './dto/article.dto';
 import { JwtOrApiKeyAuthGuard } from '../../common/guards/jwt-or-api-key-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
@@ -52,6 +52,13 @@ export class ArticlesController {
   @ApiOperation({ summary: 'List articles with filtering and pagination' })
   findAll(@Query() query: ArticleQueryDto, @CurrentUser() user: any) {
     return this.articlesService.findAll(query, user.organizationId);
+  }
+
+  @Get('calendar')
+  @RequirePermissions('articles:read')
+  @ApiOperation({ summary: 'Articles scheduled or published within a given month, for the editorial calendar' })
+  getCalendar(@Query() query: ArticleCalendarQueryDto, @CurrentUser() user: any) {
+    return this.articlesService.getCalendar(user.organizationId, query.year, query.month);
   }
 
   @Get(':id')

@@ -20,7 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useArticleSearch, useSearchAnalytics } from "@/hooks/use-search";
+import { useArticleSearch, useSearchAnalytics, useSemanticSearch } from "@/hooks/use-search";
 import type { ArticleStatus } from "@/lib/types";
 
 function SearchAnalyticsTab() {
@@ -114,6 +114,88 @@ function SearchAnalyticsTab() {
   );
 }
 
+function SemanticSearchTab() {
+  const [inputValue, setInputValue] = useState("");
+  const [query, setQuery] = useState("");
+
+  const { data, isLoading, isError } = useSemanticSearch(query, 10);
+
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setQuery(inputValue.trim());
+  };
+
+  return (
+    <div className="flex flex-col gap-6">
+      <form onSubmit={onSubmit}>
+        <Input
+          placeholder="Describe what you're looking for in your own words…"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          className="max-w-lg"
+        />
+      </form>
+      <p className="text-xs text-muted-foreground">
+        Meaning-based search — finds conceptually related articles even if they
+        don&apos;t share any of these exact words. Only articles published since
+        semantic search was enabled (or backfilled) are searchable this way.
+      </p>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Results</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {!query && (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Enter a description to get started.
+            </p>
+          )}
+          {query && isLoading && (
+            <p className="py-8 text-center text-sm text-muted-foreground">Searching…</p>
+          )}
+          {query && isError && (
+            <p className="py-8 text-center text-sm text-destructive">Search failed.</p>
+          )}
+          {query && data && data.length === 0 && (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              No semantically related articles found.
+            </p>
+          )}
+          {query && data && data.length > 0 && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Title</TableHead>
+                  <TableHead>Excerpt</TableHead>
+                  <TableHead className="text-right">Similarity</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.map((result) => (
+                  <TableRow key={result.id}>
+                    <TableCell className="font-medium">
+                      <Link href={`/articles/${result.id}`} className="hover:underline">
+                        {result.title}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="max-w-96 truncate text-muted-foreground">
+                      {result.excerpt ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {(result.similarity * 100).toFixed(0)}%
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 const STATUS_VARIANT: Record<ArticleStatus, "default" | "secondary" | "outline" | "destructive"> = {
   DRAFT: "secondary",
   IN_REVIEW: "outline",
@@ -142,6 +224,7 @@ export default function SearchPage() {
       <Tabs defaultValue="search">
         <TabsList>
           <TabsTrigger value="search">Search</TabsTrigger>
+          <TabsTrigger value="semantic">Semantic</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
 
@@ -221,6 +304,10 @@ export default function SearchPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="semantic" className="pt-4">
+          <SemanticSearchTab />
         </TabsContent>
 
         <TabsContent value="analytics" className="pt-4">

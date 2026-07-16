@@ -45,3 +45,13 @@ export class AutocompleteQueryDto {
   @IsOptional()
   limit?: number = 10;
 }
+
+export class SemanticSearchQueryDto {
+  @ApiProperty({ example: 'how will new regulations affect self-driving cars' })
+  @IsString()
+  q: string;
+
+  @ApiProperty({ required: false, default: 10 })
+  @IsOptional()
+  limit?: number = 10;
+}

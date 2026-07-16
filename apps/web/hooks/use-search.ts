@@ -42,3 +42,23 @@ export function useSearchAnalytics(days = 30) {
     queryFn: () => apiClient.get<SearchAnalytics>(`/search/analytics?days=${days}`),
   });
 }
+
+export interface SemanticSearchResult {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string | null;
+  publishedAt: string | null;
+  similarity: number;
+}
+
+export function useSemanticSearch(query: string, limit = 10) {
+  return useQuery({
+    queryKey: ["semantic-search", query, limit],
+    queryFn: () =>
+      apiClient.get<SemanticSearchResult[]>(
+        `/search/semantic?q=${encodeURIComponent(query)}&limit=${limit}`,
+      ),
+    enabled: query.trim().length > 0,
+  });
+}

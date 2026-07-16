@@ -29,7 +29,18 @@ async function bootstrap() {
   const configService = app.get(ConfigService);
   const logger = app.get(WINSTON_MODULE_NEST_PROVIDER);
   app.useLogger(logger);
-  if (sentryEnabled) logger.log('Sentry error tracking enabled', 'Bootstrap');
+  if (sentryEnabled) {
+    logger.log('Sentry error tracking enabled', 'Bootstrap');
+  } else if (configService.get('NODE_ENV') === 'production') {
+    // Not fatal (config.validation.ts already refuses to boot on genuinely
+    // dangerous misconfiguration, e.g. a leaked default secret) - a missing
+    // DSN just means server errors go unreported, worth a loud warning
+    // every restart until someone notices, not a crash.
+    logger.warn(
+      'Running in production with no SENTRY_DSN configured - server errors will not be reported anywhere',
+      'Bootstrap',
+    );
+  }
 
   app.useGlobalFilters(new SentryExceptionFilter());
 

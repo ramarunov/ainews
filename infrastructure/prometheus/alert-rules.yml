@@ -1,0 +1,53 @@
+groups:
+  - name: ainews-api
+    rules:
+      - alert: APIServiceDown
+        expr: up{job="ainews-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "AI News CMS API is unreachable"
+          description: "Prometheus has been unable to scrape {{ $labels.instance }} for 1 minute."
+
+      - alert: APIHighErrorRate
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total[5m]))
+          > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API 5xx error rate above 5%"
+          description: "{{ $value | humanizePercentage }} of requests over the last 5 minutes returned a 5xx status."
+
+      - alert: APIHighLatencyP95
+        expr: |
+          histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+          > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API p95 request latency above 2s"
+          description: "95th percentile request duration has been above 2 seconds for 5 minutes ({{ $value | humanizeDuration }})."
+
+      - alert: APIHighEventLoopLag
+        expr: nodejs_eventloop_lag_p99_seconds > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Node.js event loop is lagging"
+          description: "p99 event loop lag has been above 100ms for 5 minutes - the process is too busy to respond promptly ({{ $value | humanizeDuration }})."
+
+      - alert: APIHighMemoryUsage
+        expr: process_resident_memory_bytes > 1e9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API process memory usage above 1GB"
+          description: "Resident memory has been above 1GB for 10 minutes ({{ $value | humanize1024 }}B) - check for a leak before it OOMs."

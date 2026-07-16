@@ -180,8 +180,34 @@ Analyze the article and return E-E-A-T signals and scores (each dimension 0-25, 
           questionsAnswered: geoScore.questionsAnswered,
         },
       });
+
+      await this.generateAndStoreEmbedding(event.articleId, article.title, article.content);
     } catch (err) {
       console.error('[GEO] Failed to auto-calculate GEO score:', err);
+    }
+  }
+
+  /**
+   * Powers semantic search (SearchService.semanticSearch) - stored on
+   * article_geo rather than a dedicated table since it's computed
+   * alongside the GEO score, at the same lifecycle point (first publish),
+   * from the same content. Failure here must never undo the GEO score
+   * upsert that already succeeded above, so it gets its own try/catch
+   * rather than sharing the caller's.
+   */
+  async generateAndStoreEmbedding(articleId: string, title: string, content: string): Promise<void> {
+    try {
+      const plainText = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      const { embedding } = await this.aiGateway.embed(`${title}\n\n${plainText}`);
+      const vectorLiteral = `[${embedding.join(',')}]`;
+
+      await this.prisma.$executeRaw`
+        UPDATE article_geo
+        SET "contentEmbedding" = ${vectorLiteral}::vector
+        WHERE "articleId" = ${articleId}::uuid
+      `;
+    } catch (err) {
+      console.error(`[GEO] Failed to generate embedding for article ${articleId}:`, err);
     }
   }
 }

@@ -1,0 +1,33 @@
+# Minimal, functional Alertmanager config - starts cleanly with no real
+# paging integration configured (the "null" receiver silently drops
+# notifications), so this is safe to run in any environment out of the box.
+# Wire a real receiver before relying on this in production - see the
+# commented Slack example below for the most common starting point.
+
+route:
+  receiver: default
+  group_by: ["alertname"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - match:
+        severity: critical
+      receiver: default
+      repeat_interval: 1h
+
+receivers:
+  - name: default
+    # Replace with a real integration before depending on this in
+    # production. Example (Slack incoming webhook):
+    #
+    # slack_configs:
+    #   - api_url: "https://hooks.slack.com/services/T000/B000/XXXX"
+    #     channel: "#alerts"
+    #     send_resolved: true
+    #
+    # Example (PagerDuty):
+    #
+    # pagerduty_configs:
+    #   - routing_key: "<PAGERDUTY_INTEGRATION_KEY>"
+    #     send_resolved: true

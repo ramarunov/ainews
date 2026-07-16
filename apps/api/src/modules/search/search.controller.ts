@@ -2,7 +2,7 @@ import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 
 import { SearchService } from './search.service';
-import { SearchQueryDto, AutocompleteQueryDto } from './dto/search.dto';
+import { SearchQueryDto, AutocompleteQueryDto, SemanticSearchQueryDto } from './dto/search.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
@@ -35,5 +35,15 @@ export class SearchController {
   @ApiOperation({ summary: 'Search analytics: volume, top queries, zero-result queries' })
   getAnalytics(@Query('days') days: string | undefined, @CurrentUser() user: any) {
     return this.searchService.getAnalytics(user.organizationId, days ? Number(days) : undefined);
+  }
+
+  @Get('semantic')
+  @RequirePermissions('search:read')
+  @ApiOperation({
+    summary:
+      'Meaning-based search over article embeddings (pgvector) - finds conceptually related articles even without shared keywords',
+  })
+  semanticSearch(@Query() query: SemanticSearchQueryDto, @CurrentUser() user: any) {
+    return this.searchService.semanticSearch(query.q, user.organizationId, query.limit);
   }
 }
