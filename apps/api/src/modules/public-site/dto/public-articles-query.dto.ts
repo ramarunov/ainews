@@ -1,4 +1,4 @@
-import { IsBoolean, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -49,4 +49,13 @@ export class PublicArticlesQueryDto {
   @IsOptional()
   @IsUUID()
   excludeId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Sort key - "viewCount" powers a real "most read" list, not just latest-relabeled',
+    enum: ['publishedAt', 'viewCount'],
+    default: 'publishedAt',
+  })
+  @IsOptional()
+  @IsIn(['publishedAt', 'viewCount'])
+  sortBy?: 'publishedAt' | 'viewCount';
 }

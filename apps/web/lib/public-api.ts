@@ -26,6 +26,7 @@ export interface ArticleFilters {
   isFeatured?: boolean;
   search?: string;
   excludeId?: string;
+  sortBy?: "publishedAt" | "viewCount";
 }
 
 export async function getPublishedArticles(
@@ -40,6 +41,7 @@ export async function getPublishedArticles(
   if (filters.isFeatured !== undefined) params.set("isFeatured", String(filters.isFeatured));
   if (filters.search) params.set("search", filters.search);
   if (filters.excludeId) params.set("excludeId", filters.excludeId);
+  if (filters.sortBy) params.set("sortBy", filters.sortBy);
 
   try {
     const res = await fetch(`${API_URL}/public/articles?${params.toString()}`, {

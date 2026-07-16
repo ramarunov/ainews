@@ -1,12 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Link2, Share2, X } from "lucide-react";
+import { Link2, MessageCircle, Share2, X } from "lucide-react";
 
 export function ShareButtons({ url, title }: { url: string; title: string }) {
   const [copied, setCopied] = useState(false);
 
   const shareLinks = [
+    {
+      // WhatsApp first — the dominant sharing channel for Indonesian news
+      // readers, and the button real local news sites lead with.
+      label: "Bagikan ke WhatsApp",
+      icon: MessageCircle,
+      href: `https://wa.me/?text=${encodeURIComponent(`${title} ${url}`)}`,
+    },
     {
       label: "Share on X",
       icon: X,

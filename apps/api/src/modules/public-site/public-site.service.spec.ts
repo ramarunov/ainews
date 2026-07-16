@@ -96,6 +96,28 @@ describe('PublicSiteService', () => {
       );
     });
 
+    it('defaults to sorting by publishedAt when no sortBy is given', async () => {
+      articlesService.findAll.mockResolvedValue({ data: [], meta: {} });
+
+      await service.listPublished({} as any);
+
+      expect(articlesService.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({ sortBy: 'publishedAt', sortOrder: 'desc' }),
+        'org-1',
+      );
+    });
+
+    it('passes through sortBy=viewCount for a real "most read" list, not latest relabeled', async () => {
+      articlesService.findAll.mockResolvedValue({ data: [], meta: {} });
+
+      await service.listPublished({ sortBy: 'viewCount' } as any);
+
+      expect(articlesService.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({ sortBy: 'viewCount', sortOrder: 'desc' }),
+        'org-1',
+      );
+    });
+
     it('fetches one extra item and filters out excludeId, for related-articles queries', async () => {
       articlesService.findAll.mockResolvedValue({
         data: [{ id: 'current' }, { id: 'a' }, { id: 'b' }],

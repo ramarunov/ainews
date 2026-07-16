@@ -135,6 +135,13 @@
  * components (Button, Badge, Card, ...) read these same CSS variable names
  * via the @theme inline mapping at the top of this file, so no component
  * changes are needed, just this override block.
+ *
+ * Reference synthesis (detik.com / kompas.com / kumparan.com / antaranews.com):
+ * a saturated red masthead color, near-black heavyweight headlines for
+ * authority, off-white zone backgrounds to separate sections, and a
+ * distinct accent color per news channel/category (see category-colors.ts)
+ * — all four sites color-code their sections rather than using one flat
+ * accent everywhere.
  */
 .pulse-daily {
   --background: oklch(1 0 0);
@@ -143,16 +150,52 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.55 0.22 25);
+  --primary: oklch(0.52 0.235 27);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.145 0 0);
-  --muted: oklch(0.97 0 0);
+  --muted: oklch(0.97 0.003 25);
   --muted-foreground: oklch(0.45 0 0);
   --accent: oklch(0.96 0.02 25);
-  --accent-foreground: oklch(0.55 0.22 25);
+  --accent-foreground: oklch(0.52 0.235 27);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.9 0 0);
   --input: oklch(0.9 0 0);
-  --ring: oklch(0.55 0.22 25);
+  --ring: oklch(0.52 0.235 27);
+  /* Zone background for alternating sections (trending strip, promo band) */
+  --zone: oklch(0.975 0.004 25);
+  /* Slightly hotter than --primary — reserved for the breaking-news ticker
+   * and its live-pulse dot, so it reads as more urgent than a category tag. */
+  --breaking: oklch(0.58 0.24 24);
+}
+
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee {
+  animation: marquee 28s linear infinite;
+}
+
+.animate-marquee:hover {
+  animation-play-state: paused;
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.animate-live-pulse {
+  animation: live-pulse 1.6s ease-in-out infinite;
 }

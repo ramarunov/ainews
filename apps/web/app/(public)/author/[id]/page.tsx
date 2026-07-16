@@ -26,33 +26,38 @@ export default async function AuthorPage({ params }: Props) {
   const { data: articles } = await getPublishedArticles({ authorId: id, limit: 20 });
 
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-10">
-      <div className="flex items-center gap-4 border-b pb-6">
-        {author.avatarUrl ? (
-          <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full bg-muted">
-            <Image src={author.avatarUrl} alt={author.displayName ?? ""} fill className="object-cover" unoptimized />
+    <div className="flex flex-col gap-8">
+      <div className="bg-[var(--zone)] py-10">
+        <div className="mx-auto flex w-full max-w-6xl items-center gap-5 px-4">
+          {author.avatarUrl ? (
+            <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full bg-muted shadow-sm">
+              <Image src={author.avatarUrl} alt={author.displayName ?? ""} fill className="object-cover" unoptimized />
+            </div>
+          ) : (
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-primary text-2xl font-black text-primary-foreground shadow-sm">
+              {(author.displayName ?? "?").charAt(0).toUpperCase()}
+            </div>
+          )}
+          <div>
+            <p className="text-xs font-bold tracking-wide text-muted-foreground uppercase">Penulis</p>
+            <h1 className="text-2xl font-black tracking-tight md:text-3xl">{author.displayName}</h1>
+            {author.bio && <p className="mt-1 max-w-2xl text-muted-foreground">{author.bio}</p>}
           </div>
-        ) : (
-          <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-primary text-2xl font-black text-primary-foreground">
-            {(author.displayName ?? "?").charAt(0).toUpperCase()}
-          </div>
-        )}
-        <div>
-          <h1 className="text-2xl font-black tracking-tight">{author.displayName}</h1>
-          {author.bio && <p className="mt-1 text-muted-foreground">{author.bio}</p>}
         </div>
       </div>
 
-      {articles.length === 0 && (
-        <p className="py-12 text-center text-muted-foreground">
-          No published articles from this author yet.
-        </p>
-      )}
+      <div className="mx-auto w-full max-w-6xl px-4 pb-16">
+        {articles.length === 0 && (
+          <p className="py-12 text-center text-muted-foreground">
+            Belum ada artikel yang diterbitkan oleh penulis ini.
+          </p>
+        )}
 
-      <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
-        {articles.map((article) => (
-          <ArticleCard key={article.id} article={article} variant="medium" />
-        ))}
+        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+          {articles.map((article) => (
+            <ArticleCard key={article.id} article={article} variant="medium" />
+          ))}
+        </div>
       </div>
     </div>
   );

@@ -60,7 +60,7 @@ export class PublicSiteService {
         search: query.search,
         page: query.page,
         limit: fetchLimit,
-        sortBy: 'publishedAt',
+        sortBy: query.sortBy ?? 'publishedAt',
         sortOrder: 'desc',
       },
       organizationId,
