@@ -27,6 +27,8 @@ const LOGIN_ATTEMPTS_PREFIX = 'login_attempts:';
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION = 900; // 15 minutes in seconds
 const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour, per SECURITY.md
+const MFA_CHALLENGE_PREFIX = 'mfa:challenge:';
+const MFA_CHALLENGE_TTL_SECONDS = 300; // 5 minutes
 
 @Injectable()
 export class AuthService {
@@ -237,6 +239,22 @@ export class AuthService {
   }
 
   async login(user: any, ipAddress?: string, userAgent?: string) {
+    // MFA-enabled accounts don't get tokens from a bare email+password
+    // check - otherwise "enabling MFA" would be purely decorative. Instead
+    // of a full session, hand back a short-lived, single-use challenge
+    // token (opaque, stored server-side in Redis - never a signed JWT,
+    // which JwtStrategy would otherwise accept as a real access token).
+    if (user.mfaEnabled) {
+      const challengeToken = randomBytes(32).toString('hex');
+      await this.redis.set(
+        `${MFA_CHALLENGE_PREFIX}${challengeToken}`,
+        user.id,
+        'EX',
+        MFA_CHALLENGE_TTL_SECONDS,
+      );
+      return { mfaRequired: true, challengeToken };
+    }
+
     // Update last login
     await this.prisma.user.update({
       where: { id: user.id },
@@ -254,6 +272,75 @@ export class AuthService {
     });
 
     return this.issueTokens(user);
+  }
+
+  async verifyMfaLogin(challengeToken: string, code: string, ipAddress?: string, userAgent?: string) {
+    const key = `${MFA_CHALLENGE_PREFIX}${challengeToken}`;
+    const userId = await this.redis.get(key);
+    if (!userId) {
+      throw new UnauthorizedException('MFA challenge has expired - please log in again');
+    }
+
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null, isActive: true },
+      include: { userRoles: { include: { role: true } } },
+    });
+    if (!user || !user.mfaEnabled || !user.mfaSecret) {
+      throw new UnauthorizedException('MFA challenge has expired - please log in again');
+    }
+
+    const isValidTotp = await this.verifyMfaToken(user.id, code);
+    if (!isValidTotp) {
+      const matchedIndex = await this.findMatchingBackupCodeIndex(user.mfaBackupCodes, code);
+      if (matchedIndex === -1) {
+        throw new UnauthorizedException('Invalid MFA code');
+      }
+      // Backup codes are single-use - consume it immediately.
+      const remaining = [...user.mfaBackupCodes];
+      remaining.splice(matchedIndex, 1);
+      await this.prisma.user.update({ where: { id: user.id }, data: { mfaBackupCodes: remaining } });
+    }
+
+    // Single-use: this challenge can't be replayed even within its TTL.
+    await this.redis.del(key);
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date(), lastLoginIp: ipAddress, loginCount: { increment: 1 } },
+    });
+    this.eventEmitter.emit('user.login', { userId: user.id, ipAddress, userAgent });
+
+    return this.issueTokens(user);
+  }
+
+  async disableMfa(userId: string, password: string): Promise<void> {
+    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+
+    const passwordMatches = user.passwordHash && (await bcrypt.compare(password, user.passwordHash));
+    if (!passwordMatches) {
+      throw new UnauthorizedException('Incorrect password');
+    }
+
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { mfaEnabled: false, mfaSecret: null, mfaBackupCodes: [] },
+    });
+  }
+
+  private async findMatchingBackupCodeIndex(hashedCodes: string[], code: string): Promise<number> {
+    for (let i = 0; i < hashedCodes.length; i++) {
+      // eslint-disable-next-line no-await-in-loop
+      if (await bcrypt.compare(code, hashedCodes[i])) return i;
+    }
+    return -1;
+  }
+
+  async getMfaStatus(userId: string): Promise<{ enabled: boolean }> {
+    const user = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { mfaEnabled: true },
+    });
+    return { enabled: user.mfaEnabled };
   }
 
   // ─── Token Management ──────────────────────────────────────────────────────

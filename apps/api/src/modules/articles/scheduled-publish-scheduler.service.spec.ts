@@ -2,6 +2,23 @@
 // jsdom, not the default node environment: this file transitively imports
 // ArticlesService, which imports isomorphic-dompurify — that package
 // needs a real `window` (see articles.service.spec.ts for the full story).
+//
+// ArticlesService also now transitively imports the real jsdom *package*
+// (via ArticleInternalLinkingService) and the openai/@anthropic-ai/sdk/
+// @google/generative-ai SDKs (via AIWriterService) — same stubs as
+// articles.service.spec.ts / ai-gateway.service.spec.ts.
+import { TextEncoder, TextDecoder } from 'node:util';
+
+(global as any).TextEncoder = (global as any).TextEncoder || TextEncoder;
+(global as any).TextDecoder = (global as any).TextDecoder || TextDecoder;
+
+jest.mock('openai');
+jest.mock('@anthropic-ai/sdk');
+jest.mock('@google/generative-ai');
+for (const name of ['fetch', 'Request', 'Response', 'Headers', 'FormData', 'Blob', 'ReadableStream']) {
+  (global as any)[name] = (global as any)[name] || class {};
+}
+
 import { ScheduledPublishSchedulerService } from './scheduled-publish-scheduler.service';
 
 describe('ScheduledPublishSchedulerService', () => {

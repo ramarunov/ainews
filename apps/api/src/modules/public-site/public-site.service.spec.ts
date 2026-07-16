@@ -5,7 +5,23 @@
  * isomorphic-dompurify — that package needs a real `window` (via jsdom)
  * even when unused by the code path under test here. See
  * articles.service.spec.ts for the same requirement and its own note.
+ *
+ * ArticlesService also now transitively imports the real jsdom *package*
+ * (via ArticleInternalLinkingService) and the openai/@anthropic-ai/sdk/
+ * @google/generative-ai SDKs (via AIWriterService) — same TextEncoder and
+ * Web Fetch API stubs as articles.service.spec.ts / ai-gateway.service.spec.ts.
  */
+import { TextEncoder, TextDecoder } from 'node:util';
+
+(global as any).TextEncoder = (global as any).TextEncoder || TextEncoder;
+(global as any).TextDecoder = (global as any).TextDecoder || TextDecoder;
+
+jest.mock('openai');
+jest.mock('@anthropic-ai/sdk');
+jest.mock('@google/generative-ai');
+for (const name of ['fetch', 'Request', 'Response', 'Headers', 'FormData', 'Blob', 'ReadableStream']) {
+  (global as any)[name] = (global as any)[name] || class {};
+}
 
 // jsdom doesn't polyfill Node's setImmediate, which
 // @opensearch-project/opensearch's helpers reference at import time —

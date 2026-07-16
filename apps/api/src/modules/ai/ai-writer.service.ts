@@ -300,6 +300,44 @@ Return JSON: {
     );
   }
 
+  /**
+   * Proposes internal links for automatic insertion (no human review step,
+   * per product decision). The model must ONLY copy exact substrings from the
+   * supplied content for `searchText` — it never gets to touch the HTML
+   * directly. The caller (ArticleInternalLinkingService) is responsible for
+   * verifying each searchText actually occurs verbatim before inserting
+   * anything; a hallucinated searchText is simply skipped, never invented.
+   */
+  async suggestInternalLinks(
+    content: string,
+    candidates: Array<{ slug: string; title: string }>,
+    organizationId?: string,
+    articleId?: string,
+  ): Promise<Array<{ searchText: string; targetSlug: string }>> {
+    const candidateList = candidates.map((c) => `- slug: "${c.slug}" — title: "${c.title}"`).join('\n');
+
+    const result = await this.gateway.jsonPrompt<{ links: Array<{ searchText: string; targetSlug: string }> }>(
+      `You are an internal-linking assistant for a news CMS. Given an article's
+plain-text content and a list of candidate related articles, propose up to 3
+places in the content that should link to a candidate article.
+
+Rules:
+- "searchText" MUST be copied EXACTLY, character-for-character, from the
+  supplied content — never paraphrase, summarize, or invent it. It should be
+  a short phrase (2-6 words) that naturally relates to the target article.
+- "targetSlug" must be one of the candidate slugs provided.
+- Only propose a link where the connection is genuinely relevant, not forced.
+- Never propose the same searchText twice, and never target the same slug twice.
+- If nothing is a good fit, return fewer links or an empty list.
+
+Return JSON: {"links": [{"searchText": "...", "targetSlug": "..."}]}`,
+      `Article content:\n${content.substring(0, 6000)}\n\nCandidate related articles:\n${candidateList}`,
+      { temperature: 0.2, analysisType: 'internal_linking', organizationId, articleId },
+    );
+
+    return result.links ?? [];
+  }
+
   async extractEntities(content: string): Promise<
     Array<{
       text: string;

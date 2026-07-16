@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/card";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/auth-store";
-import type { AuthResponse } from "@/lib/types";
+import type { AuthResponse, LoginResponse } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
 
@@ -35,6 +35,8 @@ export default function LoginPage() {
   const router = useRouter();
   const setSession = useAuthStore((s) => s.setSession);
   const [submitting, setSubmitting] = useState(false);
+  const [challengeToken, setChallengeToken] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
 
   const {
     register,
@@ -45,9 +47,13 @@ export default function LoginPage() {
   const onSubmit = async (values: LoginForm) => {
     setSubmitting(true);
     try {
-      const res = await apiClient.post<AuthResponse>("/auth/login", values, {
+      const res = await apiClient.post<LoginResponse>("/auth/login", values, {
         skipAuth: true,
       });
+      if ("mfaRequired" in res) {
+        setChallengeToken(res.challengeToken);
+        return;
+      }
       setSession(res);
       router.push("/articles");
     } catch (err) {
@@ -57,6 +63,68 @@ export default function LoginPage() {
       setSubmitting(false);
     }
   };
+
+  const onSubmitMfaCode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!challengeToken) return;
+    setSubmitting(true);
+    try {
+      const res = await apiClient.post<AuthResponse>(
+        "/auth/mfa/verify-login",
+        { challengeToken, code: mfaCode },
+        { skipAuth: true },
+      );
+      setSession(res);
+      router.push("/articles");
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : "Invalid code";
+      toast.error(message);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (challengeToken) {
+    return (
+      <div className="flex flex-1 items-center justify-center bg-muted/40 px-4">
+        <Card className="w-full max-w-sm">
+          <CardHeader>
+            <CardTitle>Two-factor verification</CardTitle>
+            <CardDescription>
+              Enter the 6-digit code from your authenticator app, or a backup code.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={onSubmitMfaCode} className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="mfa-code">Code</Label>
+                <Input
+                  id="mfa-code"
+                  autoComplete="one-time-code"
+                  autoFocus
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value)}
+                />
+              </div>
+              <Button type="submit" disabled={submitting || !mfaCode}>
+                {submitting ? "Verifying…" : "Verify"}
+              </Button>
+              <button
+                type="button"
+                className="text-xs text-muted-foreground underline underline-offset-4"
+                onClick={() => {
+                  setChallengeToken(null);
+                  setMfaCode("");
+                }}
+              >
+                Back to login
+              </button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-1 items-center justify-center bg-muted/40 px-4">

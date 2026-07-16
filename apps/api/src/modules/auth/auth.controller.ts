@@ -20,6 +20,8 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { VerifyMfaDto } from './dto/verify-mfa.dto';
+import { VerifyMfaLoginDto } from './dto/verify-mfa-login.dto';
+import { DisableMfaDto } from './dto/disable-mfa.dto';
 import { ForgotPasswordDto, ResetPasswordDto } from './dto/password-reset.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { LocalAuthGuard } from './guards/local-auth.guard';
@@ -156,6 +158,15 @@ export class AuthController {
     await this.authService.logoutAll(user.id);
   }
 
+  // ─── MFA Status ────────────────────────────────────────────────────────────
+  @Get('mfa/status')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Whether MFA is currently enabled for the current user' })
+  async getMfaStatus(@CurrentUser() user: any) {
+    return this.authService.getMfaStatus(user.id);
+  }
+
   // ─── MFA Setup ─────────────────────────────────────────────────────────────
   @Post('mfa/setup')
   @UseGuards(JwtAuthGuard)
@@ -172,6 +183,30 @@ export class AuthController {
   @ApiOperation({ summary: 'Verify TOTP token and enable MFA' })
   async enableMfa(@CurrentUser() user: any, @Body() dto: VerifyMfaDto) {
     return this.authService.verifyAndEnableMfa(user.id, dto.token);
+  }
+
+  // ─── MFA Login Verification ────────────────────────────────────────────────
+  @Post('mfa/verify-login')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 900000 } })
+  @ApiOperation({ summary: 'Complete login for an MFA-enabled account using the challenge token from /auth/login' })
+  async verifyMfaLogin(@Req() req: Request, @Body() dto: VerifyMfaLoginDto) {
+    const ipAddress =
+      (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() ||
+      req.socket.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+
+    return this.authService.verifyMfaLogin(dto.challengeToken, dto.code, ipAddress, userAgent);
+  }
+
+  // ─── MFA Disable ───────────────────────────────────────────────────────────
+  @Post('mfa/disable')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Turn MFA off (requires re-entering the current password)' })
+  async disableMfa(@CurrentUser() user: any, @Body() dto: DisableMfaDto) {
+    await this.authService.disableMfa(user.id, dto.password);
+    return { disabled: true };
   }
 
   // ─── Profile ───────────────────────────────────────────────────────────────

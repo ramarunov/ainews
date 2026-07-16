@@ -76,6 +76,7 @@ describe('AuthService', () => {
     eventEmitter = { emit: jest.fn() };
     redis = {
       get: jest.fn().mockResolvedValue(null),
+      set: jest.fn().mockResolvedValue('OK'),
       multi: jest.fn().mockReturnValue({
         incr: jest.fn().mockReturnThis(),
         expire: jest.fn().mockReturnThis(),
@@ -319,6 +320,146 @@ describe('AuthService', () => {
       });
 
       await expect(service.verifyMfaToken('user-1', '123456')).resolves.toBe(false);
+    });
+  });
+
+  describe('login (MFA enforcement)', () => {
+    it('does not issue real tokens for an MFA-enabled account - returns a challenge token instead', async () => {
+      const user = { id: 'user-1', mfaEnabled: true };
+
+      const result = await service.login(user, '1.2.3.4', 'test-agent');
+
+      expect(result).toEqual({ mfaRequired: true, challengeToken: expect.any(String) });
+      expect(redis.set).toHaveBeenCalledWith(
+        expect.stringContaining('mfa:challenge:'),
+        'user-1',
+        'EX',
+        300,
+      );
+      // Regression guard: an MFA-enabled account must never reach
+      // issueTokens()/lastLoginAt update from the bare password check alone.
+      expect(prisma.user.update).not.toHaveBeenCalled();
+      expect(eventEmitter.emit).not.toHaveBeenCalledWith('user.login', expect.anything());
+    });
+
+    it('issues real tokens immediately for an account without MFA', async () => {
+      const user = { id: 'user-1', mfaEnabled: false, userRoles: [] };
+      prisma.user.update.mockResolvedValue({});
+
+      const result = await service.login(user, '1.2.3.4', 'test-agent');
+
+      expect(result).toHaveProperty('accessToken');
+      expect(redis.set).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('verifyMfaLogin', () => {
+    it('rejects an unknown or expired challenge token', async () => {
+      redis.get.mockResolvedValue(null);
+
+      await expect(service.verifyMfaLogin('bogus-token', '123456')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('completes login with a valid TOTP code and consumes the challenge (single-use)', async () => {
+      const encryption = new EncryptionService(config);
+      const rawSecret = authenticator.generateSecret(32);
+      const encryptedSecret = encryption.encrypt(rawSecret);
+      redis.get.mockResolvedValue('user-1');
+      prisma.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        mfaEnabled: true,
+        mfaSecret: encryptedSecret,
+        mfaBackupCodes: [],
+        userRoles: [],
+      });
+      prisma.user.findUniqueOrThrow.mockResolvedValue({
+        id: 'user-1',
+        mfaEnabled: true,
+        mfaSecret: encryptedSecret,
+      });
+      prisma.user.update.mockResolvedValue({});
+      const validToken = authenticator.generate(rawSecret);
+
+      const result = await service.verifyMfaLogin('real-challenge', validToken, '1.2.3.4', 'agent');
+
+      expect(result).toHaveProperty('accessToken');
+      expect(redis.del).toHaveBeenCalledWith(expect.stringContaining('real-challenge'));
+    });
+
+    it('accepts a valid backup code and consumes it so it cannot be reused', async () => {
+      const rawCode = 'deadbeef';
+      const rounds = 4; // low cost factor - only speed matters in this test
+      const hashedCode = await bcrypt.hash(rawCode, rounds);
+      redis.get.mockResolvedValue('user-1');
+      prisma.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        mfaEnabled: true,
+        mfaSecret: new EncryptionService(config).encrypt(authenticator.generateSecret(32)),
+        mfaBackupCodes: [hashedCode, 'some-other-hash'],
+        userRoles: [],
+      });
+      prisma.user.findUniqueOrThrow.mockResolvedValue({
+        id: 'user-1',
+        mfaEnabled: true,
+        mfaSecret: new EncryptionService(config).encrypt(authenticator.generateSecret(32)),
+      });
+      prisma.user.update.mockResolvedValue({});
+
+      const result = await service.verifyMfaLogin('real-challenge', rawCode, '1.2.3.4', 'agent');
+
+      expect(result).toHaveProperty('accessToken');
+      const backupCodesUpdateCall = prisma.user.update.mock.calls.find(
+        (c: any) => c[0].data.mfaBackupCodes !== undefined,
+      );
+      expect(backupCodesUpdateCall[0].data.mfaBackupCodes).toEqual(['some-other-hash']);
+    });
+
+    it('rejects an invalid code without consuming any backup code', async () => {
+      redis.get.mockResolvedValue('user-1');
+      prisma.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        mfaEnabled: true,
+        mfaSecret: new EncryptionService(config).encrypt(authenticator.generateSecret(32)),
+        mfaBackupCodes: [],
+        userRoles: [],
+      });
+      prisma.user.findUniqueOrThrow.mockResolvedValue({
+        id: 'user-1',
+        mfaEnabled: true,
+        mfaSecret: new EncryptionService(config).encrypt(authenticator.generateSecret(32)),
+      });
+
+      await expect(service.verifyMfaLogin('real-challenge', '000000', '1.2.3.4', 'agent')).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(redis.del).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('disableMfa', () => {
+    it('turns MFA off after confirming the current password', async () => {
+      const passwordHash = await bcrypt.hash('correct-password', 4);
+      prisma.user.findUniqueOrThrow.mockResolvedValue({ id: 'user-1', passwordHash });
+      prisma.user.update.mockResolvedValue({});
+
+      await service.disableMfa('user-1', 'correct-password');
+
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { id: 'user-1' },
+        data: { mfaEnabled: false, mfaSecret: null, mfaBackupCodes: [] },
+      });
+    });
+
+    it('rejects an incorrect password without touching MFA state', async () => {
+      const passwordHash = await bcrypt.hash('correct-password', 4);
+      prisma.user.findUniqueOrThrow.mockResolvedValue({ id: 'user-1', passwordHash });
+
+      await expect(service.disableMfa('user-1', 'wrong-password')).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(prisma.user.update).not.toHaveBeenCalled();
     });
   });
 

@@ -57,3 +57,7 @@ playwright-report/
 *.key
 *.cert
 secrets/
+
+# Database backups (contain plaintext-adjacent dumps — never commit)
+apps/api/backups/
+backups/

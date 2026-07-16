@@ -23,14 +23,18 @@ import {
 
 import { ArticlesService } from './articles.service';
 import { CreateArticleDto, UpdateArticleDto, ArticleQueryDto } from './dto/article.dto';
-import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtOrApiKeyAuthGuard } from '../../common/guards/jwt-or-api-key-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
 @ApiTags('Articles')
 @ApiBearerAuth('JWT')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+// Accepts either a dashboard JWT or a programmatic API key (X-API-Key
+// header) - the one controller wired up as the concrete, tested example of
+// API keys actually authenticating real requests, not just existing as an
+// unused DB model.
+@UseGuards(JwtOrApiKeyAuthGuard, PermissionsGuard)
 @Controller({ path: 'articles', version: '1' })
 export class ArticlesController {
   constructor(private readonly articlesService: ArticlesService) {}

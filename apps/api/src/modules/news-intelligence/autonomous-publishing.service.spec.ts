@@ -13,7 +13,16 @@
  * which doesn't expose these. AIWriterService is always mocked in these
  * tests (a plain object, never instantiated) so these are load-bearing
  * stubs only, never actually invoked.
+ *
+ * Also transitively imports the real jsdom *package* (via
+ * ArticleInternalLinkingService), which needs TextEncoder/TextDecoder at
+ * import time via whatwg-url - not provided by jest's jsdom test environment.
  */
+import { TextEncoder, TextDecoder } from 'node:util';
+
+(global as any).TextEncoder = (global as any).TextEncoder || TextEncoder;
+(global as any).TextDecoder = (global as any).TextDecoder || TextDecoder;
+
 for (const name of ['fetch', 'Request', 'Response', 'Headers', 'FormData', 'Blob', 'ReadableStream']) {
   (global as any)[name] = (global as any)[name] || class {};
 }

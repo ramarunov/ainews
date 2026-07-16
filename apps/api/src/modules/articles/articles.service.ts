@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ArticleStatus, Prisma } from '@prisma/client';
 import slugify from 'slugify';
@@ -7,12 +7,16 @@ import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { withOrgTransaction } from '../../infrastructure/prisma/rls-extension';
 import { sanitizeArticleHtml } from '../../common/sanitize-html';
 import { CreateArticleDto, UpdateArticleDto, ArticleQueryDto } from './dto/article.dto';
+import { ArticleInternalLinkingService } from './article-internal-linking.service';
 
 @Injectable()
 export class ArticlesService {
+  private readonly logger = new Logger(ArticlesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly internalLinkingService: ArticleInternalLinkingService,
   ) {}
 
   // ─── Create ────────────────────────────────────────────────────────────────
@@ -233,7 +237,8 @@ export class ArticlesService {
     const readingTime = Math.ceil(wordCount / 200);
 
     // Handle status transitions
-    if (dto.status === ArticleStatus.PUBLISHED && !existing.publishedAt) {
+    const isFirstPublish = dto.status === ArticleStatus.PUBLISHED && !existing.publishedAt;
+    if (isFirstPublish) {
       (dto as any).publishedAt = new Date();
     }
 
@@ -301,6 +306,22 @@ export class ArticlesService {
       }
     }
 
+    // Update categories if provided - mirrors the tag-replace block above.
+    // create() already wrote articleCategories from dto.categoryIds; this
+    // was the missing half (update() silently ignored it entirely).
+    if (dto.categoryIds !== undefined) {
+      await this.prisma.articleCategory.deleteMany({ where: { articleId: id } });
+      if (dto.categoryIds.length > 0) {
+        await this.prisma.articleCategory.createMany({
+          data: dto.categoryIds.map((categoryId, idx) => ({
+            articleId: id,
+            categoryId,
+            sortOrder: idx,
+          })),
+        });
+      }
+    }
+
     // Create revision
     const revisionNumber = (existing.revisionCount ?? 0) + 1;
     await this.createRevision(
@@ -325,6 +346,12 @@ export class ArticlesService {
         organizationId,
         slug: updated.slug,
       });
+    }
+
+    if (isFirstPublish) {
+      this.internalLinkingService
+        .insertLinks(id, organizationId)
+        .catch((err) => this.logger.error(`Internal linking failed for article ${id}`, err));
     }
 
     return updated;
@@ -499,6 +526,12 @@ export class ArticlesService {
       articleTags: {
         include: {
           tag: { select: { id: true, name: true, slug: true, color: true } },
+        },
+        orderBy: { sortOrder: 'asc' },
+      },
+      articleCategories: {
+        include: {
+          category: { select: { id: true, name: true, slug: true } },
         },
         orderBy: { sortOrder: 'asc' },
       },

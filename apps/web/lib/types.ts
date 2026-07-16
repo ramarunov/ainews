@@ -41,6 +41,42 @@ export interface AuthResponse {
   user: AuthUser;
 }
 
+export interface MfaChallengeResponse {
+  mfaRequired: true;
+  challengeToken: string;
+}
+
+export type LoginResponse = AuthResponse | MfaChallengeResponse;
+
+export interface MfaSetupResponse {
+  secret: string;
+  qrCodeUrl: string;
+  otpAuthUrl: string;
+}
+
+export interface ApiKey {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  permissions: string[];
+  rateLimit: number;
+  lastUsedAt?: string | null;
+  expiresAt?: string | null;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface CreatedApiKey extends ApiKey {
+  key: string;
+}
+
+export interface CreateApiKeyInput {
+  name: string;
+  permissions?: string[];
+  expiresAt?: string;
+  rateLimit?: number;
+}
+
 export interface Category {
   id: string;
   name: string;
@@ -115,6 +151,7 @@ export interface Article {
   primaryCategoryId?: string | null;
   primaryCategory?: Category | null;
   articleTags?: { tag: Tag }[];
+  articleCategories?: { category: Category }[];
   seriesId?: string | null;
   seriesOrder?: number | null;
   createdAt: string;
@@ -218,6 +255,7 @@ export interface CreateArticleInput {
   excerpt?: string;
   content?: string;
   primaryCategoryId?: string;
+  categoryIds?: string[];
   tagIds?: string[];
   featuredImageId?: string;
   isBreaking?: boolean;

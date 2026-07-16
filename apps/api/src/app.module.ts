@@ -16,6 +16,7 @@ import { OpenSearchModule } from './infrastructure/opensearch/opensearch.module'
 import { StorageModule } from './infrastructure/storage/storage.module';
 import { EncryptionModule } from './common/crypto/encryption.module';
 import { EmailModule } from './common/email/email.module';
+import { GuardsModule } from './common/guards/guards.module';
 
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -43,6 +44,8 @@ import { AuditModule } from './modules/audit/audit.module';
 import { SystemSettingsModule } from './modules/system-settings/system-settings.module';
 import { PublicSiteModule } from './modules/public-site/public-site.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
+import { BackupModule } from './modules/backup/backup.module';
+import { ApiKeysModule } from './modules/api-keys/api-keys.module';
 
 import { configValidationSchema } from './config/config.validation';
 import { AuditLogService } from './common/audit/audit-log.service';
@@ -153,6 +156,7 @@ import { MetricsInterceptor } from './modules/metrics/metrics.interceptor';
     StorageModule,
     EncryptionModule,
     EmailModule,
+    GuardsModule,
 
     // ─── Feature Modules ─────────────────────────────────────────────────────
     AuthModule,
@@ -175,6 +179,8 @@ import { MetricsInterceptor } from './modules/metrics/metrics.interceptor';
     SystemSettingsModule,
     PublicSiteModule,
     MetricsModule,
+    BackupModule,
+    ApiKeysModule,
 
     // ─── AI & Intelligence ───────────────────────────────────────────────────
     AIModule,

@@ -5,7 +5,29 @@
  * `window` (via jsdom) when running outside a browser. The rest of this
  * suite (and the rest of the backend's tests) run under the default `node`
  * environment; this override is scoped to this one file only.
+ *
+ * It also now transitively imports the real jsdom *package* (via
+ * ArticleInternalLinkingService), which needs TextEncoder/TextDecoder at
+ * import time via whatwg-url - jest's jsdom test environment doesn't
+ * provide those, so they must be polyfilled before that import happens.
+ *
+ * ArticleInternalLinkingService also pulls in AIWriterService ->
+ * AIGatewayService -> the real openai/@anthropic-ai/sdk/@google/generative-ai
+ * SDKs, which probe for Web Fetch API globals at module load time even when
+ * mocked (see ai-gateway.service.spec.ts for the same requirement).
  */
+import { TextEncoder, TextDecoder } from 'node:util';
+
+(global as any).TextEncoder = (global as any).TextEncoder || TextEncoder;
+(global as any).TextDecoder = (global as any).TextDecoder || TextDecoder;
+
+jest.mock('openai');
+jest.mock('@anthropic-ai/sdk');
+jest.mock('@google/generative-ai');
+for (const name of ['fetch', 'Request', 'Response', 'Headers', 'FormData', 'Blob', 'ReadableStream']) {
+  (global as any)[name] = (global as any)[name] || class {};
+}
+
 import { NotFoundException } from '@nestjs/common';
 import { ArticleStatus } from '@prisma/client';
 import { ArticlesService } from './articles.service';
@@ -14,6 +36,7 @@ describe('ArticlesService', () => {
   let service: ArticlesService;
   let prisma: any;
   let eventEmitter: any;
+  let internalLinkingService: any;
 
   beforeEach(() => {
     prisma = {
@@ -31,12 +54,17 @@ describe('ArticlesService', () => {
         deleteMany: jest.fn().mockResolvedValue({}),
         createMany: jest.fn().mockResolvedValue({}),
       },
+      articleCategory: {
+        deleteMany: jest.fn().mockResolvedValue({}),
+        createMany: jest.fn().mockResolvedValue({}),
+      },
       articleView: { create: jest.fn() },
       mediaFile: { findUnique: jest.fn() },
       $transaction: jest.fn().mockResolvedValue([]),
     };
     eventEmitter = { emit: jest.fn() };
-    service = new ArticlesService(prisma, eventEmitter);
+    internalLinkingService = { insertLinks: jest.fn().mockResolvedValue(undefined) };
+    service = new ArticlesService(prisma, eventEmitter, internalLinkingService);
   });
 
   describe('create', () => {
@@ -320,6 +348,52 @@ describe('ArticlesService', () => {
       );
     });
 
+    it('triggers internal-link insertion on the first transition to PUBLISHED', async () => {
+      await service.update(
+        'article-1',
+        { status: ArticleStatus.PUBLISHED } as any,
+        'author-1',
+        'org-1',
+      );
+
+      expect(internalLinkingService.insertLinks).toHaveBeenCalledWith('article-1', 'org-1');
+    });
+
+    it('does not trigger internal-link insertion when republishing an already-published article', async () => {
+      jest.spyOn(service, 'findOne').mockResolvedValue({
+        ...existingArticle,
+        publishedAt: new Date('2026-01-01'),
+      } as any);
+
+      await service.update(
+        'article-1',
+        { status: ArticleStatus.PUBLISHED } as any,
+        'author-1',
+        'org-1',
+      );
+
+      expect(internalLinkingService.insertLinks).not.toHaveBeenCalled();
+    });
+
+    it('does not trigger internal-link insertion for a non-publishing update', async () => {
+      await service.update(
+        'article-1',
+        { excerpt: 'tweak' } as any,
+        'author-1',
+        'org-1',
+      );
+
+      expect(internalLinkingService.insertLinks).not.toHaveBeenCalled();
+    });
+
+    it('a rejected internal-linking promise is caught and logged, never thrown from update()', async () => {
+      internalLinkingService.insertLinks.mockRejectedValue(new Error('AI gateway down'));
+
+      await expect(
+        service.update('article-1', { status: ArticleStatus.PUBLISHED } as any, 'author-1', 'org-1'),
+      ).resolves.toBeDefined();
+    });
+
     it('replaces tags by deleting existing ones then creating the new set', async () => {
       await service.update(
         'article-1',
@@ -344,6 +418,39 @@ describe('ArticlesService', () => {
 
       expect(prisma.articleTag.deleteMany).toHaveBeenCalled();
       expect(prisma.articleTag.createMany).not.toHaveBeenCalled();
+    });
+
+    it('replaces categories by deleting existing ones then creating the new set', async () => {
+      await service.update(
+        'article-1',
+        { categoryIds: ['cat-1', 'cat-2'] } as any,
+        'author-1',
+        'org-1',
+      );
+
+      expect(prisma.articleCategory.deleteMany).toHaveBeenCalledWith({
+        where: { articleId: 'article-1' },
+      });
+      expect(prisma.articleCategory.createMany).toHaveBeenCalledWith({
+        data: [
+          { articleId: 'article-1', categoryId: 'cat-1', sortOrder: 0 },
+          { articleId: 'article-1', categoryId: 'cat-2', sortOrder: 1 },
+        ],
+      });
+    });
+
+    it('clears categories without recreating any when categoryIds is an empty array', async () => {
+      await service.update('article-1', { categoryIds: [] } as any, 'author-1', 'org-1');
+
+      expect(prisma.articleCategory.deleteMany).toHaveBeenCalled();
+      expect(prisma.articleCategory.createMany).not.toHaveBeenCalled();
+    });
+
+    it('does not touch categories at all when categoryIds is not provided', async () => {
+      await service.update('article-1', { excerpt: 'tweak' } as any, 'author-1', 'org-1');
+
+      expect(prisma.articleCategory.deleteMany).not.toHaveBeenCalled();
+      expect(prisma.articleCategory.createMany).not.toHaveBeenCalled();
     });
 
     it('sanitizes new content on update, but leaves already-stored content alone when not provided', async () => {

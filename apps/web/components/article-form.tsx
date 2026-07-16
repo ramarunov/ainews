@@ -7,7 +7,7 @@ import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Loader2, Upload, ImagePlus } from "lucide-react";
+import { Loader2, Upload, ImagePlus, Star, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,7 +25,12 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-import { useCategories, useTags } from "@/hooks/use-taxonomy";
+import {
+  useCategories,
+  useTags,
+  useCreateCategory,
+  useCreateTag,
+} from "@/hooks/use-taxonomy";
 import { useAssignArticleToSeries, useSeriesList } from "@/hooks/use-series";
 import { useMediaFile, useUploadMedia } from "@/hooks/use-media";
 import { useCreateArticle, useUpdateArticle } from "@/hooks/use-articles";
@@ -59,6 +64,8 @@ export function ArticleForm({ article }: { article?: Article }) {
 
   const { data: categories } = useCategories();
   const { data: tags } = useTags();
+  const createCategory = useCreateCategory();
+  const createTag = useCreateTag();
   const { data: seriesList } = useSeriesList();
   const assignToSeries = useAssignArticleToSeries();
   const { data: existingFeaturedImage } = useMediaFile(
@@ -111,9 +118,18 @@ export function ArticleForm({ article }: { article?: Article }) {
   const liveExcerpt = watch("excerpt");
   const liveSlug = watch("slug");
 
-  const [categoryValue, setCategoryValue] = useState<string | undefined>(
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<Set<string>>(
+    () =>
+      new Set(
+        article?.articleCategories?.map((ac) => ac.category.id) ??
+          (article?.primaryCategoryId ? [article.primaryCategoryId] : []),
+      ),
+  );
+  const [primaryCategoryId, setPrimaryCategoryId] = useState<string | undefined>(
     article?.primaryCategoryId ?? undefined,
   );
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [newTagName, setNewTagName] = useState("");
   const [seriesValue, setSeriesValue] = useState<string | undefined>(
     article?.seriesId ?? undefined,
   );
@@ -158,6 +174,50 @@ export function ArticleForm({ article }: { article?: Article }) {
     );
   };
 
+  const toggleCategory = (id: string, checked: boolean) => {
+    setSelectedCategoryIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+    // Unchecking the current primary, or checking the very first category,
+    // needs a sensible primary to fall back to rather than silently
+    // leaving primaryCategoryId pointing at something no longer selected.
+    if (!checked && primaryCategoryId === id) {
+      setPrimaryCategoryId(undefined);
+    } else if (checked && !primaryCategoryId) {
+      setPrimaryCategoryId(id);
+    }
+  };
+
+  const handleCreateCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) return;
+    try {
+      const created = await createCategory.mutateAsync({ name });
+      setSelectedCategoryIds((prev) => new Set(prev).add(created.id));
+      if (!primaryCategoryId) setPrimaryCategoryId(created.id);
+      setNewCategoryName("");
+      toast.success(`Category "${created.name}" created`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to create category");
+    }
+  };
+
+  const handleCreateTag = async () => {
+    const name = newTagName.trim();
+    if (!name) return;
+    try {
+      const created = await createTag.mutateAsync({ name });
+      setSelectedTagIds((prev) => [...prev, created.id]);
+      setNewTagName("");
+      toast.success(`Tag "${created.name}" created`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to create tag");
+    }
+  };
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -182,7 +242,8 @@ export function ArticleForm({ article }: { article?: Article }) {
     slug: values.slug || undefined,
     excerpt: values.excerpt || undefined,
     content: values.content || undefined,
-    primaryCategoryId: categoryValue,
+    primaryCategoryId,
+    categoryIds: [...selectedCategoryIds],
     tagIds: selectedTagIds,
     featuredImageId,
     isBreaking: values.isBreaking,
@@ -282,22 +343,69 @@ export function ArticleForm({ article }: { article?: Article }) {
 
                 <TabsContent value="details" className="flex flex-col gap-4 pt-4">
                   <div className="flex flex-col gap-2">
-                    <Label>Category</Label>
-                    <Select
-                      value={categoryValue}
-                      onValueChange={(v) => setCategoryValue(v ?? undefined)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {categories?.data.map((cat) => (
-                          <SelectItem key={cat.id} value={cat.id}>
-                            {cat.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <Label>Categories</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Check every category this article belongs to. Click the star to
+                      set which one is the primary category.
+                    </p>
+                    <div className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-md border p-2">
+                      {categories?.data.map((cat) => {
+                        const checked = selectedCategoryIds.has(cat.id);
+                        return (
+                          <div key={cat.id} className="flex items-center gap-2">
+                            <Checkbox
+                              id={`cat-${cat.id}`}
+                              checked={checked}
+                              onCheckedChange={(v) => toggleCategory(cat.id, !!v)}
+                            />
+                            <Label htmlFor={`cat-${cat.id}`} className="flex-1 font-normal">
+                              {cat.name}
+                            </Label>
+                            {checked && (
+                              <button
+                                type="button"
+                                aria-label={`Set ${cat.name} as primary category`}
+                                onClick={() => setPrimaryCategoryId(cat.id)}
+                              >
+                                <Star
+                                  className={cn(
+                                    "h-4 w-4",
+                                    primaryCategoryId === cat.id
+                                      ? "fill-primary text-primary"
+                                      : "text-muted-foreground",
+                                  )}
+                                />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {categories?.data.length === 0 && (
+                        <p className="text-sm text-muted-foreground">No categories yet</p>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="New category name…"
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleCreateCategory();
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        disabled={!newCategoryName.trim() || createCategory.isPending}
+                        onClick={handleCreateCategory}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
 
                   <div className="flex flex-col gap-2">
@@ -318,6 +426,28 @@ export function ArticleForm({ article }: { article?: Article }) {
                       {tags?.data.length === 0 && (
                         <p className="text-sm text-muted-foreground">No tags yet</p>
                       )}
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="New tag name…"
+                        value={newTagName}
+                        onChange={(e) => setNewTagName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            handleCreateTag();
+                          }
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        disabled={!newTagName.trim() || createTag.isPending}
+                        onClick={handleCreateTag}
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
 
