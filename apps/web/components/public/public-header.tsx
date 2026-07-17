@@ -1,12 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { Menu, Search, X } from "lucide-react";
-import type { Category } from "@/lib/types";
+import type { Category, PublicArticle } from "@/lib/types";
 import { getCategoryColors } from "@/lib/category-colors";
+import { getPublishedArticles } from "@/lib/public-api";
 import { cn } from "@/lib/utils";
+import { CategoryMegaPanel } from "./category-mega-panel";
+
+// How long the cursor must stay over a category link before its mega menu
+// opens/its preview articles are fetched — avoids firing a request (and a
+// jarring flash) for every category the cursor merely passes over while
+// scanning the nav strip.
+const HOVER_OPEN_DELAY_MS = 150;
+// How long to wait before closing after the cursor leaves the nav+panel
+// area, so moving from the trigger link down into the panel itself doesn't
+// register as "left" and snap the menu shut mid-move.
+const HOVER_CLOSE_DELAY_MS = 200;
 
 export function PublicHeader({
   categories,
@@ -20,6 +32,71 @@ export function PublicHeader({
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
+
+  const [openCategorySlug, setOpenCategorySlug] = useState<string | null>(null);
+  const [loadingSlug, setLoadingSlug] = useState<string | null>(null);
+  const [previewsBySlug, setPreviewsBySlug] = useState<Record<string, PublicArticle[]>>({});
+  const previewsCacheRef = useRef<Record<string, PublicArticle[]>>({});
+  const openTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // Closing on navigation covers both a nav-link click (which changes
+  // pathname while the mouse may still technically be over the strip) and
+  // browser back/forward — either way the panel shouldn't linger. Adjusted
+  // during render (not in an effect) per React's own guidance for "reset
+  // state when a prop changes" — an effect here would setState after the
+  // commit and trigger an extra, wasted render pass.
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
+    setOpenCategorySlug(null);
+  }
+
+  useEffect(() => {
+    return () => {
+      clearTimeout(openTimeoutRef.current);
+      clearTimeout(closeTimeoutRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenCategorySlug(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const scheduleOpen = (slug: string) => {
+    clearTimeout(closeTimeoutRef.current);
+    clearTimeout(openTimeoutRef.current);
+    openTimeoutRef.current = setTimeout(() => {
+      setOpenCategorySlug(slug);
+      // Read the cache ref rather than checking state directly inside a
+      // setState updater — React's dev StrictMode deliberately double-
+      // invokes functional updaters to catch impure ones, which would fire
+      // this fetch twice per hover if the request lived there instead.
+      if (previewsCacheRef.current[slug]) return;
+      previewsCacheRef.current[slug] = []; // placeholder marks it as "in flight"
+      setLoadingSlug(slug);
+      getPublishedArticles({ categorySlug: slug, limit: 3 }).then((res) => {
+        previewsCacheRef.current = { ...previewsCacheRef.current, [slug]: res.data };
+        setPreviewsBySlug(previewsCacheRef.current);
+        setLoadingSlug((cur) => (cur === slug ? null : cur));
+      });
+    }, HOVER_OPEN_DELAY_MS);
+  };
+
+  const scheduleClose = () => {
+    clearTimeout(openTimeoutRef.current);
+    closeTimeoutRef.current = setTimeout(() => setOpenCategorySlug(null), HOVER_CLOSE_DELAY_MS);
+  };
+
+  const cancelClose = () => {
+    clearTimeout(closeTimeoutRef.current);
+  };
+
+  const openCategory = categories.find((c) => c.slug === openCategorySlug);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,32 +177,55 @@ export function PublicHeader({
           shown (not truncated) since an org can have many; the strip
           scrolls horizontally and the edge fades hint that it does,
           matching how these reference sites handle a long channel list
-          instead of hiding items behind a "more" dropdown. */}
-      <nav className="relative hidden border-t md:block">
-        <div className="no-scrollbar mx-auto flex max-w-6xl items-center gap-1 overflow-x-auto px-4">
-          {categories.map((category) => {
-            const colors = getCategoryColors(category.slug ?? category.name);
-            const isActive = pathname === `/category/${category.slug}`;
-            return (
-              <Link
-                key={category.id}
-                href={`/category/${category.slug}`}
-                className={cn(
-                  "shrink-0 border-b-2 px-3 py-2.5 text-sm font-bold tracking-wide uppercase transition-colors hover:border-current",
-                  colors.text,
-                  isActive ? "border-current" : "border-transparent",
-                )}
-              >
-                {category.name}
-              </Link>
-            );
-          })}
-        </div>
-        <div
-          aria-hidden
-          className="pointer-events-none absolute top-0 right-0 h-full w-8 bg-gradient-to-l from-background to-transparent"
-        />
-      </nav>
+          instead of hiding items behind a "more" dropdown.
+
+          Hovering a category opens a shared mega-menu panel below the whole
+          strip (not a per-item dropdown) showing its 3 latest articles,
+          fetched lazily on hover-intent and cached per slug so re-hovering
+          the same category doesn't refetch. onMouseLeave/onMouseEnter live
+          on this outer wrapper (not the individual links) so moving from a
+          trigger link down into the panel itself doesn't register as
+          "left" and close it mid-move. */}
+      <div
+        className="relative hidden md:block"
+        onMouseLeave={scheduleClose}
+        onMouseEnter={cancelClose}
+      >
+        <nav className="relative border-t">
+          <div className="no-scrollbar mx-auto flex max-w-6xl items-center gap-1 overflow-x-auto px-4">
+            {categories.map((category) => {
+              const colors = getCategoryColors(category.slug ?? category.name);
+              const isActive = pathname === `/category/${category.slug}`;
+              return (
+                <Link
+                  key={category.id}
+                  href={`/category/${category.slug}`}
+                  onMouseEnter={() => scheduleOpen(category.slug)}
+                  className={cn(
+                    "shrink-0 border-b-2 px-3 py-2.5 text-sm font-bold tracking-wide uppercase transition-colors hover:border-current",
+                    colors.text,
+                    isActive ? "border-current" : "border-transparent",
+                  )}
+                >
+                  {category.name}
+                </Link>
+              );
+            })}
+          </div>
+          <div
+            aria-hidden
+            className="pointer-events-none absolute top-0 right-0 h-full w-8 bg-gradient-to-l from-background to-transparent"
+          />
+        </nav>
+
+        {openCategory && (
+          <CategoryMegaPanel
+            category={openCategory}
+            articles={previewsBySlug[openCategory.slug]}
+            loading={loadingSlug === openCategory.slug}
+          />
+        )}
+      </div>
 
       {menuOpen && (
         <nav className="flex flex-col gap-1 border-t bg-background px-4 py-3 md:hidden">
