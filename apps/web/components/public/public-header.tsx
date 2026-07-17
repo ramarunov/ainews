@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { Menu, Search, X } from "lucide-react";
 import type { Category } from "@/lib/types";
@@ -16,6 +16,7 @@ export function PublicHeader({
   today: string;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
@@ -95,18 +96,24 @@ export function PublicHeader({
 
       {/* Category nav strip — each channel keeps its own accent color,
           matching how detik.com/kompas.com brand each section distinctly
-          rather than one flat nav color throughout. */}
-      <nav className="hidden border-t md:block">
-        <div className="mx-auto flex max-w-6xl items-center gap-1 overflow-x-auto px-4">
-          {categories.slice(0, 8).map((category) => {
+          rather than one flat nav color throughout. Every category is
+          shown (not truncated) since an org can have many; the strip
+          scrolls horizontally and the edge fades hint that it does,
+          matching how these reference sites handle a long channel list
+          instead of hiding items behind a "more" dropdown. */}
+      <nav className="relative hidden border-t md:block">
+        <div className="no-scrollbar mx-auto flex max-w-6xl items-center gap-1 overflow-x-auto px-4">
+          {categories.map((category) => {
             const colors = getCategoryColors(category.slug ?? category.name);
+            const isActive = pathname === `/category/${category.slug}`;
             return (
               <Link
                 key={category.id}
                 href={`/category/${category.slug}`}
                 className={cn(
-                  "shrink-0 border-b-2 border-transparent px-3 py-2.5 text-sm font-bold tracking-wide uppercase transition-colors hover:border-current",
+                  "shrink-0 border-b-2 px-3 py-2.5 text-sm font-bold tracking-wide uppercase transition-colors hover:border-current",
                   colors.text,
+                  isActive ? "border-current" : "border-transparent",
                 )}
               >
                 {category.name}
@@ -114,20 +121,31 @@ export function PublicHeader({
             );
           })}
         </div>
+        <div
+          aria-hidden
+          className="pointer-events-none absolute top-0 right-0 h-full w-8 bg-gradient-to-l from-background to-transparent"
+        />
       </nav>
 
       {menuOpen && (
         <nav className="flex flex-col gap-1 border-t bg-background px-4 py-3 md:hidden">
-          {categories.map((category) => (
-            <Link
-              key={category.id}
-              href={`/category/${category.slug}`}
-              className="rounded-md px-2 py-2 text-sm font-bold tracking-wide uppercase hover:bg-muted"
-              onClick={() => setMenuOpen(false)}
-            >
-              {category.name}
-            </Link>
-          ))}
+          {categories.map((category) => {
+            const colors = getCategoryColors(category.slug ?? category.name);
+            const isActive = pathname === `/category/${category.slug}`;
+            return (
+              <Link
+                key={category.id}
+                href={`/category/${category.slug}`}
+                className={cn(
+                  "rounded-md px-2 py-2 text-sm font-bold tracking-wide uppercase hover:bg-muted",
+                  isActive && colors.text,
+                )}
+                onClick={() => setMenuOpen(false)}
+              >
+                {category.name}
+              </Link>
+            );
+          })}
         </nav>
       )}
     </header>

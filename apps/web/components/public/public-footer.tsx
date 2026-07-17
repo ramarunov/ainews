@@ -5,7 +5,7 @@ import { getCategoryColors } from "@/lib/category-colors";
 export function PublicFooter({ categories }: { categories: Category[] }) {
   return (
     <footer className="mt-12 border-t bg-foreground text-background/80">
-      <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-12 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-12 sm:grid-cols-2 lg:grid-cols-5">
         <div className="flex flex-col gap-3 lg:col-span-2">
           <p className="text-2xl font-black tracking-tight text-background">
             Pulse<span className="text-primary">Daily</span>
@@ -16,10 +16,10 @@ export function PublicFooter({ categories }: { categories: Category[] }) {
           </p>
         </div>
 
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 lg:col-span-2">
           <h3 className="text-xs font-bold tracking-wide text-background uppercase">Kategori</h3>
-          <nav className="flex flex-col gap-2">
-            {categories.slice(0, 6).map((category) => {
+          <nav className="grid grid-cols-2 gap-x-4 gap-y-2">
+            {categories.map((category) => {
               const colors = getCategoryColors(category.slug ?? category.name);
               return (
                 <Link

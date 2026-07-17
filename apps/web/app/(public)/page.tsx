@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArticleCard } from "@/components/public/article-card";
 import { BreakingNewsBanner } from "@/components/public/breaking-news-banner";
 import { TrendingList } from "@/components/public/trending-list";
+import { CategoryMosaicCard } from "@/components/public/category-mosaic-card";
 import { AdSlot } from "@/components/public/ad-slot";
 import { getCategoryColors } from "@/lib/category-colors";
 import {
@@ -11,6 +12,13 @@ import {
   getPublishedArticles,
 } from "@/lib/public-api";
 import type { PublicSetting } from "@/lib/types";
+
+// Only this many categories get the full lead+grid treatment on the
+// homepage - the rest still get real visibility via the compact mosaic
+// section below, so a growing category list (finance, sports, politics,
+// tech, automotive, health, travel, celebrity, "and other topics"...)
+// never turns the homepage into an endless scroll of full sections.
+const FEATURED_CATEGORY_COUNT = 3;
 
 export const metadata: Metadata = {
   title: "Pulse Daily — Independent, fast, and to the point",
@@ -41,12 +49,23 @@ export default async function HomePage() {
     .filter((a) => a.id !== heroArticle?.id)
     .slice(4, 9);
 
-  const categorySections = await Promise.all(
-    categories.slice(0, 4).map(async (category) => ({
-      category,
-      articles: (await getPublishedArticles({ categorySlug: category.slug, limit: 5 })).data,
-    })),
-  );
+  const featuredCategories = categories.slice(0, FEATURED_CATEGORY_COUNT);
+  const otherCategories = categories.slice(FEATURED_CATEGORY_COUNT);
+
+  const [categorySections, mosaicSections] = await Promise.all([
+    Promise.all(
+      featuredCategories.map(async (category) => ({
+        category,
+        articles: (await getPublishedArticles({ categorySlug: category.slug, limit: 5 })).data,
+      })),
+    ),
+    Promise.all(
+      otherCategories.map(async (category) => ({
+        category,
+        articles: (await getPublishedArticles({ categorySlug: category.slug, limit: 4 })).data,
+      })),
+    ),
+  ]);
 
   return (
     <div className="flex flex-col gap-10 pb-16">
@@ -119,11 +138,12 @@ export default async function HomePage() {
             );
           })}
 
-          {categorySections.every(({ articles }) => articles.length === 0) && (
-            <p className="py-12 text-center text-muted-foreground">
-              No published articles yet — check back soon.
-            </p>
-          )}
+          {categorySections.every(({ articles }) => articles.length === 0) &&
+            mosaicSections.every(({ articles }) => articles.length === 0) && (
+              <p className="py-12 text-center text-muted-foreground">
+                Belum ada artikel yang diterbitkan — cek kembali nanti.
+              </p>
+            )}
         </div>
 
         <aside className="flex flex-col gap-6">
@@ -131,6 +151,25 @@ export default async function HomePage() {
           <AdSlot value={findSetting(settings, "ads.sidebar")} />
         </aside>
       </div>
+
+      {mosaicSections.some(({ articles }) => articles.length > 0) && (
+        <section className="border-t bg-[var(--zone)] py-8">
+          <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4">
+            <div className="flex items-center gap-2">
+              <span className="h-4 w-1 rounded-full bg-primary" />
+              <h2 className="text-base font-black tracking-tight uppercase">Kanal Lainnya</h2>
+            </div>
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {mosaicSections.map(
+                ({ category, articles }) =>
+                  articles.length > 0 && (
+                    <CategoryMosaicCard key={category.id} category={category} articles={articles} />
+                  ),
+              )}
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

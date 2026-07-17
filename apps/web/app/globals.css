@@ -136,12 +136,11 @@
  * via the @theme inline mapping at the top of this file, so no component
  * changes are needed, just this override block.
  *
- * Reference synthesis (detik.com / kompas.com / kumparan.com / antaranews.com):
- * a saturated red masthead color, near-black heavyweight headlines for
- * authority, off-white zone backgrounds to separate sections, and a
- * distinct accent color per news channel/category (see category-colors.ts)
- * — all four sites color-code their sections rather than using one flat
- * accent everywhere.
+ * Deliberately monochrome: a single dominant purple hue (violet) carries the
+ * brand — masthead, links, buttons, active states — instead of the earlier
+ * per-category rainbow. Category branding (category-colors.ts) now varies
+ * tone/weight within this same violet/purple family rather than switching
+ * hues, so the whole site reads as one consistent identity.
  */
 .pulse-daily {
   --background: oklch(1 0 0);
@@ -150,23 +149,24 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.52 0.235 27);
+  --primary: oklch(0.48 0.22 293);
   --primary-foreground: oklch(0.985 0 0);
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.145 0 0);
-  --muted: oklch(0.97 0.003 25);
-  --muted-foreground: oklch(0.45 0 0);
-  --accent: oklch(0.96 0.02 25);
-  --accent-foreground: oklch(0.52 0.235 27);
+  --muted: oklch(0.97 0.006 293);
+  --muted-foreground: oklch(0.45 0.01 293);
+  --accent: oklch(0.96 0.03 293);
+  --accent-foreground: oklch(0.48 0.22 293);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.9 0 0);
-  --input: oklch(0.9 0 0);
-  --ring: oklch(0.52 0.235 27);
+  --border: oklch(0.9 0.005 293);
+  --input: oklch(0.9 0.005 293);
+  --ring: oklch(0.48 0.22 293);
   /* Zone background for alternating sections (trending strip, promo band) */
-  --zone: oklch(0.975 0.004 25);
-  /* Slightly hotter than --primary — reserved for the breaking-news ticker
-   * and its live-pulse dot, so it reads as more urgent than a category tag. */
-  --breaking: oklch(0.58 0.24 24);
+  --zone: oklch(0.975 0.006 293);
+  /* Deeper/darker than --primary — reserved for the breaking-news ticker
+   * and its live-pulse dot, so it still reads as more urgent than a
+   * category tag without introducing a second hue. */
+  --breaking: oklch(0.32 0.2 293);
 }
 
 @keyframes marquee {
@@ -198,4 +198,16 @@
 
 .animate-live-pulse {
   animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+/* Hides the scrollbar on the horizontally-scrolling category nav strip
+ * while keeping it fully scrollable (mouse drag, trackpad, touch) — the
+ * edge fade gradient is the scroll affordance instead of a visible bar. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
