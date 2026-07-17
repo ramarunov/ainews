@@ -23,6 +23,7 @@ import { VerifyMfaDto } from './dto/verify-mfa.dto';
 import { VerifyMfaLoginDto } from './dto/verify-mfa-login.dto';
 import { DisableMfaDto } from './dto/disable-mfa.dto';
 import { ForgotPasswordDto, ResetPasswordDto } from './dto/password-reset.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { LocalAuthGuard } from './guards/local-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -135,6 +136,19 @@ export class AuthController {
   @ApiResponse({ status: 400, description: 'Token invalid, expired, or already used' })
   async resetPassword(@Body() dto: ResetPasswordDto) {
     await this.authService.resetPassword(dto.token, dto.newPassword);
+    return { message: 'Password updated successfully' };
+  }
+
+  @Post('change-password')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 5, ttl: 900000 } })
+  @ApiBearerAuth('JWT')
+  @ApiOperation({ summary: 'Change your own password while logged in' })
+  @ApiResponse({ status: 200, description: 'Password updated' })
+  @ApiResponse({ status: 401, description: 'Current password is incorrect' })
+  async changePassword(@CurrentUser() user: any, @Body() dto: ChangePasswordDto) {
+    await this.authService.changePassword(user.id, dto.currentPassword, dto.newPassword);
     return { message: 'Password updated successfully' };
   }
 

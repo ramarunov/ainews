@@ -635,4 +635,47 @@ describe('AuthService', () => {
       });
     });
   });
+
+  describe('changePassword', () => {
+    it('throws NotFoundException for a missing or already-deleted user', async () => {
+      prisma.user.findFirst.mockResolvedValue(null);
+
+      await expect(service.changePassword('user-1', 'OldPass123!', 'NewPass123!')).rejects.toThrow(
+        'User not found',
+      );
+    });
+
+    it('rejects an incorrect current password without changing anything', async () => {
+      const correctHash = await bcrypt.hash('CorrectPass123!', 4);
+      prisma.user.findFirst.mockResolvedValue({ id: 'user-1', passwordHash: correctHash });
+
+      await expect(
+        service.changePassword('user-1', 'WrongPass123!', 'NewPass123!'),
+      ).rejects.toThrow(UnauthorizedException);
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('skips the current-password check entirely for an OAuth-only account (no passwordHash)', async () => {
+      prisma.user.findFirst.mockResolvedValue({ id: 'user-1', passwordHash: null });
+
+      await service.changePassword('user-1', 'irrelevant', 'NewPass123!');
+
+      expect(prisma.user.update).toHaveBeenCalled();
+    });
+
+    it('updates the password hash and revokes all outstanding refresh tokens', async () => {
+      const correctHash = await bcrypt.hash('CorrectPass123!', 4);
+      prisma.user.findFirst.mockResolvedValue({ id: 'user-1', passwordHash: correctHash });
+
+      await service.changePassword('user-1', 'CorrectPass123!', 'NewPass123!');
+
+      expect(prisma.user.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'user-1' } }),
+      );
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1', revokedAt: null },
+        data: { revokedAt: expect.any(Date), revokeReason: 'password_changed' },
+      });
+    });
+  });
 });

@@ -8,19 +8,25 @@ import {
   Param,
   Query,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
   HttpCode,
   HttpStatus,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
   ApiOperation,
   ApiBearerAuth,
   ApiResponse,
   ApiParam,
+  ApiConsumes,
+  ApiBody,
 } from '@nestjs/swagger';
 
 import { UsersService } from './users.service';
+import { MediaService } from '../media/media.service';
 import {
   CreateUserDto,
   UpdateUserDto,
@@ -39,7 +45,10 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller({ path: 'users', version: '1' })
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly mediaService: MediaService,
+  ) {}
 
   @Get()
   @RequirePermissions('users:read')
@@ -65,6 +74,22 @@ export class UsersController {
   @ApiOperation({ summary: 'Update current user profile' })
   updateMe(@Body() dto: UpdateOwnProfileDto, @CurrentUser() user: any) {
     return this.usersService.updateOwnProfile(user.id, dto);
+  }
+
+  @Post('me/avatar')
+  @UseInterceptors(FileInterceptor('file'))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } })
+  @ApiOperation({ summary: "Upload and set the current user's avatar" })
+  async uploadMyAvatar(@UploadedFile() file: Express.Multer.File, @CurrentUser() user: any) {
+    // Deliberately no @RequirePermissions('media:write') here - setting
+    // your OWN avatar is a self-service profile action available to every
+    // authenticated user regardless of role, same as the rest of /users/me.
+    // The general media:write permission gates the shared content library
+    // (POST /media/upload), a different concern.
+    const media = await this.mediaService.upload(file, user.id, user.organizationId, { folder: 'avatars' });
+    const avatarUrl = media.publicUrl ?? media.cdnUrl ?? undefined;
+    return this.usersService.updateOwnProfile(user.id, { avatarUrl });
   }
 
   @Get('me/export')

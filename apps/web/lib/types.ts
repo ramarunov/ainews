@@ -29,6 +29,20 @@ export interface AuthUser {
   permissions: string[];
 }
 
+export interface MyProfile {
+  id: string;
+  email: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  displayName?: string | null;
+  avatarUrl?: string | null;
+  bio?: string | null;
+  timezone?: string | null;
+  locale?: string | null;
+  mfaEnabled: boolean;
+  isSuperadmin: boolean;
+}
+
 export interface AiProviderStatus {
   openai: boolean;
   anthropic: boolean;

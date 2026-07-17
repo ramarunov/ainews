@@ -16,6 +16,7 @@ interface AuthState extends PersistedSession {
     refreshToken: string;
     user: AuthUser;
   }) => void;
+  updateUser: (user: AuthUser) => void;
   clearSession: () => void;
 }
 
@@ -57,6 +58,16 @@ export const useAuthStore = create<AuthState>()((set) => ({
     queryClient.clear();
     set({ accessToken, refreshToken, user });
     saveSession({ accessToken, refreshToken, user });
+  },
+  // For in-place profile edits (name/bio/avatar/etc.) — same identity, same
+  // org, so unlike setSession() this deliberately does NOT clear the query
+  // cache; wiping every cached list/article just to reflect a display-name
+  // change would be a jarring, unnecessary full-app refetch.
+  updateUser: (user) => {
+    set((state) => {
+      saveSession({ accessToken: state.accessToken, refreshToken: state.refreshToken, user });
+      return { user };
+    });
   },
   clearSession: () => {
     queryClient.clear();

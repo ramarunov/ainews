@@ -4,6 +4,7 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -593,6 +594,36 @@ export class AuthService {
       this.prisma.refreshToken.updateMany({
         where: { userId: resetToken.userId, revokedAt: null },
         data: { revokedAt: new Date(), revokeReason: 'password_reset' },
+      }),
+    ]);
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string): Promise<void> {
+    const user = await this.prisma.user.findFirst({ where: { id: userId, deletedAt: null } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    // Mirrors eraseOwnAccount()'s handling of OAuth-only accounts (no
+    // passwordHash) - only verify a current password if one actually
+    // exists to check against.
+    if (user.passwordHash) {
+      const matches = await bcrypt.compare(currentPassword, user.passwordHash);
+      if (!matches) {
+        throw new UnauthorizedException('Current password is incorrect');
+      }
+    }
+
+    const rounds = this.config.get<number>('BCRYPT_ROUNDS', 12);
+    const passwordHash = await bcrypt.hash(newPassword, rounds);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: userId }, data: { passwordHash } }),
+      // Same "a compromised session shouldn't survive a password change"
+      // principle as resetPassword()/eraseOwnAccount().
+      this.prisma.refreshToken.updateMany({
+        where: { userId, revokedAt: null },
+        data: { revokedAt: new Date(), revokeReason: 'password_changed' },
       }),
     ]);
   }

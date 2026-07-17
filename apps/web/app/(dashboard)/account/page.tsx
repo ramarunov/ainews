@@ -1,13 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { toast } from "sonner";
 import { Download, Trash2, ShieldCheck, ShieldOff } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Card,
   CardContent,
@@ -22,7 +26,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useEraseMyAccount, useExportMyData } from "@/hooks/use-account";
+import {
+  useChangePassword,
+  useEraseMyAccount,
+  useExportMyData,
+  useMyProfile,
+  useUpdateMyProfile,
+  useUploadMyAvatar,
+} from "@/hooks/use-account";
 import {
   useMfaStatus,
   useSetupMfa,
@@ -33,9 +44,236 @@ import { useAuthStore } from "@/lib/auth-store";
 import { ApiError } from "@/lib/api-client";
 import type { MfaSetupResponse } from "@/lib/types";
 
+const profileSchema = z.object({
+  firstName: z.string().max(100).optional().or(z.literal("")),
+  lastName: z.string().max(100).optional().or(z.literal("")),
+  displayName: z.string().max(200).optional().or(z.literal("")),
+  bio: z.string().max(2000).optional().or(z.literal("")),
+  timezone: z.string().max(100).optional().or(z.literal("")),
+  locale: z.string().max(20).optional().or(z.literal("")),
+});
+type ProfileFormValues = z.infer<typeof profileSchema>;
+
+const passwordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Required"),
+    newPassword: z.string().min(12, "At least 12 characters"),
+    confirmPassword: z.string().min(1, "Required"),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  });
+type PasswordFormValues = z.infer<typeof passwordSchema>;
+
+function ProfileCard() {
+  const { data: profile, isLoading } = useMyProfile();
+  const updateProfile = useUpdateMyProfile();
+  const uploadAvatar = useUploadMyAvatar();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [avatarUploading, setAvatarUploading] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { isDirty },
+  } = useForm<ProfileFormValues>({
+    resolver: zodResolver(profileSchema),
+    values: {
+      firstName: profile?.firstName ?? "",
+      lastName: profile?.lastName ?? "",
+      displayName: profile?.displayName ?? "",
+      bio: profile?.bio ?? "",
+      timezone: profile?.timezone ?? "",
+      locale: profile?.locale ?? "",
+    },
+  });
+
+  const onSubmit = async (values: ProfileFormValues) => {
+    try {
+      await updateProfile.mutateAsync(values);
+      toast.success("Profile updated");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to update profile");
+    }
+  };
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setAvatarUploading(true);
+    try {
+      await uploadAvatar.mutateAsync(file);
+      toast.success("Avatar updated");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to upload avatar");
+    } finally {
+      setAvatarUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const initial = (profile?.displayName ?? profile?.email ?? "?").charAt(0).toUpperCase();
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Profile</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Profile</CardTitle>
+        <CardDescription>
+          Your name and bio are visible to other members of your organization.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-5">
+        <div className="flex items-center gap-4">
+          {profile?.avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={profile.avatarUrl}
+              alt=""
+              className="h-16 w-16 rounded-full object-cover"
+            />
+          ) : (
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-xl font-black text-primary-foreground">
+              {initial}
+            </div>
+          )}
+          <div className="flex flex-col gap-1">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarChange}
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={avatarUploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              {avatarUploading ? "Uploading…" : "Change avatar"}
+            </Button>
+            <p className="text-xs text-muted-foreground">{profile?.email}</p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="profile-first-name">First name</Label>
+              <Input id="profile-first-name" {...register("firstName")} />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="profile-last-name">Last name</Label>
+              <Input id="profile-last-name" {...register("lastName")} />
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="profile-display-name">Display name</Label>
+            <Input id="profile-display-name" {...register("displayName")} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="profile-bio">Bio</Label>
+            <Textarea id="profile-bio" rows={3} {...register("bio")} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="profile-timezone">Timezone</Label>
+              <Input id="profile-timezone" placeholder="Asia/Jakarta" {...register("timezone")} />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="profile-locale">Locale</Label>
+              <Input id="profile-locale" placeholder="id" {...register("locale")} />
+            </div>
+          </div>
+          <Button type="submit" disabled={!isDirty || updateProfile.isPending} className="self-start">
+            {updateProfile.isPending ? "Saving…" : "Save changes"}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+function ChangePasswordCard() {
+  const changePassword = useChangePassword();
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors },
+  } = useForm<PasswordFormValues>({
+    resolver: zodResolver(passwordSchema),
+    defaultValues: { currentPassword: "", newPassword: "", confirmPassword: "" },
+  });
+
+  const onSubmit = async (values: PasswordFormValues) => {
+    try {
+      await changePassword.mutateAsync({
+        currentPassword: values.currentPassword,
+        newPassword: values.newPassword,
+      });
+      toast.success("Password changed — you'll need to sign in again on other devices");
+      reset();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to change password");
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Change password</CardTitle>
+        <CardDescription>Changing your password signs you out everywhere else.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit(onSubmit)} className="flex max-w-sm flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="current-password">Current password</Label>
+            <Input id="current-password" type="password" {...register("currentPassword")} />
+            {errors.currentPassword && (
+              <p className="text-sm text-destructive">{errors.currentPassword.message}</p>
+            )}
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="new-password">New password</Label>
+            <Input id="new-password" type="password" {...register("newPassword")} />
+            {errors.newPassword && (
+              <p className="text-sm text-destructive">{errors.newPassword.message}</p>
+            )}
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="confirm-password">Confirm new password</Label>
+            <Input id="confirm-password" type="password" {...register("confirmPassword")} />
+            {errors.confirmPassword && (
+              <p className="text-sm text-destructive">{errors.confirmPassword.message}</p>
+            )}
+          </div>
+          <Button type="submit" disabled={changePassword.isPending} className="self-start">
+            {changePassword.isPending ? "Changing…" : "Change password"}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AccountPage() {
   const router = useRouter();
-  const user = useAuthStore((s) => s.user);
   const clearSession = useAuthStore((s) => s.clearSession);
 
   const exportData = useExportMyData();
@@ -119,16 +357,8 @@ export default function AccountPage() {
     <div className="flex flex-col gap-6">
       <h1 className="text-2xl font-semibold">Account &amp; Privacy</h1>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Profile</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-muted-foreground">
-          {user?.displayName ?? user?.email}
-          <br />
-          {user?.email}
-        </CardContent>
-      </Card>
+      <ProfileCard />
+      <ChangePasswordCard />
 
       <Card>
         <CardHeader>
