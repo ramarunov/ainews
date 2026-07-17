@@ -13,6 +13,23 @@ export class CategoriesService {
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
+  // Best-effort lookup for callers that only have a free-text hint (e.g.
+  // NewsSource.categoryHint / NewsItem.category) rather than a real
+  // categoryId - slugifies the hint and matches it against this org's
+  // current categories. Used by both the autonomous publishing pipeline and
+  // manual draft creation from a news item, so a hint that matches one
+  // resolves the same way regardless of which path created the article.
+  async resolveByHint(categoryHint: string | null | undefined, organizationId: string): Promise<string | null> {
+    if (!categoryHint) return null;
+    try {
+      const category = await this.findBySlug(slugify(categoryHint, { lower: true }), organizationId);
+      return category.id;
+    } catch (err) {
+      if (!(err instanceof NotFoundException)) throw err;
+      return null;
+    }
+  }
+
   // ─── Create ────────────────────────────────────────────────────────────────
 
   async create(dto: CreateCategoryDto, organizationId: string) {

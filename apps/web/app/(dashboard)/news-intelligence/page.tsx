@@ -55,10 +55,17 @@ import {
   useNewsSources,
   useUpdateNewsSource,
 } from "@/hooks/use-news-intelligence";
+import { useCategories } from "@/hooks/use-taxonomy";
 import { ApiError } from "@/lib/api-client";
 import { hasPermission, useAuthStore } from "@/lib/auth-store";
 import { cn } from "@/lib/utils";
-import type { NewsItemStatus, NewsSourceType } from "@/lib/types";
+import type { Category, NewsItemStatus, NewsSource, NewsSourceType } from "@/lib/types";
+
+// No FK on NewsSource.categoryHint (it's matched dynamically by slug at
+// autonomous-publish time, see autonomous-publishing.service.ts), so this is
+// just the sentinel the category <Select> uses for "don't set one" - never
+// sent to the API as a literal string.
+const NO_CATEGORY = "__none__";
 
 const SOURCE_TYPES: NewsSourceType[] = ["RSS", "ATOM", "NEWSAPI", "GNEWS", "WEBSITE", "MANUAL"];
 const ITEM_STATUSES: NewsItemStatus[] = ["NEW", "ANALYZED", "DRAFTED", "PUBLISHED", "IGNORED"];
@@ -99,12 +106,57 @@ function buildGoogleNewsUrl(topic: string, keyword: string): string {
   return `https://news.google.com/rss?${params}`;
 }
 
+function CategoryPicker({
+  categories,
+  value,
+  onChange,
+}: {
+  categories: Category[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  // Base UI's <Select.Value> only reliably shows the matched item's label
+  // (instead of falling back to the raw value string) when the root is
+  // given an explicit value->label `items` map - it can't be trusted to
+  // resolve this from the rendered <SelectItem> children alone once the
+  // popup has closed.
+  const items: Record<string, string> = { [NO_CATEGORY]: "No category" };
+  for (const c of categories) items[c.slug] = c.name;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Label>
+        Category{" "}
+        <span className="font-normal text-muted-foreground">
+          (used to auto-categorize articles drafted from this source)
+        </span>
+      </Label>
+      <Select items={items} value={value} onValueChange={(v) => onChange(v ?? NO_CATEGORY)}>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NO_CATEGORY}>No category</SelectItem>
+          {categories.map((c) => (
+            <SelectItem key={c.id} value={c.slug}>
+              {c.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 function AddSourceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const createSource = useCreateNewsSource();
+  const { data: categoriesData } = useCategories();
+  const categories = categoriesData?.data ?? [];
   const [type, setType] = useState<NewsSourceType>("RSS");
   const [mode, setMode] = useState<"custom" | "google-news">("custom");
   const [gnTopic, setGnTopic] = useState("TOP");
   const [gnKeyword, setGnKeyword] = useState("");
+  const [categorySlug, setCategorySlug] = useState(NO_CATEGORY);
   const {
     register,
     handleSubmit,
@@ -121,11 +173,16 @@ function AddSourceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
     setMode("custom");
     setGnTopic("TOP");
     setGnKeyword("");
+    setCategorySlug(NO_CATEGORY);
   };
 
   const onSubmit = async (values: SourceFormValues) => {
     try {
-      await createSource.mutateAsync({ ...values, type });
+      await createSource.mutateAsync({
+        ...values,
+        type,
+        categoryHint: categorySlug === NO_CATEGORY ? undefined : categorySlug,
+      });
       toast.success("News source added");
       onOpenChange(false);
       resetAll();
@@ -144,6 +201,7 @@ function AddSourceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
         name,
         url: buildGoogleNewsUrl(gnTopic, gnKeyword),
         type: "RSS",
+        categoryHint: categorySlug === NO_CATEGORY ? undefined : categorySlug,
       });
       toast.success("Google News source added");
       onOpenChange(false);
@@ -216,6 +274,7 @@ function AddSourceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
               <Input id="source-url" placeholder="https://example.com/feed" {...register("url")} />
               {errors.url && <p className="text-sm text-destructive">{errors.url.message}</p>}
             </div>
+            <CategoryPicker categories={categories} value={categorySlug} onChange={setCategorySlug} />
             <DialogFooter>
               <Button type="submit" disabled={createSource.isPending}>
                 {createSource.isPending ? "Adding…" : "Add Source"}
@@ -225,7 +284,12 @@ function AddSourceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
         ) : (
           <div className="flex flex-col gap-4 pt-2">
             <div className="flex flex-col gap-2">
-              <Label>Topic</Label>
+              <Label>
+                Topic{" "}
+                <span className="font-normal text-muted-foreground">
+                  (Google&apos;s own section, just shapes the feed URL)
+                </span>
+              </Label>
               <Select value={gnTopic} onValueChange={(v) => setGnTopic(v ?? "TOP")}>
                 <SelectTrigger>
                   <SelectValue />
@@ -253,6 +317,7 @@ function AddSourceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
               <br />
               {buildGoogleNewsUrl(gnTopic, gnKeyword)}
             </p>
+            <CategoryPicker categories={categories} value={categorySlug} onChange={setCategorySlug} />
             <DialogFooter>
               <Button type="button" disabled={createSource.isPending} onClick={handleAddGoogleNews}>
                 {createSource.isPending ? "Adding…" : "Add Google News Source"}
@@ -265,12 +330,68 @@ function AddSourceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
   );
 }
 
+function EditSourceCategoryDialog({
+  source,
+  categories,
+  onOpenChange,
+}: {
+  source: NewsSource | null;
+  categories: Category[];
+  onOpenChange: (open: boolean) => void;
+}) {
+  const updateSource = useUpdateNewsSource();
+  const [categorySlug, setCategorySlug] = useState(NO_CATEGORY);
+  // Reset the picker whenever a different source is opened for editing -
+  // adjusted during render (not in an effect) per React's own guidance, so
+  // there's no wasted extra render pass between opening the dialog and the
+  // picker showing that source's actual current category.
+  const [prevSourceId, setPrevSourceId] = useState<string | null>(null);
+  if (source && source.id !== prevSourceId) {
+    setPrevSourceId(source.id);
+    setCategorySlug(source.categoryHint ?? NO_CATEGORY);
+  }
+
+  if (!source) return null;
+
+  const handleSave = async () => {
+    try {
+      await updateSource.mutateAsync({
+        id: source.id,
+        categoryHint: categorySlug === NO_CATEGORY ? null : categorySlug,
+      });
+      toast.success("Category updated");
+      onOpenChange(false);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Update failed");
+    }
+  };
+
+  return (
+    <Dialog open={!!source} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Category for &quot;{source.name}&quot;</DialogTitle>
+        </DialogHeader>
+        <CategoryPicker categories={categories} value={categorySlug} onChange={setCategorySlug} />
+        <DialogFooter>
+          <Button onClick={handleSave} disabled={updateSource.isPending}>
+            {updateSource.isPending ? "Saving…" : "Save"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function SourcesTab({ canManage }: { canManage: boolean }) {
   const { data: sources, isLoading } = useNewsSources();
+  const { data: categoriesData } = useCategories();
+  const categories = categoriesData?.data ?? [];
   const updateSource = useUpdateNewsSource();
   const deleteSource = useDeleteNewsSource();
   const ingestSource = useIngestNewsSource();
   const [addOpen, setAddOpen] = useState(false);
+  const [editingSource, setEditingSource] = useState<NewsSource | null>(null);
   const [ingestingId, setIngestingId] = useState<string | null>(null);
 
   const handleIngest = async (id: string) => {
@@ -328,6 +449,7 @@ function SourcesTab({ canManage }: { canManage: boolean }) {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Type</TableHead>
+                <TableHead>Category</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Last fetched</TableHead>
                 <TableHead>Errors</TableHead>
@@ -335,10 +457,19 @@ function SourcesTab({ canManage }: { canManage: boolean }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sources!.map((source) => (
+              {sources!.map((source) => {
+                const category = categories.find((c) => c.slug === source.categoryHint);
+                return (
                 <TableRow key={source.id}>
                   <TableCell className="font-medium">{source.name}</TableCell>
                   <TableCell>{source.type}</TableCell>
+                  <TableCell>
+                    {category ? (
+                      <Badge variant="outline">{category.name}</Badge>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={source.isActive ? "default" : "outline"}>
                       {source.isActive ? "Active" : "Paused"}
@@ -373,6 +504,9 @@ function SourcesTab({ canManage }: { canManage: boolean }) {
                           >
                             {ingestingId === source.id ? "Ingesting…" : "Ingest Now"}
                           </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setEditingSource(source)}>
+                            Edit Category
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => handleToggleActive(source.id, source.isActive)}
                           >
@@ -389,12 +523,18 @@ function SourcesTab({ canManage }: { canManage: boolean }) {
                     </TableCell>
                   )}
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         )}
       </CardContent>
       <AddSourceDialog open={addOpen} onOpenChange={setAddOpen} />
+      <EditSourceCategoryDialog
+        source={editingSource}
+        categories={categories}
+        onOpenChange={(open) => !open && setEditingSource(null)}
+      />
     </Card>
   );
 }

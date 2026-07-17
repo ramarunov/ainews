@@ -27,6 +27,7 @@ describe('NewsIntelligenceService', () => {
   let queue: any;
   let clusteringService: any;
   let extractionService: any;
+  let categoriesService: any;
 
   beforeEach(() => {
     prisma = {
@@ -39,11 +40,13 @@ describe('NewsIntelligenceService', () => {
       isLikelyTruncated: jest.fn().mockReturnValue(false),
       extractFromUrl: jest.fn().mockResolvedValue(null),
     };
+    categoriesService = { resolveByHint: jest.fn().mockResolvedValue(null) };
     service = new NewsIntelligenceService(
       prisma,
       eventEmitter,
       clusteringService,
       extractionService,
+      categoriesService,
       queue,
     );
   });
@@ -80,6 +83,55 @@ describe('NewsIntelligenceService', () => {
 
       await expect(service.enqueueAndAwaitIngest('src-1', 'org-1')).rejects.toThrow(
         BadRequestException,
+      );
+    });
+  });
+
+  describe('createDraftFromItem', () => {
+    beforeEach(() => {
+      prisma.newsItem = {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'item-1',
+          organizationId: 'org-1',
+          articleId: null,
+          title: 'Some headline',
+          excerpt: 'An excerpt',
+          content: '<p>Body</p>',
+          url: 'https://source.example/a',
+          sourceName: 'Example Source',
+          language: 'en',
+          category: 'Politik',
+        }),
+        update: jest.fn().mockResolvedValue(undefined),
+      };
+      prisma.article = {
+        findFirst: jest.fn().mockResolvedValue(null), // slug is unique on first try
+        create: jest.fn().mockResolvedValue({ id: 'article-1' }),
+      };
+    });
+
+    it('resolves the news item\'s category hint to a real category and sets it on the draft', async () => {
+      categoriesService.resolveByHint.mockResolvedValue('cat-politik-id');
+
+      await service.createDraftFromItem('item-1', 'user-1', 'org-1');
+
+      expect(categoriesService.resolveByHint).toHaveBeenCalledWith('Politik', 'org-1');
+      expect(prisma.article.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ primaryCategoryId: 'cat-politik-id' }),
+        }),
+      );
+    });
+
+    it('leaves the draft uncategorized when the hint matches no current category', async () => {
+      categoriesService.resolveByHint.mockResolvedValue(null);
+
+      await service.createDraftFromItem('item-1', 'user-1', 'org-1');
+
+      expect(prisma.article.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ primaryCategoryId: null }),
+        }),
       );
     });
   });

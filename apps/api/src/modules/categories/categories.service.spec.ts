@@ -160,4 +160,32 @@ describe('CategoriesService', () => {
       expect(prisma.category.count).not.toHaveBeenCalled();
     });
   });
+
+  describe('resolveByHint', () => {
+    it('returns null without querying when the hint is null/undefined/empty', async () => {
+      expect(await service.resolveByHint(null, 'org-1')).toBeNull();
+      expect(await service.resolveByHint(undefined, 'org-1')).toBeNull();
+      expect(await service.resolveByHint('', 'org-1')).toBeNull();
+      expect(prisma.category.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('slugifies the hint and resolves to the matching category id', async () => {
+      prisma.category.findFirst.mockResolvedValue({ id: 'cat-politik', slug: 'politik' });
+
+      const result = await service.resolveByHint('Politik', 'org-1');
+
+      expect(prisma.category.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ slug: 'politik', organizationId: 'org-1' }) }),
+      );
+      expect(result).toBe('cat-politik');
+    });
+
+    it('returns null (not a thrown error) when no category matches the hint', async () => {
+      prisma.category.findFirst.mockResolvedValue(null);
+
+      const result = await service.resolveByHint('some-old-renamed-category', 'org-1');
+
+      expect(result).toBeNull();
+    });
+  });
 });

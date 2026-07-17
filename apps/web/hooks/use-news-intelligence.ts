@@ -36,8 +36,12 @@ export function useAutonomousPipelineUsage(enabled: boolean) {
 export function useCreateNewsSource() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { name: string; type: NewsSourceType; url: string }) =>
-      apiClient.post<NewsSource>("/news-intelligence/sources", input),
+    mutationFn: (input: {
+      name: string;
+      type: NewsSourceType;
+      url: string;
+      categoryHint?: string;
+    }) => apiClient.post<NewsSource>("/news-intelligence/sources", input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["news-sources"] }),
   });
 }
@@ -45,8 +49,14 @@ export function useCreateNewsSource() {
 export function useUpdateNewsSource() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...input }: { id: string; isActive?: boolean }) =>
-      apiClient.patch<NewsSource>(`/news-intelligence/sources/${id}`, input),
+    mutationFn: ({
+      id,
+      ...input
+    }: {
+      id: string;
+      isActive?: boolean;
+      categoryHint?: string | null;
+    }) => apiClient.patch<NewsSource>(`/news-intelligence/sources/${id}`, input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["news-sources"] }),
   });
 }

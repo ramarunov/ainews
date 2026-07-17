@@ -138,20 +138,28 @@ function CategoryFormDialog({
           </div>
           <div className="flex flex-col gap-2">
             <Label>Parent category</Label>
-            <Select value={parentId} onValueChange={(v) => setParentId(v ?? undefined)}>
-              <SelectTrigger>
-                <SelectValue placeholder="None (top-level)" />
-              </SelectTrigger>
-              <SelectContent>
-                {categories
-                  .filter((c) => c.id !== category?.id)
-                  .map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.name}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
+            {(() => {
+              // Base UI's <Select.Value> only reliably shows the matched
+              // item's label (instead of falling back to the raw value -
+              // here a UUID) when the root is given an explicit
+              // value->label `items` map.
+              const parentOptions = categories.filter((c) => c.id !== category?.id);
+              const items = Object.fromEntries(parentOptions.map((c) => [c.id, c.name]));
+              return (
+                <Select items={items} value={parentId} onValueChange={(v) => setParentId(v ?? undefined)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="None (top-level)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {parentOptions.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              );
+            })()}
           </div>
           <DialogFooter>
             <Button type="submit" disabled={saving}>

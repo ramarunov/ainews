@@ -19,6 +19,7 @@ import {
 import { NEWS_INGESTION_QUEUE } from './news-intelligence.constants';
 import { NewsClusteringService } from './news-clustering.service';
 import { ArticleExtractionService } from './article-extraction.service';
+import { CategoriesService } from '../categories/categories.service';
 
 export interface IngestSourceJobData {
   sourceId: string;
@@ -32,6 +33,7 @@ export class NewsIntelligenceService {
     private readonly eventEmitter: EventEmitter2,
     private readonly clusteringService: NewsClusteringService,
     private readonly extractionService: ArticleExtractionService,
+    private readonly categoriesService: CategoriesService,
     @InjectQueue(NEWS_INGESTION_QUEUE) private readonly ingestionQueue: Queue<IngestSourceJobData>,
   ) {}
 
@@ -415,11 +417,22 @@ export class NewsIntelligenceService {
     const content = sanitizeArticleHtml(newsItem.content ?? '');
     const wordCount = this.countWords(content);
     const readingTime = Math.ceil(wordCount / 200);
+    // newsItem.category is copied verbatim from the source's categoryHint
+    // at ingestion time (free text, not a real FK) - resolve it against
+    // this org's actual categories the same way the autonomous publishing
+    // pipeline does, so a manually-created draft isn't left uncategorized
+    // just because a human clicked "Create Draft" instead of letting the
+    // AI pipeline publish it.
+    const primaryCategoryId = await this.categoriesService.resolveByHint(
+      newsItem.category,
+      organizationId,
+    );
 
     const article = await this.prisma.article.create({
       data: {
         organizationId,
         primaryAuthorId: userId,
+        primaryCategoryId,
         title: newsItem.title,
         slug,
         excerpt: newsItem.excerpt,
