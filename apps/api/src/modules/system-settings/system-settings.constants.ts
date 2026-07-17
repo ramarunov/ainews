@@ -9,6 +9,15 @@ export const AI_PROVIDER_SETTING_KEYS = {
 
 export type AiProviderKeyField = keyof typeof AI_PROVIDER_SETTING_KEYS;
 
+// Same storage pattern as AI_PROVIDER_SETTING_KEYS but a distinct group —
+// Pexels isn't an AI provider, it's a stock-photo search API used to
+// auto-source featured images (see media/stock-photo.service.ts).
+export const MEDIA_PROVIDER_SETTING_KEYS = {
+  pexelsApiKey: 'media.pexels_api_key',
+} as const;
+
+export type MediaProviderKeyField = keyof typeof MEDIA_PROVIDER_SETTING_KEYS;
+
 // Platform-wide emergency kill switch — every AI call path (autonomous
 // pipeline, manual AI Tools, clustering entity extraction, alt-text
 // generation, GEO scoring) ultimately goes through AIGatewayService.complete(),

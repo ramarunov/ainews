@@ -25,7 +25,14 @@ import {
 } from '@nestjs/swagger';
 
 import { MediaService } from './media.service';
-import { UpdateMediaDto, MediaQueryDto, UploadMediaDto } from './dto/media.dto';
+import { StockPhotoService } from './stock-photo.service';
+import {
+  UpdateMediaDto,
+  MediaQueryDto,
+  UploadMediaDto,
+  StockPhotoSearchDto,
+  AttachStockPhotoDto,
+} from './dto/media.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
@@ -36,7 +43,28 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller({ path: 'media', version: '1' })
 export class MediaController {
-  constructor(private readonly mediaService: MediaService) {}
+  constructor(
+    private readonly mediaService: MediaService,
+    private readonly stockPhotoService: StockPhotoService,
+  ) {}
+
+  @Get('stock-photos/search')
+  @RequirePermissions('media:write')
+  @ApiOperation({ summary: 'Search Pexels for real (non-AI-generated) stock photos by keyword' })
+  searchStockPhotos(@Query() query: StockPhotoSearchDto) {
+    return this.stockPhotoService.search(query.query, query.perPage);
+  }
+
+  @Post('stock-photos/attach')
+  @RequirePermissions('media:write')
+  @ApiOperation({ summary: 'Download a searched stock photo and store it as a real media file' })
+  attachStockPhoto(@Body() dto: AttachStockPhotoDto, @CurrentUser() user: any) {
+    return this.stockPhotoService.downloadAndAttach(
+      { fullUrl: dto.fullUrl, photographer: dto.photographer ?? 'Pexels', alt: dto.alt ?? null },
+      user.id,
+      user.organizationId,
+    );
+  }
 
   @Post('upload')
   @RequirePermissions('media:write')

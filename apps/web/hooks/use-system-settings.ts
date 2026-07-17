@@ -1,11 +1,34 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
-import type { AiProviderStatus } from "@/lib/types";
+import type { AiProviderStatus, MediaProviderStatus } from "@/lib/types";
 
 export interface UpdateAiProviderKeysInput {
   openaiApiKey?: string;
   anthropicApiKey?: string;
   googleAiApiKey?: string;
+}
+
+export interface UpdateMediaProviderKeysInput {
+  pexelsApiKey?: string;
+}
+
+export function useMediaProviderStatus(enabled = true) {
+  return useQuery({
+    queryKey: ["system-settings", "media-providers"],
+    queryFn: () => apiClient.get<MediaProviderStatus>("/system-settings/media-providers"),
+    enabled,
+  });
+}
+
+export function useUpdateMediaProviderKeys() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateMediaProviderKeysInput) =>
+      apiClient.put<MediaProviderStatus>("/system-settings/media-providers", input),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["system-settings", "media-providers"], data);
+    },
+  });
 }
 
 export function useAiProviderStatus(enabled = true) {

@@ -49,6 +49,21 @@ export interface AiProviderStatus {
   google: boolean;
 }
 
+export interface MediaProviderStatus {
+  pexels: boolean;
+}
+
+export interface StockPhotoResult {
+  id: string;
+  thumbnailUrl: string;
+  fullUrl: string;
+  width: number;
+  height: number;
+  photographer: string;
+  photographerUrl: string;
+  alt: string | null;
+}
+
 export interface AuthResponse {
   accessToken: string;
   refreshToken: string;

@@ -26,3 +26,11 @@ export class SetAiServicesEnabledDto {
   @IsBoolean()
   enabled: boolean;
 }
+
+export class UpdateMediaProviderKeysDto {
+  @ApiProperty({ required: false, description: 'Leave unset to keep the current value' })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  pexelsApiKey?: string;
+}

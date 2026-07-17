@@ -1,6 +1,10 @@
 import { SystemSettingsService } from './system-settings.service';
 import { EncryptionService } from '../../common/crypto/encryption.service';
-import { AI_PROVIDER_SETTING_KEYS, AI_SERVICES_ENABLED_KEY } from './system-settings.constants';
+import {
+  AI_PROVIDER_SETTING_KEYS,
+  AI_SERVICES_ENABLED_KEY,
+  MEDIA_PROVIDER_SETTING_KEYS,
+} from './system-settings.constants';
 
 describe('SystemSettingsService', () => {
   let service: SystemSettingsService;
@@ -59,6 +63,36 @@ describe('SystemSettingsService', () => {
       expect(prisma.systemSetting.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ where: { key: AI_PROVIDER_SETTING_KEYS.anthropicApiKey } }),
       );
+    });
+  });
+
+  describe('getMediaProviderStatus', () => {
+    it('reports pexels as configured only when a row exists', async () => {
+      prisma.systemSetting.findMany.mockResolvedValue([]);
+
+      expect(await service.getMediaProviderStatus()).toEqual({ pexels: false });
+
+      prisma.systemSetting.findMany.mockResolvedValue([
+        { key: MEDIA_PROVIDER_SETTING_KEYS.pexelsApiKey },
+      ]);
+
+      expect(await service.getMediaProviderStatus()).toEqual({ pexels: true });
+    });
+  });
+
+  describe('updateMediaProviderKeys', () => {
+    it('encrypts the Pexels key before storing, never the plaintext', async () => {
+      prisma.systemSetting.upsert.mockResolvedValue({});
+      prisma.systemSetting.findMany.mockResolvedValue([
+        { key: MEDIA_PROVIDER_SETTING_KEYS.pexelsApiKey },
+      ]);
+
+      await service.updateMediaProviderKeys({ pexelsApiKey: 'pexels-real-key' }, 'user-1');
+
+      const upsertCall = prisma.systemSetting.upsert.mock.calls[0][0];
+      expect(upsertCall.where).toEqual({ key: MEDIA_PROVIDER_SETTING_KEYS.pexelsApiKey });
+      expect(upsertCall.create.value).not.toBe('pexels-real-key');
+      expect(encryption.decrypt(upsertCall.create.value)).toBe('pexels-real-key');
     });
   });
 

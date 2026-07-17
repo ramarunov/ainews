@@ -29,6 +29,8 @@ import {
   useUpdateAiProviderKeys,
   useAiServicesEnabled,
   useSetAiServicesEnabled,
+  useMediaProviderStatus,
+  useUpdateMediaProviderKeys,
 } from "@/hooks/use-system-settings";
 import { useSetting, useUpdateSetting } from "@/hooks/use-settings";
 import { useOrgMembers } from "@/hooks/use-org-users";
@@ -384,6 +386,66 @@ const PROVIDERS = [
   { field: "googleAiApiKey", statusKey: "google", label: "Google AI", placeholder: "AIza..." },
 ] as const;
 
+function MediaProviderKeysCard() {
+  const { data: status, isLoading } = useMediaProviderStatus();
+  const updateKeys = useUpdateMediaProviderKeys();
+  const [draft, setDraft] = useState("");
+
+  const handleSave = async () => {
+    const value = draft.trim();
+    if (!value) return;
+    try {
+      await updateKeys.mutateAsync({ pexelsApiKey: value });
+      setDraft("");
+      toast.success("Pexels key saved");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to save key");
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Media Providers</CardTitle>
+        <CardDescription>
+          Powers automatic featured-image sourcing: real (not AI-generated)
+          stock photos, searched by keyword, for the &quot;Search Stock
+          Photos&quot; tool in the article editor and for the autonomous
+          publishing pipeline. Get a free key at pexels.com/api.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <Label htmlFor="pexelsApiKey">Pexels</Label>
+            {!isLoading && (
+              <Badge variant={status?.pexels ? "default" : "outline"}>
+                {status?.pexels ? "Configured" : "Not configured"}
+              </Badge>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Input
+              id="pexelsApiKey"
+              type="password"
+              placeholder={status?.pexels ? "•••••••••••••••• (unchanged)" : "563..."}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+            />
+            <Button
+              variant="outline"
+              disabled={!draft.trim() || updateKeys.isPending}
+              onClick={handleSave}
+            >
+              Save
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SystemSettingsPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
@@ -517,6 +579,8 @@ export default function SystemSettingsPage() {
           })}
         </CardContent>
       </Card>
+
+      <MediaProviderKeysCard />
 
       <AutonomousPublishingCard aiConfigured={Boolean(status?.openai || status?.anthropic || status?.google)} />
 

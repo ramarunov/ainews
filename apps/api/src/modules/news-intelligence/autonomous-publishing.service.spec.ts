@@ -1,5 +1,6 @@
 /**
  * @jest-environment jsdom
+ * @jest-environment-options {"customExportConditions": ["node", "node-addons"]}
  *
  * Imports common/sanitize-html -> isomorphic-dompurify, which needs a real
  * `window` (via jsdom) even when unused by the code path under test here.
@@ -17,6 +18,14 @@
  * Also transitively imports the real jsdom *package* (via
  * ArticleInternalLinkingService), which needs TextEncoder/TextDecoder at
  * import time via whatwg-url - not provided by jest's jsdom test environment.
+ *
+ * Also now transitively imports StockPhotoService -> MediaService ->
+ * StorageService -> @aws-sdk/client-s3, which under plain jest-environment-
+ * jsdom's browser-like export-condition resolution loads an ESM-only
+ * browser build Jest's CJS transform can't parse. The customExportConditions
+ * override above forces Node resolution instead - same fix already used in
+ * comments.service.spec.ts / news-intelligence.service.spec.ts for the
+ * same class of issue with a different package (@opensearch-project/opensearch).
  */
 import { TextEncoder, TextDecoder } from 'node:util';
 
@@ -44,6 +53,7 @@ describe('AutonomousPublishingService', () => {
   let categoriesService: any;
   let articlesService: any;
   let notificationsService: any;
+  let stockPhotoService: any;
   let redis: any;
 
   const ORG_ID = 'org-1';
@@ -112,6 +122,7 @@ describe('AutonomousPublishingService', () => {
     };
     articlesService = { update: jest.fn().mockResolvedValue({}) };
     notificationsService = { create: jest.fn().mockResolvedValue({}) };
+    stockPhotoService = { autoAttachForQuery: jest.fn().mockResolvedValue(null) };
     redis = {
       set: jest.fn().mockResolvedValue('OK'),
       del: jest.fn().mockResolvedValue(1),
@@ -126,6 +137,7 @@ describe('AutonomousPublishingService', () => {
       categoriesService,
       articlesService,
       notificationsService,
+      stockPhotoService,
       redis,
     );
   });
@@ -237,6 +249,34 @@ describe('AutonomousPublishingService', () => {
       undefined,
       { articleId: 'article-1' },
     );
+  });
+
+  it('attaches an auto-picked stock photo to the article when one is found', async () => {
+    stockPhotoService.autoAttachForQuery.mockResolvedValue({ id: 'media-photo-1' });
+
+    await service.runCycle(ORG_ID);
+
+    expect(stockPhotoService.autoAttachForQuery).toHaveBeenCalledWith(
+      'newspaper journalism', // no category resolved in this default test setup
+      AUTHOR_ID,
+      ORG_ID,
+    );
+    expect(articlesService.update).toHaveBeenCalledWith(
+      'article-1',
+      expect.objectContaining({ featuredImageId: 'media-photo-1' }),
+      AUTHOR_ID,
+      ORG_ID,
+    );
+  });
+
+  it('publishes with no featured image, not an error, when no stock photo could be attached', async () => {
+    stockPhotoService.autoAttachForQuery.mockResolvedValue(null);
+
+    const result = await service.runCycle(ORG_ID);
+
+    expect(result).toEqual({ processed: 1, published: 1, flagged: 0 });
+    const updateCall = articlesService.update.mock.calls[0][1];
+    expect(updateCall).not.toHaveProperty('featuredImageId');
   });
 
   it('notifies the configured author when an article is flagged for review, with the reason in the body', async () => {

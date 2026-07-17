@@ -7,7 +7,7 @@ import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Loader2, Upload, ImagePlus, Star, Plus } from "lucide-react";
+import { Loader2, Upload, ImagePlus, Images, Star, Plus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +44,7 @@ import { GeoPanel } from "@/components/geo-panel";
 import { AiToolsPanel } from "@/components/ai-tools-panel";
 import { AiPipelinePanel } from "@/components/ai-pipeline-panel";
 import { MediaPickerDialog } from "@/components/media-picker-dialog";
+import { StockPhotoDialog } from "@/components/stock-photo-dialog";
 
 const articleSchema = z.object({
   title: z.string().min(10, "Title must be at least 10 characters").max(500),
@@ -86,6 +87,7 @@ export function ArticleForm({ article }: { article?: Article }) {
     string | undefined
   >(undefined);
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
+  const [stockPhotoOpen, setStockPhotoOpen] = useState(false);
   const featuredImagePreview =
     uploadedImagePreview ??
     existingFeaturedImage?.publicUrl ??
@@ -526,6 +528,15 @@ export function ArticleForm({ article }: { article?: Article }) {
                         <ImagePlus className="h-4 w-4" />
                         Library
                       </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => setStockPhotoOpen(true)}
+                      >
+                        <Images className="h-4 w-4" />
+                        Stock Photos
+                      </Button>
                     </div>
                   </div>
 
@@ -633,6 +644,12 @@ export function ArticleForm({ article }: { article?: Article }) {
         open={mediaPickerOpen}
         onOpenChange={setMediaPickerOpen}
         onSelect={handleMediaPick}
+      />
+      <StockPhotoDialog
+        open={stockPhotoOpen}
+        onOpenChange={setStockPhotoOpen}
+        onSelect={handleMediaPick}
+        defaultQuery={liveTitle}
       />
     </form>
   );

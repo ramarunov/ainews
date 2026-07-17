@@ -13,6 +13,8 @@ import { SettingsService } from '../settings/settings.service';
 import { CategoriesService } from '../categories/categories.service';
 import { ArticlesService } from '../articles/articles.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { StockPhotoService } from '../media/stock-photo.service';
+import { buildStockPhotoQuery } from '../media/category-stock-query.util';
 
 const CLUSTER_LOCK_PREFIX = 'autonomous-pipeline:lock:cluster:';
 // Safety-net expiry, not the normal release path (that's the try/finally
@@ -65,6 +67,7 @@ export class AutonomousPublishingService {
     private readonly categoriesService: CategoriesService,
     private readonly articlesService: ArticlesService,
     private readonly notificationsService: NotificationsService,
+    private readonly stockPhotoService: StockPhotoService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
@@ -276,6 +279,21 @@ export class AutonomousPublishingService {
       const pass =
         hallucination.recommendation === 'SAFE_TO_PUBLISH' && qualityScore.canPublish === true;
 
+      // Real (non-AI-generated) stock photo, auto-picked with no human
+      // choice involved - see StockPhotoService's docstring for why this
+      // pipeline specifically must never attach an AI-generated image to a
+      // real, possibly-unreviewed news story. Best-effort: never blocks or
+      // fails the publish itself if unconfigured, no results, or a network
+      // error occurs.
+      const categoryName = categoryId
+        ? (await this.categoriesService.findOne(categoryId, organizationId).catch(() => null))?.name
+        : null;
+      const attachedImage = await this.stockPhotoService.autoAttachForQuery(
+        buildStockPhotoQuery(categoryName),
+        authorUserId,
+        organizationId,
+      );
+
       await this.articlesService.update(
         shell.id,
         {
@@ -283,6 +301,7 @@ export class AutonomousPublishingService {
           status: pass ? ArticleStatus.PUBLISHED : ArticleStatus.IN_REVIEW,
           ...(localizedTitle && { title: localizedTitle }),
           ...(outputLanguage && { language: outputLanguage }),
+          ...(attachedImage && { featuredImageId: attachedImage.id }),
         },
         authorUserId,
         organizationId,

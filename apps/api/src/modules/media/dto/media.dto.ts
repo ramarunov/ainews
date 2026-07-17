@@ -2,9 +2,13 @@ import {
   IsString,
   IsOptional,
   IsArray,
+  IsUrl,
+  IsInt,
+  Min,
   MaxLength,
 } from 'class-validator';
-import { ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import { ApiPropertyOptional, ApiProperty } from '@nestjs/swagger';
 
 export class UploadMediaDto {
   @ApiPropertyOptional({ description: 'Folder path to store the file under', example: 'media' })
@@ -73,4 +77,36 @@ export class MediaQueryDto {
   @ApiPropertyOptional({ default: 20 })
   @IsOptional()
   limit?: number = 20;
+}
+
+export class StockPhotoSearchDto {
+  @ApiProperty({ example: 'business finance' })
+  @IsString()
+  @MaxLength(200)
+  query: string;
+
+  @ApiPropertyOptional({ default: 6 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  perPage?: number = 6;
+}
+
+export class AttachStockPhotoDto {
+  @ApiProperty()
+  @IsUrl()
+  fullUrl: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  photographer?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  alt?: string;
 }

@@ -15,6 +15,7 @@ import { SettingsModule } from '../settings/settings.module';
 import { CategoriesModule } from '../categories/categories.module';
 import { ArticlesModule } from '../articles/articles.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { MediaModule } from '../media/media.module';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     CategoriesModule,
     ArticlesModule,
     NotificationsModule,
+    MediaModule,
   ],
   providers: [
     NewsIntelligenceService,

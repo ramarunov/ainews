@@ -2,11 +2,13 @@ import { Injectable } from '@nestjs/common';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { EncryptionService } from '../../common/crypto/encryption.service';
-import { UpdateAiProviderKeysDto } from './dto/system-settings.dto';
+import { UpdateAiProviderKeysDto, UpdateMediaProviderKeysDto } from './dto/system-settings.dto';
 import {
   AI_PROVIDER_SETTING_KEYS,
   AI_SERVICES_ENABLED_KEY,
   AiProviderKeyField,
+  MEDIA_PROVIDER_SETTING_KEYS,
+  MediaProviderKeyField,
 } from './system-settings.constants';
 
 @Injectable()
@@ -49,6 +51,39 @@ export class SystemSettingsService {
     );
 
     return this.getAiProviderStatus();
+  }
+
+  /** Which media/stock-photo providers have a platform-wide key configured — never the key itself. */
+  async getMediaProviderStatus() {
+    const rows = await this.prisma.systemSetting.findMany({
+      where: { key: { in: Object.values(MEDIA_PROVIDER_SETTING_KEYS) } },
+      select: { key: true },
+    });
+    const configured = new Set(rows.map((r) => r.key));
+
+    return {
+      pexels: configured.has(MEDIA_PROVIDER_SETTING_KEYS.pexelsApiKey),
+    };
+  }
+
+  async updateMediaProviderKeys(dto: UpdateMediaProviderKeysDto, updatedBy: string) {
+    const entries = (Object.entries(dto) as [MediaProviderKeyField, string | undefined][]).filter(
+      ([, value]) => value !== undefined,
+    );
+
+    await Promise.all(
+      entries.map(([field, value]) => {
+        const key = MEDIA_PROVIDER_SETTING_KEYS[field];
+        const encrypted = this.encryption.encrypt(value as string);
+        return this.prisma.systemSetting.upsert({
+          where: { key },
+          create: { key, value: encrypted, updatedBy },
+          update: { value: encrypted, updatedBy },
+        });
+      }),
+    );
+
+    return this.getMediaProviderStatus();
   }
 
   /** Decrypted value for a given SystemSetting key, or null if never configured. */

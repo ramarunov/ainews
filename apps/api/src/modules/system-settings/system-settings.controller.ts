@@ -2,7 +2,11 @@ import { Body, Controller, Get, Put, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 
 import { SystemSettingsService } from './system-settings.service';
-import { UpdateAiProviderKeysDto, SetAiServicesEnabledDto } from './dto/system-settings.dto';
+import {
+  UpdateAiProviderKeysDto,
+  SetAiServicesEnabledDto,
+  UpdateMediaProviderKeysDto,
+} from './dto/system-settings.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { SuperadminGuard } from '../../common/guards/superadmin.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -39,5 +43,17 @@ export class SystemSettingsController {
   })
   setAiServicesEnabled(@Body() dto: SetAiServicesEnabledDto, @CurrentUser() user: any) {
     return this.systemSettingsService.setAiServicesEnabled(dto.enabled, user.id);
+  }
+
+  @Get('media-providers')
+  @ApiOperation({ summary: 'Which media/stock-photo providers have a platform-wide key configured (superadmin only)' })
+  getMediaProviderStatus() {
+    return this.systemSettingsService.getMediaProviderStatus();
+  }
+
+  @Put('media-providers')
+  @ApiOperation({ summary: 'Set platform-wide media provider API keys, e.g. Pexels (superadmin only)' })
+  updateMediaProviderKeys(@Body() dto: UpdateMediaProviderKeysDto, @CurrentUser() user: any) {
+    return this.systemSettingsService.updateMediaProviderKeys(dto, user.id);
   }
 }
