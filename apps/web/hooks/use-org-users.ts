@@ -35,6 +35,20 @@ export function useOrgRoles() {
   });
 }
 
+export function useCreateOrgMember() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      email: string;
+      password: string;
+      firstName: string;
+      lastName: string;
+      roleIds?: string[];
+    }) => apiClient.post<OrgMember>("/users", input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["org-members"] }),
+  });
+}
+
 export function useUpdateOrgMember() {
   const queryClient = useQueryClient();
   return useMutation({

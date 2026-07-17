@@ -3,10 +3,43 @@ import {
   IsOptional,
   IsBoolean,
   IsUUID,
+  IsEmail,
+  IsArray,
+  MinLength,
   MaxLength,
   IsUrl,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+
+export class CreateUserDto {
+  @ApiProperty({ example: 'jane@example.com' })
+  @IsEmail()
+  email: string;
+
+  @ApiProperty({ example: 'TempPass123!', minLength: 12 })
+  @IsString()
+  @MinLength(12, { message: 'Password must be at least 12 characters' })
+  @MaxLength(128)
+  password: string;
+
+  @ApiProperty({ example: 'Jane' })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  firstName: string;
+
+  @ApiProperty({ example: 'Doe' })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  lastName: string;
+
+  @ApiProperty({ required: false, type: [String], description: 'Role ids to assign immediately' })
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  roleIds?: string[];
+}
 
 export class UpdateUserDto {
   @ApiProperty({ required: false })

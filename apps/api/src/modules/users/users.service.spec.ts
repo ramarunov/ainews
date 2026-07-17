@@ -1,4 +1,4 @@
-import { BadRequestException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from './users.service';
 
@@ -6,12 +6,21 @@ describe('UsersService', () => {
   let service: UsersService;
   let prisma: any;
   let eventEmitter: any;
+  let config: any;
+  let emailService: any;
 
   beforeEach(() => {
     prisma = {
       user: {
         findFirst: jest.fn(),
         update: jest.fn(),
+        create: jest.fn(),
+      },
+      role: {
+        count: jest.fn(),
+      },
+      userRole: {
+        createMany: jest.fn(),
       },
       article: {
         findMany: jest.fn().mockResolvedValue([]),
@@ -27,7 +36,84 @@ describe('UsersService', () => {
       },
     };
     eventEmitter = { emit: jest.fn() };
-    service = new UsersService(prisma, eventEmitter);
+    config = { get: jest.fn((_key: string, fallback?: unknown) => fallback) };
+    emailService = { send: jest.fn().mockResolvedValue(undefined) };
+    service = new UsersService(prisma, eventEmitter, config, emailService);
+  });
+
+  describe('create', () => {
+    const dto = {
+      email: 'Jane@Example.com',
+      password: 'SuperSecret123!',
+      firstName: 'Jane',
+      lastName: 'Doe',
+    };
+
+    it('rejects a duplicate email (case-insensitively)', async () => {
+      prisma.user.findFirst.mockResolvedValue({ id: 'existing' });
+
+      await expect(service.create(dto, 'org-1', 'admin-1')).rejects.toThrow(ConflictException);
+      expect(prisma.user.create).not.toHaveBeenCalled();
+    });
+
+    it('lowercases the email and hashes the password before creating the row', async () => {
+      prisma.user.findFirst.mockResolvedValueOnce(null); // no existing user
+      prisma.user.create.mockResolvedValue({ id: 'new-user' });
+      prisma.user.findFirst.mockResolvedValueOnce({ id: 'new-user', email: 'jane@example.com' }); // findOne() re-fetch
+
+      await service.create(dto, 'org-1', 'admin-1');
+
+      expect(prisma.user.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            organizationId: 'org-1',
+            email: 'jane@example.com',
+            displayName: 'Jane Doe',
+          }),
+        }),
+      );
+      const createCall = prisma.user.create.mock.calls[0][0];
+      expect(createCall.data.passwordHash).not.toBe(dto.password);
+      expect(await bcrypt.compare(dto.password, createCall.data.passwordHash)).toBe(true);
+    });
+
+    it('rejects if any roleId does not belong to this organization', async () => {
+      prisma.user.findFirst.mockResolvedValue(null);
+      prisma.role.count.mockResolvedValue(1); // only 1 of the 2 requested roles matched
+
+      await expect(
+        service.create({ ...dto, roleIds: ['role-1', 'role-2'] }, 'org-1', 'admin-1'),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.user.create).not.toHaveBeenCalled();
+    });
+
+    it('assigns the requested roles after creating the user', async () => {
+      prisma.user.findFirst.mockResolvedValueOnce(null);
+      prisma.role.count.mockResolvedValue(2);
+      prisma.user.create.mockResolvedValue({ id: 'new-user' });
+      prisma.user.findFirst.mockResolvedValueOnce({ id: 'new-user' });
+
+      await service.create({ ...dto, roleIds: ['role-1', 'role-2'] }, 'org-1', 'admin-1');
+
+      expect(prisma.userRole.createMany).toHaveBeenCalledWith({
+        data: [
+          { userId: 'new-user', roleId: 'role-1', grantedBy: 'admin-1' },
+          { userId: 'new-user', roleId: 'role-2', grantedBy: 'admin-1' },
+        ],
+      });
+    });
+
+    it('emails the new user their temporary password, without letting a send failure break creation', async () => {
+      prisma.user.findFirst.mockResolvedValueOnce(null);
+      prisma.user.create.mockResolvedValue({ id: 'new-user', email: 'jane@example.com' });
+      prisma.user.findFirst.mockResolvedValueOnce({ id: 'new-user', email: 'jane@example.com' });
+      emailService.send.mockRejectedValue(new Error('SMTP down'));
+
+      await expect(service.create(dto, 'org-1', 'admin-1')).resolves.toBeDefined();
+      expect(emailService.send).toHaveBeenCalledWith(
+        expect.objectContaining({ to: 'jane@example.com' }),
+      );
+    });
   });
 
   describe('exportOwnData', () => {

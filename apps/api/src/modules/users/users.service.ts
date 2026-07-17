@@ -6,11 +6,13 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
-import { UpdateUserDto, UpdateOwnProfileDto, UserQueryDto } from './dto/user.dto';
+import { EmailService } from '../../common/email/email.service';
+import { CreateUserDto, UpdateUserDto, UpdateOwnProfileDto, UserQueryDto } from './dto/user.dto';
 
 const SAFE_SELECT: Prisma.UserSelect = {
   id: true,
@@ -43,7 +45,69 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly config: ConfigService,
+    private readonly emailService: EmailService,
   ) {}
+
+  // ─── Create ────────────────────────────────────────────────────────────────
+
+  async create(dto: CreateUserDto, organizationId: string, createdBy: string) {
+    const exists = await this.prisma.user.findFirst({
+      where: { email: dto.email.toLowerCase(), deletedAt: null },
+    });
+    if (exists) {
+      throw new ConflictException('Email address is already registered');
+    }
+
+    if (dto.roleIds?.length) {
+      const roleCount = await this.prisma.role.count({
+        where: { id: { in: dto.roleIds }, organizationId },
+      });
+      if (roleCount !== dto.roleIds.length) {
+        throw new BadRequestException('One or more roles were not found in this organization');
+      }
+    }
+
+    const rounds = this.config.get<number>('BCRYPT_ROUNDS', 12);
+    const passwordHash = await bcrypt.hash(dto.password, rounds);
+
+    const user = await this.prisma.user.create({
+      data: {
+        organizationId,
+        email: dto.email.toLowerCase(),
+        passwordHash,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        displayName: `${dto.firstName} ${dto.lastName}`,
+      },
+    });
+
+    if (dto.roleIds?.length) {
+      await this.prisma.userRole.createMany({
+        data: dto.roleIds.map((roleId) => ({ userId: user.id, roleId, grantedBy: createdBy })),
+      });
+    }
+
+    this.eventEmitter.emit('user.created', { userId: user.id, organizationId, createdBy });
+
+    // Fire-and-forget, same convention as AuthService's password-reset email
+    // — an SMTP outage must not turn account creation into a 500. The admin
+    // set this password directly (no invite-link flow exists yet), so the
+    // email exists purely to hand the new user their credentials.
+    const appUrl = this.config.get<string>('APP_URL', 'http://localhost:3100');
+    this.emailService
+      .send({
+        to: user.email,
+        subject: 'Your account has been created',
+        html: `<p>An administrator created an account for you.</p>
+<p>Email: ${user.email}<br/>Temporary password: ${dto.password}</p>
+<p><a href="${appUrl}/login">Log in</a> and change your password as soon as possible.</p>`,
+        text: `An administrator created an account for you. Email: ${user.email}, temporary password: ${dto.password}. Log in at ${appUrl}/login and change your password as soon as possible.`,
+      })
+      .catch((err) => console.error('[UsersService] Failed to send new-account email', err));
+
+    return this.findOne(user.id, organizationId);
+  }
 
   // ─── Find All ──────────────────────────────────────────────────────────────
 

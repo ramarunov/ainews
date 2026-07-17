@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { toast } from "sonner";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Plus } from "lucide-react";
 
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -21,6 +24,7 @@ import {
 import {
   Dialog,
   DialogContent,
+  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -32,6 +36,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   useAssignRole,
+  useCreateOrgMember,
   useDeactivateOrgMember,
   useDeleteOrgMember,
   useOrgMembers,
@@ -42,6 +47,148 @@ import {
 import { ApiError } from "@/lib/api-client";
 import { hasPermission, useAuthStore } from "@/lib/auth-store";
 import type { OrgMember } from "@/lib/types";
+
+function generatePassword(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#$%";
+  const bytes = new Uint32Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => chars[b % chars.length]).join("");
+}
+
+const addUserSchema = z.object({
+  firstName: z.string().min(1, "Required").max(100),
+  lastName: z.string().min(1, "Required").max(100),
+  email: z.string().email("Enter a valid email address"),
+  password: z.string().min(12, "At least 12 characters"),
+});
+
+type AddUserFormValues = z.infer<typeof addUserSchema>;
+
+function AddUserDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
+  const { data: roles } = useOrgRoles();
+  const createMember = useCreateOrgMember();
+  const [roleIds, setRoleIds] = useState<Set<string>>(new Set());
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<AddUserFormValues>({
+    resolver: zodResolver(addUserSchema),
+    defaultValues: { firstName: "", lastName: "", email: "", password: "" },
+  });
+
+  const resetAll = () => {
+    reset({ firstName: "", lastName: "", email: "", password: "" });
+    setRoleIds(new Set());
+  };
+
+  const toggleRole = (roleId: string, checked: boolean) => {
+    setRoleIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(roleId);
+      else next.delete(roleId);
+      return next;
+    });
+  };
+
+  const onSubmit = async (values: AddUserFormValues) => {
+    try {
+      await createMember.mutateAsync({ ...values, roleIds: [...roleIds] });
+      toast.success("User created — their temporary password was also emailed to them");
+      onOpenChange(false);
+      resetAll();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to create user");
+    }
+  };
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        onOpenChange(o);
+        if (!o) resetAll();
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Add a user</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="new-user-first">First name</Label>
+              <Input id="new-user-first" {...register("firstName")} />
+              {errors.firstName && <p className="text-sm text-destructive">{errors.firstName.message}</p>}
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="new-user-last">Last name</Label>
+              <Input id="new-user-last" {...register("lastName")} />
+              {errors.lastName && <p className="text-sm text-destructive">{errors.lastName.message}</p>}
+            </div>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="new-user-email">Email</Label>
+            <Input id="new-user-email" type="email" {...register("email")} />
+            {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="new-user-password">
+              Temporary password{" "}
+              <span className="font-normal text-muted-foreground">
+                (also emailed to the new user)
+              </span>
+            </Label>
+            <div className="flex gap-2">
+              <Input id="new-user-password" {...register("password")} />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setValue("password", generatePassword(), { shouldValidate: true })}
+              >
+                Generate
+              </Button>
+            </div>
+            {watch("password") && (
+              <p className="text-xs text-muted-foreground">
+                Share this with the user, or they&apos;ll receive it by email.
+              </p>
+            )}
+            {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label>Roles</Label>
+            <div className="flex flex-col gap-2">
+              {(roles ?? []).map((role) => (
+                <div key={role.id} className="flex items-center gap-2">
+                  <Checkbox
+                    id={`new-user-role-${role.id}`}
+                    checked={roleIds.has(role.id)}
+                    onCheckedChange={(checked) => toggleRole(role.id, checked === true)}
+                  />
+                  <Label htmlFor={`new-user-role-${role.id}`} className="flex-1 font-normal">
+                    {role.name}
+                  </Label>
+                </div>
+              ))}
+              {(roles ?? []).length === 0 && (
+                <p className="text-sm text-muted-foreground">No roles configured.</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="submit" disabled={createMember.isPending}>
+              {createMember.isPending ? "Creating…" : "Create User"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 function ManageRolesDialog({
   member,
@@ -118,6 +265,7 @@ export default function UsersPage() {
   const reactivate = useReactivateOrgMember();
   const deleteMember = useDeleteOrgMember();
   const [rolesDialogMember, setRolesDialogMember] = useState<OrgMember | null>(null);
+  const [addUserOpen, setAddUserOpen] = useState(false);
 
   const handleDeactivate = async (id: string) => {
     try {
@@ -150,13 +298,19 @@ export default function UsersPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Users</h1>
-        <p className="text-sm text-muted-foreground">
-          Manage your organization&apos;s members and their roles. New members join by
-          registering with an invite from your team — there&apos;s no email-invite flow
-          yet, so share your organization details directly for now.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Users</h1>
+          <p className="text-sm text-muted-foreground">
+            Manage your organization&apos;s members and their roles.
+          </p>
+        </div>
+        {canWrite && (
+          <Button onClick={() => setAddUserOpen(true)}>
+            <Plus className="h-4 w-4" />
+            Add User
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -271,6 +425,7 @@ export default function UsersPage() {
         open={!!rolesDialogMember}
         onOpenChange={(open) => !open && setRolesDialogMember(null)}
       />
+      <AddUserDialog open={addUserOpen} onOpenChange={setAddUserOpen} />
     </div>
   );
 }

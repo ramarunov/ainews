@@ -22,6 +22,7 @@ import {
 
 import { UsersService } from './users.service';
 import {
+  CreateUserDto,
   UpdateUserDto,
   UpdateOwnProfileDto,
   UserQueryDto,
@@ -45,6 +46,13 @@ export class UsersController {
   @ApiOperation({ summary: 'List users with filtering and pagination' })
   findAll(@Query() query: UserQueryDto, @CurrentUser() user: any) {
     return this.usersService.findAll(query, user.organizationId);
+  }
+
+  @Post()
+  @RequirePermissions('users:write')
+  @ApiOperation({ summary: 'Create a new user in this organization with a temporary password' })
+  create(@Body() dto: CreateUserDto, @CurrentUser() user: any) {
+    return this.usersService.create(dto, user.organizationId, user.id);
   }
 
   @Get('me')
