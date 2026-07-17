@@ -5,10 +5,13 @@ import { notFound, redirect } from "next/navigation";
 import { ArticleCard } from "@/components/public/article-card";
 import { ShareButtons } from "@/components/public/share-buttons";
 import { AdSlot } from "@/components/public/ad-slot";
+import { AuthorBox } from "@/components/public/author-box";
+import { CommentSection } from "@/components/public/comment-section";
 import { SmartArticleImage, CategoryPlaceholder } from "@/components/public/smart-article-image";
 import { Badge } from "@/components/ui/badge";
 import { getCategoryColors } from "@/lib/category-colors";
 import {
+  getArticleComments,
   getPublicSettings,
   getPublishedArticleBySlug,
   getPublishedArticles,
@@ -73,7 +76,7 @@ export default async function NewsArticlePage({ params }: Props) {
     notFound();
   }
 
-  const [related, settings] = await Promise.all([
+  const [related, settings, comments] = await Promise.all([
     article.primaryCategory
       ? getPublishedArticles({
           categorySlug: article.primaryCategory.slug,
@@ -82,6 +85,7 @@ export default async function NewsArticlePage({ params }: Props) {
         })
       : Promise.resolve({ data: [], meta: { total: 0, page: 1, limit: 4, totalPages: 0 } }),
     getPublicSettings(),
+    getArticleComments(slug),
   ]);
 
   const colors = getCategoryColors(article.primaryCategory?.slug ?? article.primaryCategory?.name);
@@ -184,6 +188,10 @@ export default async function NewsArticlePage({ params }: Props) {
         )}
 
         <AdSlot value={findSetting(settings, "ads.in_article")} className="my-8 flex justify-center" />
+
+        {article.primaryAuthor && article.primaryAuthor.displayName && (
+          <AuthorBox author={article.primaryAuthor} />
+        )}
       </div>
 
       {related.data.length > 0 && (
@@ -201,6 +209,10 @@ export default async function NewsArticlePage({ params }: Props) {
           </div>
         </section>
       )}
+
+      <div className="mx-auto w-full max-w-3xl px-4 pb-16">
+        <CommentSection articleSlug={article.slug} initialComments={comments} />
+      </div>
     </article>
   );
 }

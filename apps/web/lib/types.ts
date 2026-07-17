@@ -559,3 +559,24 @@ export interface NotFoundLogEntry {
   lastSeenAt: string;
   resolved: boolean;
 }
+
+export type CommentStatus = "PENDING" | "APPROVED" | "REJECTED" | "SPAM";
+
+export interface CommentNode {
+  id: string;
+  authorName: string;
+  content: string;
+  createdAt: string;
+  replies: CommentNode[];
+}
+
+export interface AdminComment {
+  id: string;
+  authorName: string;
+  authorEmail: string;
+  content: string;
+  status: CommentStatus;
+  spamScore: number;
+  createdAt: string;
+  article: { id: string; title: string; slug: string };
+}

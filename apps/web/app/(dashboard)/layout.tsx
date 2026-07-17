@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Newspaper, FolderTree, Tags, Layers, Image as ImageIcon, Search, History, UserCircle, LogOut, ShieldCheck, KanbanSquare, Radio, BarChart3, Users, Link2, KeyRound, CalendarDays, Webhook } from "lucide-react";
+import { Newspaper, FolderTree, Tags, Layers, Image as ImageIcon, Search, History, UserCircle, LogOut, ShieldCheck, KanbanSquare, Radio, BarChart3, Users, Link2, KeyRound, CalendarDays, Webhook, MessageSquare } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notification-bell";
@@ -166,6 +166,18 @@ export default function DashboardLayout({
             >
               <Webhook className="h-4 w-4" />
               Webhooks
+            </Link>
+          )}
+          {hasPermission(user, "comments:read") && (
+            <Link
+              href="/comments"
+              className={cn(
+                "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-muted",
+                pathname.startsWith("/comments") && "bg-muted text-foreground",
+              )}
+            >
+              <MessageSquare className="h-4 w-4" />
+              Comments
             </Link>
           )}
           {hasPermission(user, "audit:read") && (

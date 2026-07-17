@@ -40,6 +40,7 @@ import { AIModule } from './modules/ai/ai.module';
 import { SeoModule } from './modules/seo/seo.module';
 import { GeoModule } from './modules/geo/geo.module';
 import { NewsIntelligenceModule } from './modules/news-intelligence/news-intelligence.module';
+import { CommentsModule } from './modules/comments/comments.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { SystemSettingsModule } from './modules/system-settings/system-settings.module';
 import { PublicSiteModule } from './modules/public-site/public-site.module';
@@ -181,6 +182,7 @@ import { MetricsInterceptor } from './modules/metrics/metrics.interceptor';
     MetricsModule,
     BackupModule,
     ApiKeysModule,
+    CommentsModule,
 
     // ─── AI & Intelligence ───────────────────────────────────────────────────
     AIModule,

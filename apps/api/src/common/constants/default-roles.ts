@@ -17,6 +17,7 @@ const SETTINGS_ALL = ['settings:read', 'settings:write'];
 const PLUGINS_ALL = ['plugins:read', 'plugins:write'];
 const THEMES_ALL = ['themes:read', 'themes:write'];
 const WEBHOOKS_ALL = ['webhooks:read', 'webhooks:write', 'webhooks:delete'];
+const COMMENTS_ALL = ['comments:read', 'comments:moderate'];
 
 export const ALL_PERMISSIONS = [
   ...ARTICLES_ALL,
@@ -34,6 +35,7 @@ export const ALL_PERMISSIONS = [
   ...PLUGINS_ALL,
   ...THEMES_ALL,
   ...WEBHOOKS_ALL,
+  ...COMMENTS_ALL,
   'audit:read',
 ];
 
@@ -55,6 +57,7 @@ export const DEFAULT_ROLES: DefaultRoleDefinition[] = [
       ...MEDIA_ALL,
       ...WORKFLOW_ALL,
       ...NEWS_ALL,
+      ...COMMENTS_ALL,
       'search:read',
       'analytics:read',
       'ai:use',

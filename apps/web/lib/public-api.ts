@@ -1,5 +1,6 @@
 import type {
   Category,
+  CommentNode,
   PaginatedResponse,
   PublicArticle,
   PublicAuthor,
@@ -123,6 +124,51 @@ export async function getPublicSettings(): Promise<PublicSetting[]> {
     return await res.json();
   } catch {
     return [];
+  }
+}
+
+export async function getArticleComments(slug: string): Promise<CommentNode[]> {
+  try {
+    const res = await fetch(`${API_URL}/public/articles/${slug}/comments`, {
+      next: { revalidate: 30 },
+    });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
+export interface SubmitCommentInput {
+  authorName: string;
+  authorEmail: string;
+  content: string;
+  parentId?: string;
+}
+
+// Unlike every other function in this file, a failure here needs to reach
+// the comment form with a real message (e.g. "Comments may not contain
+// links") rather than being swallowed to an empty default - so this
+// returns a result object instead of throwing or silently degrading.
+export async function submitArticleComment(
+  slug: string,
+  input: SubmitCommentInput,
+): Promise<{ ok: true; status: string; message: string } | { ok: false; error: string }> {
+  try {
+    const res = await fetch(`${API_URL}/public/articles/${slug}/comments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+      cache: "no-store",
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const message = Array.isArray(body?.message) ? body.message.join(", ") : body?.message;
+      return { ok: false, error: message ?? "Failed to submit comment." };
+    }
+    return { ok: true, status: body.status, message: body.message };
+  } catch {
+    return { ok: false, error: "Failed to submit comment. Please check your connection." };
   }
 }
 

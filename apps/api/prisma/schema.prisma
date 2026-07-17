@@ -111,6 +111,7 @@ model Organization {
   apiKeys      ApiKey[]
   webhooks     Webhook[]
   auditLogs    AuditLog[]
+  articleComments ArticleComment[]
 
   @@map("organizations")
 }
@@ -430,6 +431,7 @@ model Article {
   assignments       ArticleAssignment[]
   editorialComments EditorialComment[]
   views             ArticleView[]
+  comments          ArticleComment[]
 
   @@unique([organizationId, slug])
   @@index([organizationId])
@@ -776,6 +778,46 @@ model EditorialComment {
 
   @@index([articleId])
   @@map("editorial_comments")
+}
+
+enum CommentStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SPAM
+}
+
+// Public reader comments (distinct from EditorialComment, which is the
+// internal dashboard's draft-review discussion between editors). Guest-only
+// by design - this project has no reader-facing auth system, so
+// authorName/authorEmail are free text, not a User relation. Content is
+// always plain text (no HTML) and never allowed to contain a link
+// (enforced in CommentsService, not just the DTO) - both a spam vector and
+// an XSS-adjacent risk for a public unauthenticated write endpoint.
+model ArticleComment {
+  id             String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String        @db.Uuid
+  articleId      String        @db.Uuid
+  parentId       String?       @db.Uuid
+  authorName     String        @db.VarChar(100)
+  authorEmail    String        @db.VarChar(255)
+  content        String        @db.VarChar(2000)
+  status         CommentStatus @default(PENDING)
+  spamScore      Int           @default(0)
+  ipAddress      String?       @db.VarChar(64)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  deletedAt      DateTime?
+
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  article        Article          @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  parent         ArticleComment?  @relation("ArticleCommentReplies", fields: [parentId], references: [id])
+  replies        ArticleComment[] @relation("ArticleCommentReplies")
+
+  @@index([organizationId])
+  @@index([articleId, status])
+  @@index([parentId])
+  @@map("article_comments")
 }
 
 // =============================================================================
