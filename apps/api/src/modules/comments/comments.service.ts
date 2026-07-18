@@ -31,6 +31,10 @@ export class CommentsService {
     // attach a comment to it (and never leak that the slug exists at all).
     const article = await this.publicSiteService.findPublishedBySlug(slug);
 
+    if (!article.commentsEnabled) {
+      throw new BadRequestException('Komentar dinonaktifkan untuk artikel ini.');
+    }
+
     if (dto.parentId) {
       const parent = await this.prisma.articleComment.findFirst({
         where: { id: dto.parentId, articleId: article.id, deletedAt: null },

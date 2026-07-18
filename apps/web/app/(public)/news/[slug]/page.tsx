@@ -211,7 +211,11 @@ export default async function NewsArticlePage({ params }: Props) {
       )}
 
       <div className="mx-auto w-full max-w-3xl px-4 pb-16">
-        <CommentSection articleSlug={article.slug} initialComments={comments} />
+        <CommentSection
+          articleSlug={article.slug}
+          initialComments={comments}
+          commentsEnabled={article.commentsEnabled ?? true}
+        />
       </div>
     </article>
   );

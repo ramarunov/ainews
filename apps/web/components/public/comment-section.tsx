@@ -135,10 +135,12 @@ function CommentItem({
   comment,
   articleSlug,
   depth,
+  commentsEnabled,
 }: {
   comment: CommentNode;
   articleSlug: string;
   depth: number;
+  commentsEnabled: boolean;
 }) {
   const [replying, setReplying] = useState(false);
   const visualDepth = Math.min(depth, MAX_VISUAL_DEPTH);
@@ -153,13 +155,15 @@ function CommentItem({
             <time className="text-xs text-muted-foreground">{formatRelativeDate(comment.createdAt)}</time>
           </div>
           <p className="whitespace-pre-wrap text-sm leading-relaxed">{comment.content}</p>
-          <button
-            type="button"
-            onClick={() => setReplying((r) => !r)}
-            className="mt-1 w-fit text-xs font-bold text-muted-foreground hover:text-primary"
-          >
-            {replying ? "Batal" : "Balas"}
-          </button>
+          {commentsEnabled && (
+            <button
+              type="button"
+              onClick={() => setReplying((r) => !r)}
+              className="mt-1 w-fit text-xs font-bold text-muted-foreground hover:text-primary"
+            >
+              {replying ? "Batal" : "Balas"}
+            </button>
+          )}
           {replying && (
             <div className="mt-2">
               <CommentForm
@@ -174,7 +178,13 @@ function CommentItem({
       </div>
 
       {comment.replies.map((reply) => (
-        <CommentItem key={reply.id} comment={reply} articleSlug={articleSlug} depth={depth + 1} />
+        <CommentItem
+          key={reply.id}
+          comment={reply}
+          articleSlug={articleSlug}
+          depth={depth + 1}
+          commentsEnabled={commentsEnabled}
+        />
       ))}
     </div>
   );
@@ -187,9 +197,11 @@ function countComments(nodes: CommentNode[]): number {
 export function CommentSection({
   articleSlug,
   initialComments,
+  commentsEnabled = true,
 }: {
   articleSlug: string;
   initialComments: CommentNode[];
+  commentsEnabled?: boolean;
 }) {
   const total = countComments(initialComments);
 
@@ -202,16 +214,30 @@ export function CommentSection({
         </h2>
       </div>
 
-      <CommentForm articleSlug={articleSlug} />
+      {commentsEnabled ? (
+        <CommentForm articleSlug={articleSlug} />
+      ) : (
+        <p className="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+          Komentar dinonaktifkan untuk artikel ini.
+        </p>
+      )}
 
       {initialComments.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          Belum ada komentar. Jadilah yang pertama berkomentar!
-        </p>
+        commentsEnabled && (
+          <p className="text-sm text-muted-foreground">
+            Belum ada komentar. Jadilah yang pertama berkomentar!
+          </p>
+        )
       ) : (
         <div className="flex flex-col">
           {initialComments.map((comment) => (
-            <CommentItem key={comment.id} comment={comment} articleSlug={articleSlug} depth={0} />
+            <CommentItem
+              key={comment.id}
+              comment={comment}
+              articleSlug={articleSlug}
+              depth={0}
+              commentsEnabled={commentsEnabled}
+            />
           ))}
         </div>
       )}

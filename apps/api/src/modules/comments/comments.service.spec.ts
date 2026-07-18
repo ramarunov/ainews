@@ -26,7 +26,7 @@ describe('CommentsService', () => {
   let prisma: any;
   let publicSiteService: any;
 
-  const article = { id: 'article-1', slug: 'some-story', status: 'PUBLISHED' };
+  const article = { id: 'article-1', slug: 'some-story', status: 'PUBLISHED', commentsEnabled: true };
 
   beforeEach(() => {
     prisma = {
@@ -51,6 +51,13 @@ describe('CommentsService', () => {
 
   describe('submitComment', () => {
     const baseDto = { authorName: 'Jane Reader', authorEmail: 'jane@example.com', content: 'Great story!' };
+
+    it('rejects a submission when the article has comments disabled', async () => {
+      publicSiteService.findPublishedBySlug.mockResolvedValue({ ...article, commentsEnabled: false });
+
+      await expect(service.submitComment('some-story', baseDto)).rejects.toThrow(BadRequestException);
+      expect(prisma.articleComment.create).not.toHaveBeenCalled();
+    });
 
     it('rejects content containing a link before ever touching the DB', async () => {
       await expect(

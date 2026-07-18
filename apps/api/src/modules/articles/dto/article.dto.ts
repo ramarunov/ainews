@@ -99,6 +99,11 @@ export class CreateArticleDto {
   @IsBoolean()
   isPremium?: boolean;
 
+  @ApiProperty({ required: false, default: true })
+  @IsOptional()
+  @IsBoolean()
+  commentsEnabled?: boolean;
+
   @ApiProperty({ required: false, default: 'en' })
   @IsOptional()
   @IsString()

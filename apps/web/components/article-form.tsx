@@ -55,6 +55,7 @@ const articleSchema = z.object({
   primaryCategoryId: z.string().optional(),
   isBreaking: z.boolean(),
   isFeatured: z.boolean(),
+  commentsEnabled: z.boolean(),
 });
 
 type ArticleFormValues = z.infer<typeof articleSchema>;
@@ -112,6 +113,7 @@ export function ArticleForm({ article }: { article?: Article }) {
       primaryCategoryId: article?.primaryCategoryId ?? undefined,
       isBreaking: article?.isBreaking ?? false,
       isFeatured: article?.isFeatured ?? false,
+      commentsEnabled: article?.commentsEnabled ?? true,
     },
   });
 
@@ -250,6 +252,7 @@ export function ArticleForm({ article }: { article?: Article }) {
     featuredImageId,
     isBreaking: values.isBreaking,
     isFeatured: values.isFeatured,
+    commentsEnabled: values.commentsEnabled,
   });
 
   const onSave = async (values: ArticleFormValues) => {
@@ -583,6 +586,22 @@ export function ArticleForm({ article }: { article?: Article }) {
                     />
                     <Label htmlFor="isFeatured" className="font-normal">
                       Featured
+                    </Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Controller
+                      name="commentsEnabled"
+                      control={control}
+                      render={({ field }) => (
+                        <Checkbox
+                          id="commentsEnabled"
+                          checked={field.value}
+                          onCheckedChange={(v) => field.onChange(!!v)}
+                        />
+                      )}
+                    />
+                    <Label htmlFor="commentsEnabled" className="font-normal">
+                      Enable comments
                     </Label>
                   </div>
                 </TabsContent>

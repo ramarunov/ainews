@@ -250,6 +250,7 @@ export interface Article {
   isBreaking: boolean;
   isFeatured: boolean;
   isAiAssisted?: boolean;
+  commentsEnabled: boolean;
   featuredImageId?: string | null;
   featuredImageUrl?: string | null;
   primaryCategoryId?: string | null;
@@ -323,6 +324,7 @@ export interface PublicArticle {
   isBreaking?: boolean;
   isFeatured?: boolean;
   isAiAssisted?: boolean;
+  commentsEnabled?: boolean;
   readingTime?: number;
   primaryAuthor?: PublicAuthor | null;
   primaryCategory?: Category | null;
@@ -364,6 +366,7 @@ export interface CreateArticleInput {
   featuredImageId?: string;
   isBreaking?: boolean;
   isFeatured?: boolean;
+  commentsEnabled?: boolean;
 }
 
 export interface MediaFile {

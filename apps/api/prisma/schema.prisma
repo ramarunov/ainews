@@ -380,6 +380,7 @@ model Article {
   isFeatured        Boolean       @default(false)
   isPremium         Boolean       @default(false)
   isAiAssisted      Boolean       @default(false)
+  commentsEnabled   Boolean       @default(true)
 
   // Featured Image
   featuredImageId   String?       @db.Uuid

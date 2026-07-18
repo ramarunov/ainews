@@ -27,6 +27,38 @@ import { MediaPickerDialog } from "@/components/media-picker-dialog";
 import type { MediaFile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+type EditorMode = "visual" | "html";
+
+function countWords(html: string): number {
+  const text = html.replace(/<[^>]*>/g, " ");
+  return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function ModeTab({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "rounded-t-md border border-b-0 px-3 py-1.5 text-xs font-medium",
+        active
+          ? "border-border bg-background text-foreground"
+          : "border-transparent text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
 function ToolbarButton({
   onClick,
   active,
@@ -172,6 +204,11 @@ export function RichTextEditor({
   onChange: (html: string) => void;
 }) {
   const [mediaPickerOpen, setMediaPickerOpen] = useState(false);
+  // WordPress-style "Visual" / "HTML" tabs — visual is the Tiptap WYSIWYG
+  // editor below; html is a plain raw-source textarea, matching WordPress's
+  // own Text editor (no syntax highlighting there either).
+  const [mode, setMode] = useState<EditorMode>("visual");
+  const [htmlDraft, setHtmlDraft] = useState(content);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -196,13 +233,16 @@ export function RichTextEditor({
   // "Replace content" buttons calling setValue("content", ...)) need to be
   // pushed into the editor explicitly, but only when it actually differs
   // from what's already there — otherwise every keystroke's onUpdate would
-  // round-trip back in and reset the cursor position.
+  // round-trip back in and reset the cursor position. Skipped entirely
+  // while in HTML mode: the textarea is the source of truth there, and
+  // resyncing a hidden Tiptap doc on every keystroke would be wasted work -
+  // switching back to Visual explicitly pushes the final draft in instead.
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || mode === "html") return;
     if (content !== editor.getHTML()) {
       editor.commands.setContent(content, { emitUpdate: false });
     }
-  }, [content, editor]);
+  }, [content, editor, mode]);
 
   const handleMediaSelect = (media: MediaFile) => {
     const url = media.publicUrl ?? media.cdnUrl;
@@ -211,12 +251,50 @@ export function RichTextEditor({
     }
   };
 
+  const switchToHtml = () => {
+    if (editor) setHtmlDraft(editor.getHTML());
+    setMode("html");
+  };
+
+  const switchToVisual = () => {
+    editor?.commands.setContent(htmlDraft);
+    onChange(htmlDraft);
+    setMode("visual");
+  };
+
   if (!editor) return null;
+
+  const wordCount = countWords(mode === "html" ? htmlDraft : content);
 
   return (
     <div className="rounded-md border">
-      <Toolbar editor={editor} onOpenMediaPicker={() => setMediaPickerOpen(true)} />
-      <EditorContent editor={editor} />
+      <div className="flex gap-1 border-b bg-muted/30 px-1 pt-1">
+        <ModeTab active={mode === "visual"} onClick={switchToVisual}>
+          Visual
+        </ModeTab>
+        <ModeTab active={mode === "html"} onClick={switchToHtml}>
+          HTML
+        </ModeTab>
+      </div>
+      {mode === "visual" ? (
+        <>
+          <Toolbar editor={editor} onOpenMediaPicker={() => setMediaPickerOpen(true)} />
+          <EditorContent editor={editor} />
+        </>
+      ) : (
+        <textarea
+          value={htmlDraft}
+          onChange={(e) => {
+            setHtmlDraft(e.target.value);
+            onChange(e.target.value);
+          }}
+          spellCheck={false}
+          className="min-h-[300px] w-full resize-y p-3 font-mono text-xs focus:outline-none"
+        />
+      )}
+      <div className="border-t px-3 py-1.5 text-right text-xs text-muted-foreground">
+        {wordCount.toLocaleString()} {wordCount === 1 ? "word" : "words"}
+      </div>
       <MediaPickerDialog
         open={mediaPickerOpen}
         onOpenChange={setMediaPickerOpen}
