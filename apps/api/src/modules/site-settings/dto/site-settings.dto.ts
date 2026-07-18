@@ -75,6 +75,18 @@ export class UpdateHomepageSeoDto {
   ogImageUrl?: string;
 }
 
+export class UpdateBrandingDto {
+  @ApiProperty({ required: false, description: 'Replaces the default logo shown on the public site, login page, and dashboard sidebar' })
+  @IsOptional()
+  @IsUrl({ require_tld: false })
+  logoUrl?: string;
+
+  @ApiProperty({ required: false, description: 'Replaces the default browser tab icon/favicon' })
+  @IsOptional()
+  @IsUrl({ require_tld: false })
+  faviconUrl?: string;
+}
+
 export class ScriptSlotDto {
   @ApiProperty()
   @IsBoolean()

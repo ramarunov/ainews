@@ -25,9 +25,11 @@ const HOVER_CLOSE_DELAY_MS = 200;
 export function PublicHeader({
   categories,
   today,
+  logoUrl,
 }: {
   categories: Category[];
   today: string;
+  logoUrl?: string;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -139,7 +141,7 @@ export function PublicHeader({
           </button>
           <Link href="/" className="flex items-center">
             <Image
-              src="/brand/logo.png"
+              src={logoUrl || "/brand/logo.png"}
               alt={SITE_NAME}
               width={1606}
               height={433}

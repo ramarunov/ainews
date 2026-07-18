@@ -4,6 +4,7 @@ import type {
   CustomScriptsSetting,
   HomepageSeoSetting,
   HomepageWidgetsSetting,
+  SiteBrandingSetting,
   SiteFooterSetting,
 } from "@/lib/types";
 
@@ -73,5 +74,43 @@ export function useUpdateCustomScripts() {
     mutationFn: (input: CustomScriptsSetting) =>
       apiClient.put<CustomScriptsSetting>("/site-settings/custom-scripts", input),
     onSuccess: (data) => queryClient.setQueryData(["site-settings", "custom-scripts"], data),
+  });
+}
+
+export function useSiteBranding(enabled = true) {
+  return useQuery({
+    queryKey: ["site-settings", "branding"],
+    queryFn: () => apiClient.get<SiteBrandingSetting | null>("/site-settings/branding"),
+    enabled,
+  });
+}
+
+export function useUpdateSiteBranding() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SiteBrandingSetting) =>
+      apiClient.put<SiteBrandingSetting>("/site-settings/branding", input),
+    onSuccess: (data) => queryClient.setQueryData(["site-settings", "branding"], data),
+  });
+}
+
+// Unauthenticated variant for places that render before/without a session
+// (login page, the dashboard shell before the auth check resolves) - reads
+// through the public settings endpoint rather than the superadmin-gated one.
+export function usePublicBranding() {
+  return useQuery({
+    queryKey: ["public-settings", "branding"],
+    queryFn: async () => {
+      const settings = await apiClient.get<{ key: string; value: unknown }[]>(
+        "/public/settings",
+        { skipAuth: true },
+      );
+      return (
+        (settings.find((s) => s.key === "site.branding")?.value as
+          | SiteBrandingSetting
+          | undefined) ?? null
+      );
+    },
+    staleTime: 5 * 60 * 1000,
   });
 }

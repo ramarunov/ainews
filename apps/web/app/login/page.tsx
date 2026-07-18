@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/card";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/auth-store";
+import { usePublicBranding } from "@/hooks/use-site-settings";
 import { SITE_NAME } from "@/lib/brand";
 import type { AuthResponse, LoginResponse } from "@/lib/types";
 
@@ -34,6 +35,7 @@ type LoginForm = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const router = useRouter();
   const setSession = useAuthStore((s) => s.setSession);
+  const { data: branding } = usePublicBranding();
   const [submitting, setSubmitting] = useState(false);
   const [challengeToken, setChallengeToken] = useState<string | null>(null);
   const [mfaCode, setMfaCode] = useState("");
@@ -88,7 +90,7 @@ export default function LoginPage() {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-6 bg-muted/40 px-4">
         <Image
-          src="/brand/logo.png"
+          src={branding?.logoUrl || "/brand/logo.png"}
           alt={SITE_NAME}
           width={1606}
           height={433}
@@ -138,7 +140,7 @@ export default function LoginPage() {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 bg-muted/40 px-4">
       <Image
-        src="/brand/logo.png"
+        src={branding?.logoUrl || "/brand/logo.png"}
         alt={SITE_NAME}
         width={1606}
         height={433}

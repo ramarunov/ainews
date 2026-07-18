@@ -6,6 +6,7 @@ import { SuperadminGuard } from '../../common/guards/superadmin.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { SiteSettingsService } from './site-settings.service';
 import {
+  UpdateBrandingDto,
   UpdateCustomScriptsDto,
   UpdateFooterSettingDto,
   UpdateHomepageSeoDto,
@@ -65,5 +66,17 @@ export class SiteSettingsController {
   @ApiOperation({ summary: 'Set custom header/footer script injection (superadmin only)' })
   updateCustomScripts(@Body() dto: UpdateCustomScriptsDto, @CurrentUser() user: any) {
     return this.siteSettingsService.updateCustomScripts(dto, user.id);
+  }
+
+  @Get('branding')
+  @ApiOperation({ summary: 'Logo and favicon URLs (superadmin only)' })
+  getBranding() {
+    return this.siteSettingsService.getBranding();
+  }
+
+  @Put('branding')
+  @ApiOperation({ summary: 'Set the logo and favicon URLs (superadmin only)' })
+  updateBranding(@Body() dto: UpdateBrandingDto, @CurrentUser() user: any) {
+    return this.siteSettingsService.updateBranding(dto, user.id);
   }
 }

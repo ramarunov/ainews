@@ -96,6 +96,31 @@ describe('SiteSettingsService', () => {
     });
   });
 
+  describe('getBranding / updateBranding', () => {
+    it('writes the logo/favicon URLs as public', async () => {
+      settingsService.set.mockResolvedValue({});
+      const dto = { logoUrl: 'https://example.com/logo.png', faviconUrl: 'https://example.com/icon.png' };
+
+      await service.updateBranding(dto as any, 'user-1');
+
+      expect(settingsService.set).toHaveBeenCalledWith(
+        'public-org-1',
+        SITE_SETTING_KEYS.branding,
+        dto,
+        'user-1',
+        true,
+      );
+    });
+
+    it('reads the branding setting for the public-site org', async () => {
+      settingsService.get.mockResolvedValue({ logoUrl: 'https://example.com/logo.png' });
+
+      await service.getBranding();
+
+      expect(settingsService.get).toHaveBeenCalledWith('public-org-1', SITE_SETTING_KEYS.branding);
+    });
+  });
+
   describe('when the public site is not configured', () => {
     it('propagates the NotFoundException from the shared org resolver', () => {
       config.get.mockReturnValue('');

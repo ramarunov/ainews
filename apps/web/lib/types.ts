@@ -91,6 +91,11 @@ export interface CustomScriptsSetting {
   footer: ScriptSlot;
 }
 
+export interface SiteBrandingSetting {
+  logoUrl?: string;
+  faviconUrl?: string;
+}
+
 export interface StockPhotoResult {
   id: string;
   thumbnailUrl: string;

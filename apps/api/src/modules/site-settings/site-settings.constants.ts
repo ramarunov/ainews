@@ -8,6 +8,7 @@ export const SITE_SETTING_KEYS = {
   homepageWidgets: 'site.homepage_widgets',
   homepageSeo: 'site.homepage_seo',
   customScripts: 'site.custom_scripts',
+  branding: 'site.branding',
 } as const;
 
 export type SiteSettingKey = (typeof SITE_SETTING_KEYS)[keyof typeof SITE_SETTING_KEYS];

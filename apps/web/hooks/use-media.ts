@@ -50,6 +50,22 @@ export function useUploadMedia() {
   });
 }
 
+// Uploads into a dedicated "branding" folder rather than reusing
+// useUploadMedia's "articles" folder - the logo/favicon aren't article
+// media and shouldn't show up mixed into the article Media Library.
+export function useUploadBrandingAsset() {
+  return useMutation({
+    mutationFn: (file: File) => {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("folder", "branding");
+      return apiClient.post<MediaFile>("/media/upload", formData, {
+        isFormData: true,
+      });
+    },
+  });
+}
+
 export function useDeleteMedia() {
   const queryClient = useQueryClient();
   return useMutation({

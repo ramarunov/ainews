@@ -9,6 +9,7 @@ import { Newspaper, FolderTree, Tags, Layers, Image as ImageIcon, Search, Histor
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notification-bell";
 import { hasPermission, useAuthStore } from "@/lib/auth-store";
+import { usePublicBranding } from "@/hooks/use-site-settings";
 import { cn } from "@/lib/utils";
 import { SITE_NAME } from "@/lib/brand";
 
@@ -31,6 +32,7 @@ export default function DashboardLayout({
   const accessToken = useAuthStore((s) => s.accessToken);
   const user = useAuthStore((s) => s.user);
   const clearSession = useAuthStore((s) => s.clearSession);
+  const { data: branding } = usePublicBranding();
   // The static shell is prerendered with no session; delay rendering
   // auth-dependent content until after the first client-only effect so
   // that render matches the server output and React doesn't have to
@@ -54,7 +56,7 @@ export default function DashboardLayout({
         <div className="flex items-center justify-between gap-2 border-b px-6 py-4">
           <div className="min-w-0">
             <Image
-              src="/brand/logo.png"
+              src={branding?.logoUrl || "/brand/logo.png"}
               alt={SITE_NAME}
               width={1606}
               height={433}

@@ -2,7 +2,7 @@ import { PublicHeader } from "@/components/public/public-header";
 import { PublicFooter } from "@/components/public/public-footer";
 import { AdSlot } from "@/components/public/ad-slot";
 import { findPublicSetting, getCategories, getPublicSettings } from "@/lib/public-api";
-import type { CustomScriptsSetting, SiteFooterSetting } from "@/lib/types";
+import type { CustomScriptsSetting, SiteBrandingSetting, SiteFooterSetting } from "@/lib/types";
 
 export default async function PublicLayout({
   children,
@@ -22,11 +22,12 @@ export default async function PublicLayout({
 
   const footerSetting = findPublicSetting<SiteFooterSetting>(settings, "site.footer");
   const customScripts = findPublicSetting<CustomScriptsSetting>(settings, "site.custom_scripts");
+  const branding = findPublicSetting<SiteBrandingSetting>(settings, "site.branding");
 
   return (
     <div className="pulse-daily flex min-h-full flex-1 flex-col bg-background text-foreground">
       <AdSlot value={customScripts?.header} />
-      <PublicHeader categories={categories} today={today} />
+      <PublicHeader categories={categories} today={today} logoUrl={branding?.logoUrl} />
       <main className="flex flex-1 flex-col">{children}</main>
       <PublicFooter categories={categories} footerSetting={footerSetting} />
       <AdSlot value={customScripts?.footer} />

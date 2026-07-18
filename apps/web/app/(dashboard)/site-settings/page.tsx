@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { toast } from "sonner";
-import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Loader2, Plus, Trash2, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,7 +35,10 @@ import {
   useUpdateHomepageSeo,
   useCustomScripts,
   useUpdateCustomScripts,
+  useSiteBranding,
+  useUpdateSiteBranding,
 } from "@/hooks/use-site-settings";
+import { useUploadBrandingAsset } from "@/hooks/use-media";
 import { useAuthStore } from "@/lib/auth-store";
 import { ApiError } from "@/lib/api-client";
 import { SITE_NAME, SITE_TAGLINE } from "@/lib/brand";
@@ -44,6 +48,7 @@ import type {
   HomepageSeoSetting,
   HomepageWidget,
   HomepageWidgetType,
+  SiteBrandingSetting,
   SiteFooterSetting,
 } from "@/lib/types";
 
@@ -325,6 +330,117 @@ function HomepageSeoForm({ initial }: { initial: HomepageSeoSetting }) {
   );
 }
 
+function BrandingCard({ isSuperadmin }: { isSuperadmin: boolean }) {
+  const { data, isLoading } = useSiteBranding(isSuperadmin);
+
+  if (isLoading) return <CardSkeleton />;
+
+  return <BrandingForm initial={data ?? {}} />;
+}
+
+function BrandingAssetSlot({
+  label,
+  description,
+  defaultSrc,
+  value,
+  onChange,
+}: {
+  label: string;
+  description: string;
+  defaultSrc: string;
+  value?: string;
+  onChange: (url: string | undefined) => void;
+}) {
+  const uploadAsset = useUploadBrandingAsset();
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const media = await uploadAsset.mutateAsync(file);
+      onChange(media.publicUrl ?? media.cdnUrl ?? undefined);
+      toast.success(`${label} uploaded`);
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Upload failed");
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <Label>{label}</Label>
+      <p className="text-xs text-muted-foreground">{description}</p>
+      <div className="flex items-center gap-4">
+        <div className="relative flex h-16 w-16 items-center justify-center overflow-hidden rounded-md border bg-muted/40">
+          <Image
+            src={value || defaultSrc}
+            alt={label}
+            fill
+            className="object-contain p-1"
+            unoptimized
+          />
+        </div>
+        <div className="flex gap-2">
+          <label className="flex cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground hover:bg-muted">
+            {uploadAsset.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Upload className="h-4 w-4" />
+            )}
+            Upload
+            <input type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
+          </label>
+          {value && (
+            <Button type="button" variant="ghost" size="sm" onClick={() => onChange(undefined)}>
+              Reset to default
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BrandingForm({ initial }: { initial: SiteBrandingSetting }) {
+  const update = useUpdateSiteBranding();
+  const [logoUrl, setLogoUrl] = useState<string | undefined>(initial.logoUrl);
+  const [faviconUrl, setFaviconUrl] = useState<string | undefined>(initial.faviconUrl);
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await update.mutateAsync({ logoUrl, faviconUrl });
+      toast.success("Branding saved");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <BrandingAssetSlot
+        label="Logo"
+        description="Shown on the public site header, login page, and dashboard sidebar."
+        defaultSrc="/brand/logo.png"
+        value={logoUrl}
+        onChange={setLogoUrl}
+      />
+      <BrandingAssetSlot
+        label="Favicon"
+        description="Shown as the browser tab icon. Use a square image for best results."
+        defaultSrc="/icon"
+        value={faviconUrl}
+        onChange={setFaviconUrl}
+      />
+      <Button size="sm" className="self-end" disabled={saving} onClick={handleSave}>
+        {saving ? "Saving…" : "Save"}
+      </Button>
+    </div>
+  );
+}
+
 function CustomScriptsCard({ isSuperadmin }: { isSuperadmin: boolean }) {
   const { data, isLoading } = useCustomScripts(isSuperadmin);
 
@@ -397,10 +513,22 @@ export default function SiteSettingsPage() {
       <div>
         <h1 className="text-2xl font-semibold">Site Settings</h1>
         <p className="text-sm text-muted-foreground">
-          Control the public reader site&apos;s footer, homepage sidebar widgets, homepage SEO, and
-          custom scripts — no code changes needed.
+          Control the public reader site&apos;s branding, footer, homepage sidebar widgets,
+          homepage SEO, and custom scripts — no code changes needed.
         </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Branding</CardTitle>
+          <CardDescription>
+            The logo and browser tab icon shown across the site and dashboard.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <BrandingCard isSuperadmin={isSuperadmin} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

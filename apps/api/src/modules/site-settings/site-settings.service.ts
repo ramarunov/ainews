@@ -5,6 +5,7 @@ import { getPublicSiteOrgId } from '../../common/config/public-site-org.util';
 import { SettingsService } from '../settings/settings.service';
 import { SITE_SETTING_KEYS } from './site-settings.constants';
 import {
+  UpdateBrandingDto,
   UpdateCustomScriptsDto,
   UpdateFooterSettingDto,
   UpdateHomepageSeoDto,
@@ -64,5 +65,13 @@ export class SiteSettingsService {
       updatedBy,
       true,
     );
+  }
+
+  getBranding() {
+    return this.settingsService.get(this.orgId, SITE_SETTING_KEYS.branding);
+  }
+
+  updateBranding(dto: UpdateBrandingDto, updatedBy: string) {
+    return this.settingsService.set(this.orgId, SITE_SETTING_KEYS.branding, dto, updatedBy, true);
   }
 }
