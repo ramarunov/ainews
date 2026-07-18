@@ -37,6 +37,7 @@ import {
 } from './dto/user.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../common/guards/permissions.guard';
+import { SuperadminGuard } from '../../common/guards/superadmin.guard';
 import { RequirePermissions } from '../../common/decorators/permissions.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 
@@ -58,8 +59,9 @@ export class UsersController {
   }
 
   @Post()
+  @UseGuards(SuperadminGuard)
   @RequirePermissions('users:write')
-  @ApiOperation({ summary: 'Create a new user in this organization with a temporary password' })
+  @ApiOperation({ summary: 'Create a new user in this organization with a temporary password (superadmin only)' })
   create(@Body() dto: CreateUserDto, @CurrentUser() user: any) {
     return this.usersService.create(dto, user.organizationId, user.id);
   }

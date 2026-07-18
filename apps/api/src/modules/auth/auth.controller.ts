@@ -5,18 +5,14 @@ import {
   Body,
   UseGuards,
   Req,
-  Res,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
-import { AuthGuard } from '@nestjs/passport';
-import { ConfigService } from '@nestjs/config';
-import { Request, Response } from 'express';
+import { Request } from 'express';
 
 import { AuthService } from './auth.service';
-import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { VerifyMfaDto } from './dto/verify-mfa.dto';
@@ -31,20 +27,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 @ApiTags('Auth')
 @Controller({ path: 'auth', version: '1' })
 export class AuthController {
-  constructor(
-    private readonly authService: AuthService,
-    private readonly config: ConfigService,
-  ) {}
-
-  // ─── Register ──────────────────────────────────────────────────────────────
-  @Post('register')
-  @Throttle({ default: { limit: 10, ttl: 3600000 } })
-  @ApiOperation({ summary: 'Register a new user account' })
-  @ApiResponse({ status: 201, description: 'User created and tokens issued' })
-  @ApiResponse({ status: 409, description: 'Email already registered' })
-  async register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
-  }
+  constructor(private readonly authService: AuthService) {}
 
   // ─── Login ─────────────────────────────────────────────────────────────────
   @Post('login')
@@ -71,50 +54,6 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Invalid or expired refresh token' })
   async refresh(@Body() dto: RefreshTokenDto) {
     return this.authService.refreshAccessToken(dto.refreshToken);
-  }
-
-  // ─── OAuth (AUTH-002) ──────────────────────────────────────────────────────
-  // The frontend is a token-in-localStorage SPA, not a cookie-session app,
-  // so the callback can't just "log the user in" server-side - it redirects
-  // to a dedicated frontend page with the issued tokens in the query
-  // string, which stores them into the auth store the same way a normal
-  // email/password login response does.
-
-  @Get('google')
-  @UseGuards(AuthGuard('google'))
-  @ApiOperation({ summary: 'Start Google OAuth login (redirects to Google)' })
-  googleAuth() {
-    // Guard handles the redirect; nothing to do here.
-  }
-
-  @Get('google/callback')
-  @UseGuards(AuthGuard('google'))
-  @ApiOperation({ summary: 'Google OAuth callback' })
-  googleCallback(@Req() req: Request, @Res() res: Response) {
-    this.redirectWithTokens(res, req.user);
-  }
-
-  @Get('github')
-  @UseGuards(AuthGuard('github'))
-  @ApiOperation({ summary: 'Start GitHub OAuth login (redirects to GitHub)' })
-  githubAuth() {
-    // Guard handles the redirect; nothing to do here.
-  }
-
-  @Get('github/callback')
-  @UseGuards(AuthGuard('github'))
-  @ApiOperation({ summary: 'GitHub OAuth callback' })
-  githubCallback(@Req() req: Request, @Res() res: Response) {
-    this.redirectWithTokens(res, req.user);
-  }
-
-  private redirectWithTokens(res: Response, tokens: any) {
-    const appUrl = this.config.get<string>('APP_URL', 'http://localhost:3100');
-    const params = new URLSearchParams({
-      accessToken: tokens.accessToken,
-      refreshToken: tokens.refreshToken,
-    });
-    res.redirect(`${appUrl}/oauth-callback?${params.toString()}`);
   }
 
   // ─── Password Reset ────────────────────────────────────────────────────────

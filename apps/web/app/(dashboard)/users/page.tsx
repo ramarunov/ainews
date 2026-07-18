@@ -305,7 +305,7 @@ export default function UsersPage() {
             Manage your organization&apos;s members and their roles.
           </p>
         </div>
-        {canWrite && (
+        {authUser?.isSuperadmin && (
           <Button onClick={() => setAddUserOpen(true)}>
             <Plus className="h-4 w-4" />
             Add User

@@ -9,7 +9,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -23,8 +23,6 @@ import { apiClient, ApiError } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/auth-store";
 import { SITE_NAME } from "@/lib/brand";
 import type { AuthResponse, LoginResponse } from "@/lib/types";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
 
 const loginSchema = z.object({
   email: z.string().email("Enter a valid email address"),
@@ -193,27 +191,6 @@ export default function LoginPage() {
               {submitting ? "Signing in…" : "Sign in"}
             </Button>
           </form>
-
-          <div className="mt-4 flex items-center gap-2">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-xs text-muted-foreground">or continue with</span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
-          <div className="mt-4 flex flex-col gap-2">
-            <a href={`${API_URL}/auth/google`} className={buttonVariants({ variant: "outline" })}>
-              Continue with Google
-            </a>
-            <a href={`${API_URL}/auth/github`} className={buttonVariants({ variant: "outline" })}>
-              Continue with GitHub
-            </a>
-          </div>
-
-          <p className="mt-4 text-center text-sm text-muted-foreground">
-            No account?{" "}
-            <Link href="/register" className="underline underline-offset-4">
-              Register your organization
-            </Link>
-          </p>
         </CardContent>
       </Card>
     </div>
