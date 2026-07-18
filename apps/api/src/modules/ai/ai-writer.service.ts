@@ -91,6 +91,7 @@ export class AIWriterService {
 Write in ${options.tone ?? 'authoritative'} tone.
 Always write factually. Never hallucinate facts, statistics, or quotes.
 Format the article with proper HTML headings (h2, h3), paragraphs, and where appropriate, lists.
+Never begin the article with a heading - start directly with the lead paragraph. Headings are only used to break up later sections, never before the first paragraph.
 Target length: approximately ${options.targetLength ?? 1000} words.
 Target audience: ${options.targetAudience ?? 'general news readers'}.${
       languageName
@@ -110,6 +111,7 @@ Requirements:
 - If focus keyword is provided, use it naturally in the first paragraph, headings, and throughout
 - End with a strong conclusion or forward-looking statement
 - Do NOT use phrases like "In conclusion" or "To summarize"
+- Do NOT start the article with a heading (h2/h3) - the very first element must be a paragraph
 - Write ${options.targetLength ?? 1000} words approximately`;
 
     const draft = await this.gateway.prompt(systemPrompt, userPrompt, {
@@ -119,7 +121,14 @@ Requirements:
       articleId: options.articleId,
       analysisType: 'draft_generation',
     });
-    return this.stripCodeFence(draft);
+    return this.stripLeadingHeading(this.stripCodeFence(draft));
+  }
+
+  // Despite being told not to, models still sometimes open the article with
+  // a heading (often just restating the title) before the lead paragraph -
+  // same "instructions aren't 100% reliable" reason stripCodeFence exists.
+  private stripLeadingHeading(text: string): string {
+    return text.replace(/^\s*<h[1-3][^>]*>[\s\S]*?<\/h[1-3]>\s*/i, '');
   }
 
   async rewriteParagraph(options: EditorOptions): Promise<string> {
