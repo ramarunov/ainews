@@ -395,6 +395,34 @@ The image should be appropriate for a news article, not promotional or cartoon-l
     );
   }
 
+  /**
+   * Short English keyword phrase for searching a real stock-photo library
+   * (Pexels) for this specific article, rather than a generic per-category
+   * query. Deliberately not a DALL-E-style scene description - stock
+   * libraries match on concrete nouns/concepts, not prose, and skew English
+   * regardless of the article's own language.
+   */
+  async suggestStockPhotoQuery(
+    title: string,
+    organizationId?: string,
+    articleId?: string,
+  ): Promise<string> {
+    const result = await this.gateway.prompt(
+      `You help pick a real stock photo for a news article. Given the headline, reply with 2-4 short English keywords (concrete nouns/concepts) suitable for searching a general stock-photo library like Pexels.
+Never include people's names or other identifying details of real individuals - the photo will be a generic stock image, not a picture of the actual people/event involved.
+Reply with the keywords only, comma-separated, no explanation and no trailing punctuation.`,
+      `Headline: ${title}`,
+      {
+        temperature: 0.3,
+        maxTokens: 20,
+        analysisType: 'stock_photo_query',
+        organizationId,
+        articleId,
+      },
+    );
+    return result.trim();
+  }
+
   async generateAltText(
     imageUrl: string,
     context: { caption?: string; organizationId?: string } = {},

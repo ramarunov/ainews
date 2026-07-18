@@ -299,8 +299,17 @@ export class AutonomousPublishingService {
       const categoryName = categoryId
         ? (await this.categoriesService.findOne(categoryId, organizationId).catch(() => null))?.name
         : null;
+      // Prefer a headline-specific search query over the generic per-category
+      // one so articles in the same category don't all reach for the same
+      // handful of stock photos; falls back to the category query if the AI
+      // call fails or is unavailable (same fail-gracefully convention as
+      // everything else in this pipeline).
+      const stockQuery = await this.aiWriter
+        .suggestStockPhotoQuery(title, organizationId, shell.id)
+        .then((q) => q || buildStockPhotoQuery(categoryName))
+        .catch(() => buildStockPhotoQuery(categoryName));
       const attachedImage = await this.stockPhotoService.autoAttachForQuery(
-        buildStockPhotoQuery(categoryName),
+        stockQuery,
         authorUserId,
         organizationId,
       );

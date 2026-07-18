@@ -106,6 +106,9 @@ describe('AutonomousPublishingService', () => {
         recommendations: [],
         canPublish: true,
       }),
+      // Empty by default so existing tests' category-based fallback
+      // expectation ('newspaper journalism') keeps holding unchanged.
+      suggestStockPhotoQuery: jest.fn().mockResolvedValue(''),
     };
     systemSettings = {
       getAiProviderStatus: jest.fn().mockResolvedValue({ openai: true, anthropic: false, google: false }),
@@ -277,6 +280,31 @@ describe('AutonomousPublishingService', () => {
     expect(result).toEqual({ processed: 1, readyForReview: 1, flagged: 0 });
     const updateCall = articlesService.update.mock.calls[0][1];
     expect(updateCall).not.toHaveProperty('featuredImageId');
+  });
+
+  it('searches for a stock photo using the AI-suggested, headline-specific query when one is available', async () => {
+    aiWriter.suggestStockPhotoQuery.mockResolvedValue('protest crowd street');
+
+    await service.runCycle(ORG_ID);
+
+    expect(aiWriter.suggestStockPhotoQuery).toHaveBeenCalledWith('Big Story', ORG_ID, 'article-1');
+    expect(stockPhotoService.autoAttachForQuery).toHaveBeenCalledWith(
+      'protest crowd street',
+      AUTHOR_ID,
+      ORG_ID,
+    );
+  });
+
+  it('falls back to the generic category query when the AI stock-photo query call fails', async () => {
+    aiWriter.suggestStockPhotoQuery.mockRejectedValue(new Error('AI gateway down'));
+
+    await service.runCycle(ORG_ID);
+
+    expect(stockPhotoService.autoAttachForQuery).toHaveBeenCalledWith(
+      'newspaper journalism',
+      AUTHOR_ID,
+      ORG_ID,
+    );
   });
 
   it('notifies the configured author when an article is flagged for review, with the reason in the body', async () => {
