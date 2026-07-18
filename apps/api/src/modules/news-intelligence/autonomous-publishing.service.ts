@@ -112,6 +112,12 @@ export class AutonomousPublishingService {
     const minSources = this.config.get<number>('AUTONOMOUS_PIPELINE_MIN_SOURCES', 1);
     const stabilizationMinutes = this.config.get<number>('AUTONOMOUS_PIPELINE_STABILIZATION_MINUTES', 20);
     const maxPerCycle = this.config.get<number>('AUTONOMOUS_PIPELINE_MAX_PER_CYCLE', 3);
+    // Same 48h freshness window the public news sitemap already uses - a
+    // cluster otherwise has no upper bound on age, so a story that broke
+    // days ago but only just became eligible again (e.g. its previous
+    // draft was deleted) would get drafted and published-review'd as if it
+    // were breaking news today.
+    const maxAgeHours = this.config.get<number>('AUTONOMOUS_PIPELINE_MAX_AGE_HOURS', 48);
     // Cap the batch by remaining drafting budget too, so a cycle never pulls
     // more candidate clusters than it could actually draft before the next
     // quota check - overflow would just sit as extra IN_REVIEW load for no
@@ -124,6 +130,7 @@ export class AutonomousPublishingService {
         organizationId,
         itemCount: { gte: minSources },
         lastUpdatedAt: { lte: new Date(Date.now() - stabilizationMinutes * 60_000) },
+        firstSeenAt: { gte: new Date(Date.now() - maxAgeHours * 60 * 60_000) },
         newsItems: { none: { articleId: { not: null } } },
       },
       orderBy: { trendScore: 'desc' },

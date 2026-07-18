@@ -214,6 +214,28 @@ describe('AutonomousPublishingService', () => {
     );
   });
 
+  it('only considers clusters within the configured freshness window, not just unstabilized/undrafted ones', async () => {
+    config.get.mockImplementation((key: string, def: any) =>
+      key === 'AUTONOMOUS_PIPELINE_MAX_AGE_HOURS' ? 48 : def,
+    );
+    const before = Date.now();
+
+    await service.runCycle(ORG_ID);
+
+    expect(prisma.newsCluster.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          firstSeenAt: expect.objectContaining({ gte: expect.any(Date) }),
+        }),
+      }),
+    );
+    const { firstSeenAt } = (prisma.newsCluster.findMany.mock.calls[0][0] as any).where;
+    const ageMs = before - firstSeenAt.gte.getTime();
+    // Should be ~48h before "now" (within a few seconds of test execution slack).
+    expect(ageMs).toBeGreaterThan(48 * 60 * 60_000 - 5000);
+    expect(ageMs).toBeLessThan(48 * 60 * 60_000 + 5000);
+  });
+
   it('routes to review with a passed-gate signal, never auto-publishing, when the quality gate passes', async () => {
     const result = await service.runCycle(ORG_ID);
 
