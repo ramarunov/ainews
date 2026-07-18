@@ -46,9 +46,18 @@ describe('SettingsController', () => {
     });
   });
 
-  describe('non-site keys', () => {
-    it('is unaffected by the superadmin check for ordinary keys', async () => {
+  describe('ads.* keys (superadmin-only Ad Widgets namespace)', () => {
+    it('rejects a non-superadmin write to an ads.* key, even with settings:write', () => {
       const user = { organizationId: 'org-1', id: 'user-1', isSuperadmin: false };
+
+      expect(() =>
+        controller.set('ads.header', { value: { enabled: true } } as any, user),
+      ).toThrow(ForbiddenException);
+      expect(settingsService.set).not.toHaveBeenCalled();
+    });
+
+    it('allows a superadmin to write an ads.* key through this endpoint too', async () => {
+      const user = { organizationId: 'org-1', id: 'user-1', isSuperadmin: true };
 
       await controller.set('ads.header', { value: { enabled: true } } as any, user);
 
@@ -56,6 +65,22 @@ describe('SettingsController', () => {
         'org-1',
         'ads.header',
         { enabled: true },
+        'user-1',
+        false,
+      );
+    });
+  });
+
+  describe('ordinary (non-superadmin-only) keys', () => {
+    it('is unaffected by the superadmin check', async () => {
+      const user = { organizationId: 'org-1', id: 'user-1', isSuperadmin: false };
+
+      await controller.set('theme.color', { value: { hex: '#000' } } as any, user);
+
+      expect(settingsService.set).toHaveBeenCalledWith(
+        'org-1',
+        'theme.color',
+        { hex: '#000' },
         'user-1',
         false,
       );

@@ -22,6 +22,14 @@ import { RequirePermissions } from '../../common/decorators/permissions.decorato
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { SITE_SETTING_KEY_PREFIX } from '../site-settings/site-settings.constants';
 
+// Ad Widgets (System Settings > "Ad Widgets") store raw HTML/script snippets
+// under this prefix - the same script-injection risk as site.* settings, so
+// they need the same superadmin-only write gate even though they've long
+// been surfaced only in a superadmin-gated page: nothing previously stopped
+// an org member with plain `settings:write` from writing to these keys
+// directly through this generic endpoint.
+const AD_WIDGET_KEY_PREFIX = 'ads.';
+
 @ApiTags('Settings')
 @ApiBearerAuth('JWT')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -72,14 +80,16 @@ export class SettingsController {
     return this.settingsService.remove(user.organizationId, key);
   }
 
-  // `site.*` keys back the superadmin-only Site Settings feature
-  // (see modules/site-settings) - they must stay writable ONLY through that
-  // feature's own SuperadminGuard-gated controller, never through this
-  // generic org-permission-gated endpoint, or any org member holding the
-  // ordinary `settings:write` permission could inject scripts/content into
-  // the public site despite the dedicated UI being superadmin-only.
+  // `site.*` (Site Settings) and `ads.*` (Ad Widgets) keys both back
+  // superadmin-only UI and both allow raw script injection - they must stay
+  // writable ONLY by a superadmin, never through this generic
+  // org-permission-gated endpoint, or any org member holding the ordinary
+  // `settings:write` permission could inject scripts/content into the
+  // public site despite the dedicated UI being superadmin-only.
   private assertNotSuperadminOnlyKey(key: string, user: any) {
-    if (key.startsWith(SITE_SETTING_KEY_PREFIX) && !user.isSuperadmin) {
+    const isSuperadminOnlyKey =
+      key.startsWith(SITE_SETTING_KEY_PREFIX) || key.startsWith(AD_WIDGET_KEY_PREFIX);
+    if (isSuperadminOnlyKey && !user.isSuperadmin) {
       throw new ForbiddenException('Superadmin access required for this setting');
     }
   }

@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, HttpException, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 
@@ -20,7 +20,14 @@ export class HealthController {
 
   @Get('ready')
   @ApiOperation({ summary: 'Readiness probe' })
-  readiness() {
-    return this.healthService.checkReadiness();
+  async readiness() {
+    const result = await this.healthService.checkReadiness();
+    // A K8s/orchestrator readiness probe gates on HTTP status, not response
+    // body - returning 200 unconditionally (Nest's default for a plain
+    // return) meant a degraded dependency never actually failed the probe.
+    if (result.status !== 'ok') {
+      throw new HttpException(result, HttpStatus.SERVICE_UNAVAILABLE);
+    }
+    return result;
   }
 }

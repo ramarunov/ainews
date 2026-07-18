@@ -38,17 +38,6 @@ turnkey production setup — see "Deliberately not included" below.
   feature is actually built; adding an empty worker Deployment now would
   misrepresent capability that doesn't exist.
 
-## Known limitation worth knowing about
-
-`HealthService.checkReadiness()` (`apps/api/src/modules/health/health.service.ts`)
-always returns HTTP 200, even when a dependency check fails — it reports
-`status: "degraded"` in the response *body*, not the status code. Kubernetes
-readiness probes only look at the HTTP status code, so `api-deployment.yaml`'s
-readiness probe will currently report a pod ready even if Postgres, Redis,
-or OpenSearch are unreachable. Not fixed here since it's an application
-change, not a manifest one — flagging it so it doesn't get mistaken for
-working health-gating.
-
 ## Usage
 
 ```bash

@@ -18,6 +18,11 @@ describe('SeoService', () => {
         Array.from({ length: 1000 }, () => 'word').join(' ') +
         ' widget ' +
         '</p>' +
+        '<a href="/news/related-one">related one</a>' +
+        '<a href="/news/related-two">related two</a>' +
+        '<a href="/news/related-three">related three</a>' +
+        '<img src="/a.jpg" alt="a photo">' +
+        '<img src="/b.jpg" alt="another photo">' +
         '<h2>Body</h2>';
       const title = 'The Ultimate Widget Guide';
 
@@ -27,9 +32,6 @@ describe('SeoService', () => {
         focusKeyword: 'widget',
         slug: 'ultimate-widget-guide',
         hasSchema: true,
-        internalLinkCount: 3,
-        imageCount: 2,
-        imagesWithAlt: 2,
       });
 
       expect(result.details.headingStructure).toBe(10);
@@ -63,12 +65,32 @@ describe('SeoService', () => {
     });
 
     it('scores image alt text as full marks when there are no images', () => {
-      const result = service.calculateSeoScore('<p>content</p>', 'Title', {
-        imageCount: 0,
-        imagesWithAlt: 0,
-      });
+      const result = service.calculateSeoScore('<p>content</p>', 'Title', {});
 
       expect(result.details.imageAltText).toBe(5);
+    });
+
+    it('penalizes images missing alt text and recommends fixing them', () => {
+      const content = '<img src="/a.jpg" alt="described"><img src="/b.jpg">';
+      const result = service.calculateSeoScore(content, 'Title', {});
+
+      expect(result.details.imageAltText).toBe(3);
+      expect(result.recommendations).toContain('Add alt text to all images');
+    });
+
+    it('counts real internal links from the content, not an external option', () => {
+      const withLinks = service.calculateSeoScore(
+        '<p>content</p>' + '<a href="/news/a">a</a>'.repeat(3),
+        'Title',
+        {},
+      );
+      expect(withLinks.details.internalLinks).toBe(10);
+
+      const withoutLinks = service.calculateSeoScore('<p>content</p>', 'Title', {});
+      expect(withoutLinks.details.internalLinks).toBe(0);
+      expect(withoutLinks.recommendations).toContain(
+        'Add internal links to related content',
+      );
     });
   });
 

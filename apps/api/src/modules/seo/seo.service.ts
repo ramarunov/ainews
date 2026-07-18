@@ -185,9 +185,6 @@ Return ONLY the title text, no quotes or explanation.`,
       focusKeyword?: string;
       slug?: string;
       hasSchema?: boolean;
-      internalLinkCount?: number;
-      imageCount?: number;
-      imagesWithAlt?: number;
     },
   ): SeoScoreBreakdown {
     const text = content.replace(/<[^>]+>/g, ' ').toLowerCase();
@@ -279,8 +276,11 @@ Return ONLY the title text, no quotes or explanation.`,
       recommendations.push(`Article is very short (${wordCount} words). Expand significantly`);
     }
 
-    // Internal links (10 points)
-    const internalLinks = options.internalLinkCount ?? 0;
+    // Internal links (10 points) — counted directly from the actual content,
+    // same as headingStructure below, rather than an external option nothing
+    // ever supplied (this used to always read 0 regardless of real links,
+    // including links inserted by the automatic internal-linking feature).
+    const internalLinks = (content.match(/<a\s[^>]*href=["']\/news\//gi) ?? []).length;
     if (internalLinks >= 3) {
       details.internalLinks = 10;
     } else if (internalLinks >= 1) {
@@ -290,9 +290,11 @@ Return ONLY the title text, no quotes or explanation.`,
       recommendations.push('Add internal links to related content');
     }
 
-    // Image alt text (5 points)
-    const totalImages = options.imageCount ?? 0;
-    const altImages = options.imagesWithAlt ?? 0;
+    // Image alt text (5 points) — same fix as internal links above: counted
+    // from the real content instead of external options nothing ever passed.
+    const imgTags = content.match(/<img\s[^>]*>/gi) ?? [];
+    const totalImages = imgTags.length;
+    const altImages = imgTags.filter((tag) => /\salt=["'][^"']+["']/i.test(tag)).length;
     if (totalImages === 0 || altImages === totalImages) {
       details.imageAltText = 5;
     } else {

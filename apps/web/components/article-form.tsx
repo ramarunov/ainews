@@ -462,7 +462,20 @@ export function ArticleForm({ article }: { article?: Article }) {
                           onValueChange={(v) => handleSeriesChange(v ?? undefined)}
                         >
                           <SelectTrigger className="flex-1">
-                            <SelectValue placeholder="Not part of a series" />
+                            {/* Resolved from the already-loaded seriesList
+                                directly, rather than relying on Select's own
+                                item-label lookup, which only registers
+                                labels for items rendered while the popup has
+                                been opened at least once - the trigger would
+                                otherwise show the placeholder for a value
+                                that was set before this select was ever
+                                opened (e.g. an existing article's series). */}
+                            <SelectValue placeholder="Not part of a series">
+                              {(value: string) =>
+                                seriesList?.find((s) => s.id === value)?.name ||
+                                "Not part of a series"
+                              }
+                            </SelectValue>
                           </SelectTrigger>
                           <SelectContent>
                             {seriesList?.map((s) => (
