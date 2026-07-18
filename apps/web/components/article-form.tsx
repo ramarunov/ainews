@@ -7,9 +7,9 @@ import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Loader2, Upload, ImagePlus, Images, Star, Plus } from "lucide-react";
+import { Loader2, Upload, ImagePlus, Images, Star, Plus, ExternalLink } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -45,6 +45,8 @@ import { AiToolsPanel } from "@/components/ai-tools-panel";
 import { AiPipelinePanel } from "@/components/ai-pipeline-panel";
 import { MediaPickerDialog } from "@/components/media-picker-dialog";
 import { StockPhotoDialog } from "@/components/stock-photo-dialog";
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3100";
 
 const articleSchema = z.object({
   title: z.string().min(10, "Title must be at least 10 characters").max(500),
@@ -668,6 +670,17 @@ export function ArticleForm({ article }: { article?: Article }) {
             <Button type="button" onClick={onPublish} disabled={saving}>
               {saving ? "Publishing…" : "Publish"}
             </Button>
+            {article?.status === "PUBLISHED" && (
+              <a
+                href={`${SITE_URL}/news/${article.slug}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={buttonVariants({ variant: "outline" })}
+              >
+                <ExternalLink className="h-4 w-4" />
+                View article
+              </a>
+            )}
           </div>
         </div>
       </div>
