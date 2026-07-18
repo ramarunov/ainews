@@ -17,8 +17,8 @@ export function useNewsSources() {
 }
 
 export interface AutonomousPipelineUsage {
-  publishedToday: number;
-  publishedThisHour: number;
+  draftedToday: number;
+  draftedThisHour: number;
   dailyLimit: number | null;
   hourlyLimit: number | null;
 }

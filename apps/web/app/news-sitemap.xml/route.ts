@@ -1,7 +1,7 @@
 import { getPublishedArticles } from "@/lib/public-api";
+import { SITE_NAME } from "@/lib/brand";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3100";
-const SITE_NAME = "AI News CMS";
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
 
 // Escapes the five XML special characters - titles/excerpts are free-text
@@ -34,7 +34,7 @@ export async function GET() {
     <news:news>
       <news:publication>
         <news:name>${escapeXml(SITE_NAME)}</news:name>
-        <news:language>en</news:language>
+        <news:language>${escapeXml(article.language ?? "en")}</news:language>
       </news:publication>
       <news:publication_date>${new Date(article.publishedAt!).toISOString()}</news:publication_date>
       <news:title>${escapeXml(article.title)}</news:title>

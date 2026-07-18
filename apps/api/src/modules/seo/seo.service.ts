@@ -58,14 +58,25 @@ export class SeoService {
       featuredImageUrl?: string;
       author?: { displayName: string };
       publishedAt?: Date;
+      updatedAt?: Date;
     },
     siteUrl: string,
     focusKeyword?: string,
+    organization?: { name: string; logoUrl?: string | null },
   ): Promise<SeoData> {
+    // Each piece degrades independently rather than via a single Promise.all
+    // - the AI-backed meta title/description calls can fail on their own
+    // (AI services disabled, provider outage) without also losing the
+    // schema.org JSON-LD below, which needs no AI at all. Before this fix,
+    // one AI failure silently aborted the entire SEO package, meaning a
+    // fresh install with AI services off would never get structured data
+    // on any article, ever - not just a degraded meta title.
     const [metaTitle, metaDescription, schema] = await Promise.all([
-      this.generateMetaTitle(article.title, focusKeyword),
-      this.aiWriter.generateMetaDescription(article.content, focusKeyword),
-      this.generateArticleSchema(article, siteUrl),
+      this.generateMetaTitle(article.title, focusKeyword).catch(() => article.title.substring(0, 60)),
+      this.aiWriter
+        .generateMetaDescription(article.content, focusKeyword)
+        .catch(() => (article.excerpt ?? article.content.replace(/<[^>]+>/g, ' ')).trim().substring(0, 160)),
+      this.generateArticleSchema(article, siteUrl, organization),
     ]);
 
     const canonicalUrl = this.buildCanonicalUrl(siteUrl, article.slug);
@@ -122,8 +133,10 @@ Return ONLY the title text, no quotes or explanation.`,
       featuredImageUrl?: string;
       author?: { displayName: string };
       publishedAt?: Date;
+      updatedAt?: Date;
     },
     siteUrl: string,
+    organization?: { name: string; logoUrl?: string | null },
   ): Promise<object> {
     const url = this.buildCanonicalUrl(siteUrl, article.slug);
 
@@ -132,9 +145,14 @@ Return ONLY the title text, no quotes or explanation.`,
       '@type': 'NewsArticle',
       headline: article.title,
       url,
+      mainEntityOfPage: { '@type': 'WebPage', '@id': url },
       description: article.excerpt ?? '',
       datePublished: article.publishedAt?.toISOString(),
-      dateModified: new Date().toISOString(),
+      // Falls back to publishedAt when updatedAt isn't available (e.g. the
+      // manual schema/article endpoint, which has no article record) -
+      // never the moment this function happens to run, which would silently
+      // drift from the article's real edit history.
+      dateModified: (article.updatedAt ?? article.publishedAt)?.toISOString(),
       author: article.author
         ? {
             '@type': 'Person',
@@ -147,12 +165,30 @@ Return ONLY the title text, no quotes or explanation.`,
             url: article.featuredImageUrl,
           }
         : undefined,
+      publisher: organization
+        ? {
+            '@type': 'Organization',
+            name: organization.name,
+            // Points at the About/Editorial-Policy/Corrections page - the
+            // closest this codebase has to real NewsMediaOrganization-style
+            // ownership/editorial transparency without a dedicated schema.
+            url: `${siteUrl.replace(/\/$/, '')}/about`,
+            logo: organization.logoUrl
+              ? { '@type': 'ImageObject', url: organization.logoUrl }
+              : undefined,
+          }
+        : undefined,
     };
 
     // Remove undefined values
     Object.keys(schema).forEach(
       (k) => schema[k] === undefined && delete schema[k],
     );
+    if (schema.publisher) {
+      Object.keys(schema.publisher).forEach(
+        (k) => schema.publisher[k] === undefined && delete schema.publisher[k],
+      );
+    }
 
     return schema;
   }
@@ -373,7 +409,7 @@ Return ONLY the title text, no quotes or explanation.`,
   // ─── Private Helpers ──────────────────────────────────────────────────────
 
   private buildCanonicalUrl(siteUrl: string, slug: string): string {
-    return `${siteUrl.replace(/\/$/, '')}/${slug}`;
+    return `${siteUrl.replace(/\/$/, '')}/news/${slug}`;
   }
 
   // ─── Event Handlers ────────────────────────────────────────────────────────
@@ -390,11 +426,17 @@ Return ONLY the title text, no quotes or explanation.`,
         },
       });
 
-      if (!article || article.seoData) return; // Skip if SEO data already exists
+      // Deliberately NOT skipped when seoData already exists - this handler
+      // re-fires on every save that leaves an article PUBLISHED (not just
+      // the first publish), so meta tags and the NewsArticle JSON-LD (in
+      // particular dateModified) stay in sync with real edits instead of
+      // being frozen at whatever they were the moment the article first
+      // went live.
+      if (!article) return;
 
       const org = await this.prisma.organization.findUnique({
         where: { id: event.organizationId },
-        select: { settings: true },
+        select: { name: true, logoUrl: true, settings: true },
       });
 
       const siteUrl = (org?.settings as any)?.siteUrl ?? 'https://example.com';
@@ -409,8 +451,11 @@ Return ONLY the title text, no quotes or explanation.`,
           featuredImageUrl: article.featuredImageUrl ?? undefined,
           author: { displayName: article.primaryAuthor.displayName ?? 'Staff' },
           publishedAt: article.publishedAt ?? undefined,
+          updatedAt: article.updatedAt,
         },
         siteUrl,
+        undefined,
+        org ? { name: org.name, logoUrl: org.logoUrl } : undefined,
       );
 
       await this.prisma.articleSeo.upsert({

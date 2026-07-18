@@ -297,9 +297,12 @@ export interface PublicArticleSeo {
   metaTitle?: string | null;
   metaDescription?: string | null;
   canonicalUrl?: string | null;
+  robots?: string | null;
   ogTitle?: string | null;
   ogDescription?: string | null;
   ogImageUrl?: string | null;
+  twitterCard?: string | null;
+  schemaJsonld?: Record<string, unknown> | null;
 }
 
 export interface PublicAuthor {
@@ -319,6 +322,8 @@ export interface PublicArticle {
   excerpt?: string | null;
   content?: string | null;
   publishedAt?: string | null;
+  updatedAt?: string | null;
+  language?: string;
   featuredImageUrl?: string | null;
   featuredImageAlt?: string | null;
   isBreaking?: boolean;

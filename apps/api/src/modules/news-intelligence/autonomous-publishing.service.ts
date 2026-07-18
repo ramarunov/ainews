@@ -36,18 +36,25 @@ export const AUTONOMOUS_PIPELINE_SETTINGS = {
 } as const;
 
 export interface AutonomousPipelineUsage {
-  publishedToday: number;
-  publishedThisHour: number;
+  draftedToday: number;
+  draftedThisHour: number;
   dailyLimit: number | null;
   hourlyLimit: number | null;
 }
 
 /**
- * Discover -> AI rewrite -> quality-gated publish, with zero schema
+ * Discover -> AI rewrite -> quality-gate -> IN_REVIEW, with zero schema
  * migrations: reuses NewsCluster/NewsItem (discovery+clustering, already
  * built), ArticleAiAnalysis (already used for AI cost tracking), and the
  * org-scoped Setting model (same reuse pattern as the ad-widget feature)
  * for per-org opt-in config.
+ *
+ * Deliberately never auto-publishes (product decision, 2026-07-18): every
+ * article this pipeline produces lands at ArticleStatus.IN_REVIEW - the
+ * quality gate (hallucination + quality-score check) still runs and its
+ * pass/fail result still matters, but only as a priority signal for the
+ * human reviewer, never as an auto-publish trigger. A human must always
+ * take the actual publish action via the normal editor flow.
  *
  * Off by default per org (requires both `enabled` and `authorUserId`
  * settings) and inert platform-wide until an AI provider key is configured
@@ -71,7 +78,7 @@ export class AutonomousPublishingService {
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
-  async runCycle(organizationId: string): Promise<{ processed: number; published: number; flagged: number }> {
+  async runCycle(organizationId: string): Promise<{ processed: number; readyForReview: number; flagged: number }> {
     const [enabled, authorUserId, outputLanguage] = await Promise.all([
       this.settings.get(organizationId, AUTONOMOUS_PIPELINE_SETTINGS.enabled),
       this.settings.get(organizationId, AUTONOMOUS_PIPELINE_SETTINGS.authorUserId),
@@ -79,7 +86,7 @@ export class AutonomousPublishingService {
     ]);
 
     if (!enabled || !authorUserId) {
-      return { processed: 0, published: 0, flagged: 0 };
+      return { processed: 0, readyForReview: 0, flagged: 0 };
     }
 
     const providerStatus = await this.systemSettings.getAiProviderStatus();
@@ -87,30 +94,29 @@ export class AutonomousPublishingService {
       this.logger.debug(
         `Autonomous pipeline enabled for org ${organizationId} but no AI provider key is configured yet - skipping.`,
       );
-      return { processed: 0, published: 0, flagged: 0 };
+      return { processed: 0, readyForReview: 0, flagged: 0 };
     }
 
     const usage = await this.getUsageStats(organizationId);
-    const dailyRemaining = usage.dailyLimit != null ? usage.dailyLimit - usage.publishedToday : Infinity;
-    const hourlyRemaining = usage.hourlyLimit != null ? usage.hourlyLimit - usage.publishedThisHour : Infinity;
+    const dailyRemaining = usage.dailyLimit != null ? usage.dailyLimit - usage.draftedToday : Infinity;
+    const hourlyRemaining = usage.hourlyLimit != null ? usage.hourlyLimit - usage.draftedThisHour : Infinity;
     const remainingBudget = Math.min(dailyRemaining, hourlyRemaining);
 
     if (remainingBudget <= 0) {
       this.logger.debug(
-        `Autonomous pipeline for org ${organizationId} is at its publish quota (${usage.publishedToday}/${usage.dailyLimit ?? '∞'} today, ${usage.publishedThisHour}/${usage.hourlyLimit ?? '∞'} this hour) - skipping cycle.`,
+        `Autonomous pipeline for org ${organizationId} is at its drafting quota (${usage.draftedToday}/${usage.dailyLimit ?? '∞'} today, ${usage.draftedThisHour}/${usage.hourlyLimit ?? '∞'} this hour) - skipping cycle.`,
       );
-      return { processed: 0, published: 0, flagged: 0 };
+      return { processed: 0, readyForReview: 0, flagged: 0 };
     }
 
     const minSources = this.config.get<number>('AUTONOMOUS_PIPELINE_MIN_SOURCES', 1);
     const stabilizationMinutes = this.config.get<number>('AUTONOMOUS_PIPELINE_STABILIZATION_MINUTES', 20);
     const maxPerCycle = this.config.get<number>('AUTONOMOUS_PIPELINE_MAX_PER_CYCLE', 3);
-    // Cap the batch by remaining publish budget too, so a cycle never
-    // pulls more candidate clusters than it could actually publish before
-    // the next quota check - unpublishable overflow would just sit as
-    // extra IN_REVIEW load for no benefit (or, if under quota next cycle,
-    // double-count against a budget that's meant to pace publishing, not
-    // drafting).
+    // Cap the batch by remaining drafting budget too, so a cycle never pulls
+    // more candidate clusters than it could actually draft before the next
+    // quota check - overflow would just sit as extra IN_REVIEW load for no
+    // benefit (or, if under quota next cycle, double-count against a budget
+    // that's meant to pace draft creation).
     const take = Number.isFinite(remainingBudget) ? Math.min(maxPerCycle, remainingBudget) : maxPerCycle;
 
     const clusters = await this.prisma.newsCluster.findMany({
@@ -125,7 +131,7 @@ export class AutonomousPublishingService {
       include: { newsItems: { include: { source: true } } },
     });
 
-    let published = 0;
+    let readyForReview = 0;
     let flagged = 0;
 
     for (const cluster of clusters) {
@@ -148,7 +154,7 @@ export class AutonomousPublishingService {
           authorUserId as string,
           (outputLanguage as string | null) ?? undefined,
         );
-        if (outcome === 'published') published++;
+        if (outcome === 'ready_for_review') readyForReview++;
         if (outcome === 'flagged') flagged++;
       } catch (err: any) {
         this.logger.error(`Autonomous pipeline failed for cluster ${cluster.id}: ${err?.message ?? err}`);
@@ -159,11 +165,11 @@ export class AutonomousPublishingService {
 
     if (clusters.length > 0) {
       this.logger.log(
-        `Autonomous pipeline processed ${clusters.length} cluster(s) for org ${organizationId}: ${published} published, ${flagged} flagged for review`,
+        `Autonomous pipeline processed ${clusters.length} cluster(s) for org ${organizationId}: ${readyForReview} ready for review, ${flagged} flagged for review`,
       );
     }
 
-    return { processed: clusters.length, published, flagged };
+    return { processed: clusters.length, readyForReview, flagged };
   }
 
   // Read-only: powers the usage readout on the Autonomous Publishing
@@ -174,21 +180,26 @@ export class AutonomousPublishingService {
     const startOfHour = new Date(now);
     startOfHour.setUTCMinutes(0, 0, 0);
 
-    const [dailyLimitRaw, hourlyLimitRaw, publishedToday, publishedThisHour] = await Promise.all([
+    // Keyed off createdAt, not publishedAt - this pipeline never sets
+    // publishedAt itself anymore (everything lands at IN_REVIEW, a human
+    // publishes it later, possibly much later or never), so the quota has
+    // to cap how many drafts it *creates* per window, not how many it
+    // "publishes" (a concept that no longer applies to this pipeline).
+    const [dailyLimitRaw, hourlyLimitRaw, draftedToday, draftedThisHour] = await Promise.all([
       this.settings.get(organizationId, AUTONOMOUS_PIPELINE_SETTINGS.dailyLimit),
       this.settings.get(organizationId, AUTONOMOUS_PIPELINE_SETTINGS.hourlyLimit),
       this.prisma.article.count({
-        where: { organizationId, isAiAssisted: true, status: ArticleStatus.PUBLISHED, publishedAt: { gte: startOfDay } },
+        where: { organizationId, isAiAssisted: true, createdAt: { gte: startOfDay } },
       }),
       this.prisma.article.count({
-        where: { organizationId, isAiAssisted: true, status: ArticleStatus.PUBLISHED, publishedAt: { gte: startOfHour } },
+        where: { organizationId, isAiAssisted: true, createdAt: { gte: startOfHour } },
       }),
     ]);
 
     const dailyLimit = typeof dailyLimitRaw === 'number' ? dailyLimitRaw : null;
     const hourlyLimit = typeof hourlyLimitRaw === 'number' ? hourlyLimitRaw : null;
 
-    return { publishedToday, publishedThisHour, dailyLimit, hourlyLimit };
+    return { draftedToday, draftedThisHour, dailyLimit, hourlyLimit };
   }
 
   private async processCluster(
@@ -210,7 +221,7 @@ export class AutonomousPublishingService {
     organizationId: string,
     authorUserId: string,
     outputLanguage: string | undefined,
-  ): Promise<'published' | 'flagged'> {
+  ): Promise<'ready_for_review' | 'flagged'> {
     const items = [...cluster.newsItems].sort((a, b) => {
       const aTime = (a.publishedAt ?? a.fetchedAt).getTime();
       const bTime = (b.publishedAt ?? b.fetchedAt).getTime();
@@ -294,11 +305,16 @@ export class AutonomousPublishingService {
         organizationId,
       );
 
+      // Always IN_REVIEW - this pipeline never auto-publishes (product
+      // decision, 2026-07-18: Google News' 2026 publisher guidance requires
+      // AI-assisted content be human-curated, reviewed before publication).
+      // `pass` still matters as a priority signal for the reviewer, just
+      // never as a publish trigger.
       await this.articlesService.update(
         shell.id,
         {
           content,
-          status: pass ? ArticleStatus.PUBLISHED : ArticleStatus.IN_REVIEW,
+          status: ArticleStatus.IN_REVIEW,
           ...(localizedTitle && { title: localizedTitle }),
           ...(outputLanguage && { language: outputLanguage }),
           ...(attachedImage && { featuredImageId: attachedImage.id }),
@@ -316,7 +332,7 @@ export class AutonomousPublishingService {
           result: {
             hallucination,
             qualityScore,
-            decision: pass ? 'published' : 'flagged_for_review',
+            decision: pass ? 'passed_gate_pending_review' : 'flagged_for_review',
           } as unknown as Prisma.InputJsonValue,
         },
       });
@@ -325,22 +341,22 @@ export class AutonomousPublishingService {
         where: { clusterId: cluster.id },
         data: {
           articleId: shell.id,
-          status: pass ? NewsItemStatus.PUBLISHED : NewsItemStatus.DRAFTED,
+          status: NewsItemStatus.DRAFTED,
         },
       });
 
       const finalTitle = localizedTitle ?? title;
       // Fire-and-forget: a notification failure must never undo a
-      // successful publish/flag decision (this runs after every write
-      // above has already committed, unlike the try/catch's own cleanup
-      // path, which only ever deletes a shell that never got this far).
+      // successful draft/flag decision (this runs after every write above
+      // has already committed, unlike the try/catch's own cleanup path,
+      // which only ever deletes a shell that never got this far).
       this.notificationsService
         .create(
           authorUserId,
-          pass ? 'ai_article_published' : 'ai_article_flagged',
-          pass ? `AI published: ${finalTitle}` : `AI draft needs review: ${finalTitle}`,
+          pass ? 'ai_article_ready_for_review' : 'ai_article_flagged',
+          pass ? `AI draft ready for review: ${finalTitle}` : `AI draft needs review: ${finalTitle}`,
           pass
-            ? undefined
+            ? 'Passed automated fact-check and quality checks - still needs a human review before publishing.'
             : `Fact-check: ${hallucination.recommendation.replaceAll('_', ' ')}. Quality score: ${qualityScore.overall}/100.`,
           { articleId: shell.id },
         )
@@ -348,7 +364,7 @@ export class AutonomousPublishingService {
           this.logger.error(`Failed to notify ${authorUserId} about article ${shell.id}: ${err?.message ?? err}`),
         );
 
-      return pass ? 'published' : 'flagged';
+      return pass ? 'ready_for_review' : 'flagged';
     } catch (err) {
       await this.prisma.article.delete({ where: { id: shell.id } });
       throw err;

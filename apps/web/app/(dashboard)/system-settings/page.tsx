@@ -147,8 +147,8 @@ function PublishQuotaFields({
       </div>
       {enabled && usage && (
         <p className="text-xs text-muted-foreground">
-          {usage.publishedToday}{usage.dailyLimit != null ? `/${usage.dailyLimit}` : ""} published today ·{" "}
-          {usage.publishedThisHour}{usage.hourlyLimit != null ? `/${usage.hourlyLimit}` : ""} this hour
+          {usage.draftedToday}{usage.dailyLimit != null ? `/${usage.dailyLimit}` : ""} drafted today ·{" "}
+          {usage.draftedThisHour}{usage.hourlyLimit != null ? `/${usage.hourlyLimit}` : ""} this hour
         </p>
       )}
     </div>
@@ -216,11 +216,11 @@ function AutonomousPublishingCard({ aiConfigured }: { aiConfigured: boolean }) {
       <CardHeader>
         <CardTitle className="text-base">Autonomous Publishing</CardTitle>
         <CardDescription>
-          Let AI discover clustered news stories, write a new article in your
-          brand voice, and publish it automatically when it passes an
-          automatic fact-check and quality gate. Anything that doesn&apos;t
-          pass is routed to human review instead of being published blind.
-          Off by default.
+          Let AI discover clustered news stories and write a new article in
+          your brand voice — every draft lands in Review for a human to check
+          before it goes live, never published automatically. An automatic
+          fact-check and quality gate still runs on each draft, so reviewers
+          can see at a glance which ones passed. Off by default.
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-5">
@@ -248,7 +248,7 @@ function AutonomousPublishingCard({ aiConfigured }: { aiConfigured: boolean }) {
         <div className="flex flex-col gap-2 border-t pt-4">
           <Label htmlFor="autonomous-author">AI byline / author</Label>
           <p className="text-xs text-muted-foreground">
-            Autonomously published articles are attributed to this account.
+            Articles the pipeline drafts are attributed to this account.
           </p>
           <Select value={authorUserId || undefined} onValueChange={handleAuthorChange}>
             <SelectTrigger id="autonomous-author">

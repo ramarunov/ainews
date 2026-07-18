@@ -107,10 +107,15 @@ describe('SeoService', () => {
       );
 
       expect(schema['@type']).toBe('NewsArticle');
-      expect(schema.url).toBe('https://example.com/breaking-news');
+      expect(schema.url).toBe('https://example.com/news/breaking-news');
+      expect(schema.mainEntityOfPage).toEqual({
+        '@type': 'WebPage',
+        '@id': 'https://example.com/news/breaking-news',
+      });
       expect(schema.headline).toBe('Breaking News');
       expect(schema).not.toHaveProperty('author');
       expect(schema).not.toHaveProperty('image');
+      expect(schema).not.toHaveProperty('publisher');
     });
 
     it('includes the author name when an author is provided', async () => {
@@ -124,6 +129,86 @@ describe('SeoService', () => {
       );
 
       expect(schema.author).toEqual({ '@type': 'Person', name: 'Jane Doe' });
+    });
+
+    it('falls back to publishedAt for dateModified when updatedAt is not given', async () => {
+      const schema: any = await service.generateArticleSchema(
+        {
+          title: 'No Edits Yet',
+          slug: 'no-edits-yet',
+          publishedAt: new Date('2026-01-01T00:00:00.000Z'),
+        },
+        'https://example.com',
+      );
+
+      expect(schema.dateModified).toBe('2026-01-01T00:00:00.000Z');
+    });
+
+    it('prefers the real updatedAt for dateModified when the article was edited after publish', async () => {
+      const schema: any = await service.generateArticleSchema(
+        {
+          title: 'Edited Story',
+          slug: 'edited-story',
+          publishedAt: new Date('2026-01-01T00:00:00.000Z'),
+          updatedAt: new Date('2026-01-05T12:00:00.000Z'),
+        },
+        'https://example.com',
+      );
+
+      expect(schema.dateModified).toBe('2026-01-05T12:00:00.000Z');
+    });
+
+    it('includes publisher with logo when organization info is provided', async () => {
+      const schema: any = await service.generateArticleSchema(
+        { title: 'Org Story', slug: 'org-story' },
+        'https://example.com',
+        { name: 'BeritaBot.com', logoUrl: 'https://example.com/logo.png' },
+      );
+
+      expect(schema.publisher).toEqual({
+        '@type': 'Organization',
+        name: 'BeritaBot.com',
+        url: 'https://example.com/about',
+        logo: { '@type': 'ImageObject', url: 'https://example.com/logo.png' },
+      });
+    });
+
+    it('omits publisher.logo when the organization has no logoUrl, but always includes the About page url', async () => {
+      const schema: any = await service.generateArticleSchema(
+        { title: 'No Logo Story', slug: 'no-logo-story' },
+        'https://example.com',
+        { name: 'BeritaBot.com' },
+      );
+
+      expect(schema.publisher).toEqual({
+        '@type': 'Organization',
+        name: 'BeritaBot.com',
+        url: 'https://example.com/about',
+      });
+    });
+  });
+
+  describe('generateSeoData', () => {
+    it('still produces schema.org JSON-LD when the AI-backed meta title/description calls fail', async () => {
+      // A long title forces generateMetaTitle down its AI-calling branch;
+      // both AI-dependent calls are made to reject here, simulating AI
+      // services being disabled - the schema.org piece needs no AI at all
+      // and must not be lost as collateral damage.
+      const aiGateway = { prompt: jest.fn().mockRejectedValue(new Error('AI services are currently disabled')) };
+      const aiWriter = { generateMetaDescription: jest.fn().mockRejectedValue(new Error('AI services are currently disabled')) };
+      const resilientService = new SeoService(undefined as any, aiGateway as any, aiWriter as any, undefined as any);
+
+      const longTitle = 'A'.repeat(80);
+      const result = await resilientService.generateSeoData(
+        'article-1',
+        { title: longTitle, content: '<p>Real article content.</p>', excerpt: 'A short excerpt.', slug: 'long-title-story' },
+        'https://example.com',
+      );
+
+      expect((result.schemaJsonld as any)['@type']).toBe('NewsArticle');
+      expect((result.schemaJsonld as any).headline).toBe(longTitle);
+      expect(result.metaTitle).toBe(longTitle.substring(0, 60));
+      expect(result.metaDescription).toBe('A short excerpt.');
     });
   });
 });

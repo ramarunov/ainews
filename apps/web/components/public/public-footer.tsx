@@ -47,6 +47,9 @@ export function PublicFooter({
             <Link href="/search" className="w-fit text-sm hover:text-background">
               Cari Berita
             </Link>
+            <Link href="/about" className="w-fit text-sm hover:text-background">
+              Tentang Kami
+            </Link>
             <Link href="/login" className="w-fit text-sm hover:text-background">
               Login Redaksi
             </Link>

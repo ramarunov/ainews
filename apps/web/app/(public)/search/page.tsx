@@ -6,6 +6,11 @@ import { SITE_NAME } from "@/lib/brand";
 
 export const metadata: Metadata = {
   title: `Cari — ${SITE_NAME}`,
+  // On-site search results are query-driven, low-value duplicate-content
+  // pages from a crawler's perspective (Google explicitly recommends against
+  // indexing internal search results) - unlike /news, which is a genuine
+  // editorial archive and stays indexable.
+  robots: { index: false, follow: true },
 };
 
 interface Props {

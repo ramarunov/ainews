@@ -17,6 +17,7 @@ import {
   getPublishedArticles,
   resolveRedirect,
 } from "@/lib/public-api";
+import { SITE_NAME } from "@/lib/brand";
 import type { PublicSetting } from "@/lib/types";
 
 interface Props {
@@ -38,11 +39,22 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return {
     title,
     description,
+    robots: seo?.robots ?? undefined,
     alternates: seo?.canonicalUrl ? { canonical: seo.canonicalUrl } : undefined,
     openGraph: {
       title: seo?.ogTitle ?? title,
       description: seo?.ogDescription ?? description,
+      siteName: SITE_NAME,
       type: "article",
+      publishedTime: article.publishedAt ?? undefined,
+      modifiedTime: article.updatedAt ?? undefined,
+      authors: article.primaryAuthor?.displayName ? [article.primaryAuthor.displayName] : undefined,
+      images: ogImage ? [ogImage] : undefined,
+    },
+    twitter: {
+      card: (seo?.twitterCard as "summary" | "summary_large_image" | undefined) ?? "summary_large_image",
+      title: seo?.ogTitle ?? title,
+      description: seo?.ogDescription ?? description,
       images: ogImage ? [ogImage] : undefined,
     },
   };
@@ -93,6 +105,21 @@ export default async function NewsArticlePage({ params }: Props) {
 
   return (
     <article className="flex flex-col">
+      {article.seoData?.schemaJsonld && (
+        <script
+          type="application/ld+json"
+          // NewsArticle JSON-LD generated server-side by SeoService and
+          // stored verbatim on ArticleSeo.schemaJsonld - rendered as-is, not
+          // reconstructed here, so the page always matches what SeoService
+          // actually produced. `<` is escaped so a literal "</script>"
+          // inside a headline/description (user- or AI-authored content)
+          // can't prematurely close this tag - the browser's HTML parser
+          // scans for that sequence before the JSON is ever parsed.
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(article.seoData.schemaJsonld).replace(/</g, "\\u003c"),
+          }}
+        />
+      )}
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 pt-10">
         {article.primaryCategory && (
           <Link
