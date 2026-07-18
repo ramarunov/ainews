@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArticleCard } from "@/components/public/article-card";
 import { getPublishedArticles } from "@/lib/public-api";
+import { SITE_NAME } from "@/lib/brand";
 
 export const metadata: Metadata = {
-  title: "All News — Pulse Daily",
-  description: "Every published story from Pulse Daily, most recent first.",
+  title: `All News — ${SITE_NAME}`,
+  description: `Every published story from ${SITE_NAME}, most recent first.`,
 };
 
 interface Props {

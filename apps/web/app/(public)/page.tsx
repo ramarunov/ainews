@@ -2,16 +2,18 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArticleCard } from "@/components/public/article-card";
 import { BreakingNewsBanner } from "@/components/public/breaking-news-banner";
-import { TrendingList } from "@/components/public/trending-list";
+import { HomepageWidget } from "@/components/public/homepage-widget";
 import { CategoryMosaicCard } from "@/components/public/category-mosaic-card";
 import { AdSlot } from "@/components/public/ad-slot";
 import { getCategoryColors } from "@/lib/category-colors";
 import {
+  findPublicSetting,
   getCategories,
   getPublicSettings,
   getPublishedArticles,
 } from "@/lib/public-api";
-import type { PublicSetting } from "@/lib/types";
+import { SITE_NAME, SITE_TAGLINE } from "@/lib/brand";
+import type { HomepageSeoSetting, HomepageWidgetsSetting } from "@/lib/types";
 
 // Only this many categories get the full lead+grid treatment on the
 // homepage - the rest still get real visibility via the compact mosaic
@@ -20,15 +22,20 @@ import type { PublicSetting } from "@/lib/types";
 // never turns the homepage into an endless scroll of full sections.
 const FEATURED_CATEGORY_COUNT = 3;
 
-export const metadata: Metadata = {
-  title: "Pulse Daily — Independent, fast, and to the point",
-  description: "The latest breaking news, analysis, and stories from Pulse Daily.",
+const DEFAULT_HOMEPAGE_WIDGETS: HomepageWidgetsSetting = {
+  widgets: [{ type: "trending", enabled: true }],
 };
 
-function findSetting(settings: PublicSetting[], key: string) {
-  return settings.find((s) => s.key === key)?.value as
-    | { enabled?: boolean; html?: string }
-    | undefined;
+export async function generateMetadata(): Promise<Metadata> {
+  const settings = await getPublicSettings();
+  const seo = findPublicSetting<HomepageSeoSetting>(settings, "site.homepage_seo");
+
+  return {
+    title: seo?.title || `${SITE_NAME} — ${SITE_TAGLINE}`,
+    description:
+      seo?.description || `The latest breaking news, analysis, and stories from ${SITE_NAME}.`,
+    ...(seo?.ogImageUrl && { openGraph: { images: [seo.ogImageUrl] } }),
+  };
 }
 
 export default async function HomePage() {
@@ -88,7 +95,7 @@ export default async function HomePage() {
       )}
 
       <div className="mx-auto w-full max-w-6xl px-4">
-        <AdSlot value={findSetting(settings, "ads.header")} className="flex justify-center" />
+        <AdSlot value={findPublicSetting(settings, "ads.header")} className="flex justify-center" />
       </div>
 
       {latestStrip.length > 0 && (
@@ -147,8 +154,18 @@ export default async function HomePage() {
         </div>
 
         <aside className="flex flex-col gap-6">
-          <TrendingList articles={trending.data} />
-          <AdSlot value={findSetting(settings, "ads.sidebar")} />
+          {(
+            findPublicSetting<HomepageWidgetsSetting>(settings, "site.homepage_widgets") ??
+            DEFAULT_HOMEPAGE_WIDGETS
+          ).widgets.map((widget, idx) => (
+            <HomepageWidget
+              key={idx}
+              widget={widget}
+              trendingArticles={trending.data}
+              categories={categories}
+            />
+          ))}
+          <AdSlot value={findPublicSetting(settings, "ads.sidebar")} />
         </aside>
       </div>
 

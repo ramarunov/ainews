@@ -5,6 +5,7 @@ import Image from "next/image";
 import { Newspaper } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getCategoryColors } from "@/lib/category-colors";
+import { SITE_NAME } from "@/lib/brand";
 
 export function CategoryPlaceholder({
   categoryName,
@@ -26,7 +27,7 @@ export function CategoryPlaceholder({
     >
       <Newspaper className="absolute -right-3 -bottom-3 h-24 w-24 text-white/15" strokeWidth={1.5} />
       <span className="relative px-4 text-center text-sm font-black tracking-wide text-white/90 uppercase">
-        {categoryName ?? "Pulse Daily"}
+        {categoryName ?? SITE_NAME}
       </span>
     </div>
   );

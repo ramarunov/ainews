@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
@@ -20,6 +21,7 @@ import {
 } from "@/components/ui/card";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/auth-store";
+import { SITE_NAME } from "@/lib/brand";
 import type { AuthResponse } from "@/lib/types";
 
 const registerSchema = z.object({
@@ -64,7 +66,16 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="flex flex-1 items-center justify-center bg-muted/40 px-4 py-10">
+    <div className="flex flex-1 flex-col items-center justify-center gap-6 bg-muted/40 px-4 py-10">
+      <Image
+        src="/brand/logo.png"
+        alt={SITE_NAME}
+        width={1606}
+        height={433}
+        unoptimized
+        priority
+        className="h-10 w-auto"
+      />
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Register your organization</CardTitle>

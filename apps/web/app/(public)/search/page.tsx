@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import { Search as SearchIcon } from "lucide-react";
 import { ArticleCard } from "@/components/public/article-card";
 import { searchPublishedArticles } from "@/lib/public-api";
+import { SITE_NAME } from "@/lib/brand";
 
 export const metadata: Metadata = {
-  title: "Cari — Pulse Daily",
+  title: `Cari — ${SITE_NAME}`,
 };
 
 interface Props {
@@ -22,7 +23,7 @@ export default async function SearchPage({ searchParams }: Props) {
     <div className="flex flex-col gap-8">
       <div className="bg-[var(--zone)] py-10">
         <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4">
-          <h1 className="text-3xl font-black tracking-tight">Cari di Pulse Daily</h1>
+          <h1 className="text-3xl font-black tracking-tight">Cari di {SITE_NAME}</h1>
           <form method="GET" className="flex gap-2">
             <div className="relative flex-1">
               <SearchIcon className="pointer-events-none absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-muted-foreground" />

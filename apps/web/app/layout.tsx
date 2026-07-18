@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI News CMS",
-  description: "AI Native News CMS — Editorial Dashboard",
+  title: "BeritaBot CMS",
+  description: "AI Native News CMS — Editorial Dashboard for BeritaBot.com",
 };
 
 export default function RootLayout({

@@ -127,6 +127,12 @@ export async function getPublicSettings(): Promise<PublicSetting[]> {
   }
 }
 
+// Shared lookup for the array getPublicSettings() returns - every caller
+// wants one key's typed value, not the raw isPublic-flagged row list.
+export function findPublicSetting<T>(settings: PublicSetting[], key: string): T | undefined {
+  return settings.find((s) => s.key === key)?.value as T | undefined;
+}
+
 export async function getArticleComments(slug: string): Promise<CommentNode[]> {
   try {
     const res = await fetch(`${API_URL}/public/articles/${slug}/comments`, {

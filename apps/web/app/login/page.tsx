@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
@@ -20,6 +21,7 @@ import {
 } from "@/components/ui/card";
 import { apiClient, ApiError } from "@/lib/api-client";
 import { useAuthStore } from "@/lib/auth-store";
+import { SITE_NAME } from "@/lib/brand";
 import type { AuthResponse, LoginResponse } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
@@ -86,7 +88,16 @@ export default function LoginPage() {
 
   if (challengeToken) {
     return (
-      <div className="flex flex-1 items-center justify-center bg-muted/40 px-4">
+      <div className="flex flex-1 flex-col items-center justify-center gap-6 bg-muted/40 px-4">
+        <Image
+          src="/brand/logo.png"
+          alt={SITE_NAME}
+          width={1606}
+          height={433}
+          unoptimized
+          priority
+          className="h-10 w-auto"
+        />
         <Card className="w-full max-w-sm">
           <CardHeader>
             <CardTitle>Two-factor verification</CardTitle>
@@ -127,13 +138,20 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex flex-1 items-center justify-center bg-muted/40 px-4">
+    <div className="flex flex-1 flex-col items-center justify-center gap-6 bg-muted/40 px-4">
+      <Image
+        src="/brand/logo.png"
+        alt={SITE_NAME}
+        width={1606}
+        height={433}
+        unoptimized
+        priority
+        className="h-10 w-auto"
+      />
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>Sign in</CardTitle>
-          <CardDescription>
-            AI Native News CMS — editorial dashboard
-          </CardDescription>
+          <CardDescription>BeritaBot CMS — editorial dashboard</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">

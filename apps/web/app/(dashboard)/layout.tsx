@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Newspaper, FolderTree, Tags, Layers, Image as ImageIcon, Search, History, UserCircle, LogOut, ShieldCheck, KanbanSquare, Radio, BarChart3, Users, Link2, KeyRound, CalendarDays, Webhook, MessageSquare } from "lucide-react";
+import { Newspaper, FolderTree, Tags, Layers, Image as ImageIcon, Search, History, UserCircle, LogOut, ShieldCheck, Globe, KanbanSquare, Radio, BarChart3, Users, Link2, KeyRound, CalendarDays, Webhook, MessageSquare } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notification-bell";
 import { hasPermission, useAuthStore } from "@/lib/auth-store";
 import { cn } from "@/lib/utils";
+import { SITE_NAME } from "@/lib/brand";
 
 const navItems = [
   { href: "/articles", label: "Articles", icon: Newspaper },
@@ -51,8 +53,15 @@ export default function DashboardLayout({
       <aside className="flex w-64 flex-col border-r bg-muted/20">
         <div className="flex items-center justify-between gap-2 border-b px-6 py-4">
           <div className="min-w-0">
-            <p className="font-semibold">AI News CMS</p>
-            <p className="truncate text-xs text-muted-foreground">
+            <Image
+              src="/brand/logo.png"
+              alt={SITE_NAME}
+              width={1606}
+              height={433}
+              unoptimized
+              className="h-7 w-auto"
+            />
+            <p className="mt-1 truncate text-xs text-muted-foreground">
               {user?.displayName ?? user?.email}
             </p>
           </div>
@@ -202,6 +211,18 @@ export default function DashboardLayout({
             >
               <ShieldCheck className="h-4 w-4" />
               System Settings
+            </Link>
+          )}
+          {user?.isSuperadmin && (
+            <Link
+              href="/site-settings"
+              className={cn(
+                "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-muted",
+                pathname.startsWith("/site-settings") && "bg-muted text-foreground",
+              )}
+            >
+              <Globe className="h-4 w-4" />
+              Site Settings
             </Link>
           )}
         </nav>

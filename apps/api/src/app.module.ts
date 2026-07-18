@@ -43,6 +43,7 @@ import { NewsIntelligenceModule } from './modules/news-intelligence/news-intelli
 import { CommentsModule } from './modules/comments/comments.module';
 import { AuditModule } from './modules/audit/audit.module';
 import { SystemSettingsModule } from './modules/system-settings/system-settings.module';
+import { SiteSettingsModule } from './modules/site-settings/site-settings.module';
 import { PublicSiteModule } from './modules/public-site/public-site.module';
 import { MetricsModule } from './modules/metrics/metrics.module';
 import { BackupModule } from './modules/backup/backup.module';
@@ -178,6 +179,7 @@ import { MetricsInterceptor } from './modules/metrics/metrics.interceptor';
     WebhooksModule,
     HealthModule,
     SystemSettingsModule,
+    SiteSettingsModule,
     PublicSiteModule,
     MetricsModule,
     BackupModule,

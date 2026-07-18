@@ -53,6 +53,44 @@ export interface MediaProviderStatus {
   pexels: boolean;
 }
 
+export interface FooterLink {
+  label: string;
+  url: string;
+}
+
+export interface SiteFooterSetting {
+  description?: string;
+  links: FooterLink[];
+}
+
+export type HomepageWidgetType = "trending" | "categories" | "custom_html";
+
+export interface HomepageWidget {
+  type: HomepageWidgetType;
+  enabled: boolean;
+  html?: string;
+}
+
+export interface HomepageWidgetsSetting {
+  widgets: HomepageWidget[];
+}
+
+export interface HomepageSeoSetting {
+  title?: string;
+  description?: string;
+  ogImageUrl?: string;
+}
+
+export interface ScriptSlot {
+  enabled: boolean;
+  html: string;
+}
+
+export interface CustomScriptsSetting {
+  header: ScriptSlot;
+  footer: ScriptSlot;
+}
+
 export interface StockPhotoResult {
   id: string;
   thumbnailUrl: string;

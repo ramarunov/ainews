@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ArticleCard } from "@/components/public/article-card";
 import { getAuthorProfile, getPublishedArticles } from "@/lib/public-api";
+import { SITE_NAME } from "@/lib/brand";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -13,8 +14,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const author = await getAuthorProfile(id);
   if (!author) return {};
   return {
-    title: `${author.displayName ?? "Author"} — Pulse Daily`,
-    description: author.bio ?? `Articles by ${author.displayName} on Pulse Daily.`,
+    title: `${author.displayName ?? "Author"} — ${SITE_NAME}`,
+    description: author.bio ?? `Articles by ${author.displayName} on ${SITE_NAME}.`,
   };
 }
 

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ArticleStatus } from '@prisma/client';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { getPublicSiteOrgId } from '../../common/config/public-site-org.util';
 import { ArticlesService } from '../articles/articles.service';
 import { CategoriesService } from '../categories/categories.service';
 import { SearchService } from '../search/search.service';
@@ -28,11 +29,7 @@ export class PublicSiteService {
    * published content is public; which one is a deploy-time config choice.
    */
   getPublicOrgId(): string {
-    const orgId = this.config.get<string>('PUBLIC_SITE_ORG_ID', '');
-    if (!orgId) {
-      throw new NotFoundException('Public site is not configured');
-    }
-    return orgId;
+    return getPublicSiteOrgId(this.config);
   }
 
   async listPublished(query: PublicArticlesQueryDto) {

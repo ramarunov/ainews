@@ -2,11 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import Image from "next/image";
 import Link from "next/link";
 import { Menu, Search, X } from "lucide-react";
 import type { Category, PublicArticle } from "@/lib/types";
 import { getCategoryColors } from "@/lib/category-colors";
 import { getPublishedArticles } from "@/lib/public-api";
+import { SITE_NAME } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 import { CategoryMegaPanel } from "./category-mega-panel";
 
@@ -135,8 +137,16 @@ export function PublicHeader({
           >
             {menuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
           </button>
-          <Link href="/" className="text-2xl font-black tracking-tight">
-            Pulse<span className="text-primary">Daily</span>
+          <Link href="/" className="flex items-center">
+            <Image
+              src="/brand/logo.png"
+              alt={SITE_NAME}
+              width={1606}
+              height={433}
+              unoptimized
+              priority
+              className="h-9 w-auto"
+            />
           </Link>
         </div>
 

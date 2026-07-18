@@ -6,6 +6,7 @@ import { ArticleCard } from "@/components/public/article-card";
 import { TrendingList } from "@/components/public/trending-list";
 import { getCategoryColors } from "@/lib/category-colors";
 import { getCategoryBySlug, getPublishedArticles } from "@/lib/public-api";
+import { SITE_NAME } from "@/lib/brand";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -17,8 +18,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const category = await getCategoryBySlug(slug);
   if (!category) return {};
   return {
-    title: `${category.name} — Pulse Daily`,
-    description: category.description ?? `Latest ${category.name} stories from Pulse Daily.`,
+    title: `${category.name} — ${SITE_NAME}`,
+    description: category.description ?? `Latest ${category.name} stories from ${SITE_NAME}.`,
   };
 }
 
