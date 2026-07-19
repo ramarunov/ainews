@@ -125,6 +125,33 @@ describe('StockPhotoService', () => {
       );
       expect(mediaService.upload).not.toHaveBeenCalled();
     });
+
+    it('rejects a non-Pexels URL without ever fetching it (SSRF guard)', async () => {
+      const maliciousResult = { ...result, fullUrl: 'http://169.254.169.254/latest/meta-data/' };
+
+      await expect(
+        service.downloadAndAttach(maliciousResult, 'user-1', 'org-1'),
+      ).rejects.toThrow(BadRequestException);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('rejects a plain-http Pexels-hostname URL (protocol downgrade attempt)', async () => {
+      const httpResult = { ...result, fullUrl: 'http://images.pexels.com/photos/123/large2x.jpg' };
+
+      await expect(service.downloadAndAttach(httpResult, 'user-1', 'org-1')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('rejects a lookalike host that merely contains "pexels.com"', async () => {
+      const lookalike = { ...result, fullUrl: 'https://images.pexels.com.evil.example/x.jpg' };
+
+      await expect(service.downloadAndAttach(lookalike, 'user-1', 'org-1')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
   });
 
   describe('autoAttachForQuery', () => {

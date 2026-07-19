@@ -3,6 +3,7 @@ import { JSDOM } from 'jsdom';
 import { Readability } from '@mozilla/readability';
 
 import { sanitizeArticleHtml } from '../../common/sanitize-html';
+import { assertPublicHttpUrl } from '../../common/ssrf-guard';
 
 const FETCH_TIMEOUT_MS = 10_000;
 const USER_AGENT =
@@ -41,6 +42,17 @@ export class ArticleExtractionService {
   // body out of the surrounding page chrome. Returns null on any failure
   // so callers can fall back to the original RSS-provided snippet.
   async extractFromUrl(url: string): Promise<ExtractedArticle | null> {
+    try {
+      // This URL comes from an RSS feed (or an AI-resolved redirect) - an
+      // org admin who can add a news source, or a compromised/malicious
+      // feed, could otherwise steer this server-side fetch at an internal
+      // address. Checked per call, not once at startup, since DNS can change.
+      await assertPublicHttpUrl(url);
+    } catch (err: any) {
+      this.logger.warn(`Refusing to extract from ${url}: ${err?.message ?? err}`);
+      return null;
+    }
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 

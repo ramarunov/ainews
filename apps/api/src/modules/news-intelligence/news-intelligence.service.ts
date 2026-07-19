@@ -9,6 +9,7 @@ import slugify from 'slugify';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { sanitizeArticleHtml } from '../../common/sanitize-html';
+import { assertPublicHttpUrl } from '../../common/ssrf-guard';
 import {
   CreateNewsSourceDto,
   UpdateNewsSourceDto,
@@ -152,6 +153,14 @@ export class NewsIntelligenceService {
     let itemsSkipped = 0;
 
     try {
+      // source.url is set by whoever has news:manage-sources - without this
+      // check, pointing a source at an internal address would make the
+      // server fetch it via rss-parser, the same SSRF class as
+      // ArticleExtractionService.extractFromUrl. Handled by the catch
+      // below like any other feed-fetch failure (recorded on the source,
+      // doesn't crash the sweep).
+      await assertPublicHttpUrl(source.url);
+
       const parser = new Parser();
       const feed = await parser.parseURL(source.url);
       itemsFound = feed.items?.length ?? 0;

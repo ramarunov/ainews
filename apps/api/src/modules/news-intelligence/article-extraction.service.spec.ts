@@ -10,6 +10,15 @@ import { TextEncoder, TextDecoder } from 'node:util';
 (global as any).TextEncoder = (global as any).TextEncoder || TextEncoder;
 (global as any).TextDecoder = (global as any).TextDecoder || TextDecoder;
 
+// The SSRF guard resolves DNS for every URL before fetching it - mocked so
+// these tests stay fast/offline/deterministic instead of depending on real
+// DNS resolution for example.com. Defaults to a public address; the SSRF
+// test below overrides it per-call to simulate a private-IP result.
+jest.mock('node:dns/promises', () => ({
+  lookup: jest.fn().mockResolvedValue({ address: '93.184.216.34', family: 4 }),
+}));
+
+import { lookup } from 'node:dns/promises';
 import { ArticleExtractionService } from './article-extraction.service';
 
 describe('ArticleExtractionService', () => {
@@ -18,6 +27,7 @@ describe('ArticleExtractionService', () => {
   beforeEach(() => {
     service = new ArticleExtractionService();
     (global as any).fetch = jest.fn();
+    (lookup as jest.Mock).mockResolvedValue({ address: '93.184.216.34', family: 4 });
   });
 
   afterEach(() => {
@@ -97,6 +107,15 @@ describe('ArticleExtractionService', () => {
       const result = await service.extractFromUrl('https://example.com/unreachable');
 
       expect(result).toBeNull();
+    });
+
+    it('refuses to fetch (and returns null) when the URL resolves to a private/internal address', async () => {
+      (lookup as jest.Mock).mockResolvedValue({ address: '169.254.169.254', family: 4 });
+
+      const result = await service.extractFromUrl('https://sneaky.example/feed');
+
+      expect(result).toBeNull();
+      expect(global.fetch).not.toHaveBeenCalled();
     });
 
     it('returns null when Readability finds nothing article-like', async () => {

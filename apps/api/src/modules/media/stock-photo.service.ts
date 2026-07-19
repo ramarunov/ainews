@@ -28,6 +28,27 @@ interface PexelsPhoto {
 
 const PEXELS_SEARCH_URL = 'https://api.pexels.com/v1/search';
 
+// downloadAndAttach() is reachable directly via POST /media/stock-photos/attach
+// with a client-supplied fullUrl (@IsUrl() alone only checks it's a
+// well-formed URL, not that it's actually a Pexels one) - without this
+// allowlist, an authenticated media:write user could make the server fetch
+// an arbitrary internal address (e.g. a cloud metadata endpoint) and the
+// response would be stored as a viewable MediaFile. Pexels always serves
+// photo assets from this CDN host.
+const ALLOWED_PHOTO_HOSTS = new Set(['images.pexels.com']);
+
+function assertAllowedPhotoUrl(rawUrl: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new BadRequestException('Invalid photo URL');
+  }
+  if (parsed.protocol !== 'https:' || !ALLOWED_PHOTO_HOSTS.has(parsed.hostname)) {
+    throw new BadRequestException('Photo URL must be an https://images.pexels.com link');
+  }
+}
+
 /**
  * Sources real (not AI-generated) photos for article featured images via
  * the Pexels API - see the discussion in this session for why: an
@@ -95,6 +116,7 @@ export class StockPhotoService {
     uploaderId: string,
     organizationId: string,
   ) {
+    assertAllowedPhotoUrl(result.fullUrl);
     const res = await fetch(result.fullUrl);
     if (!res.ok) {
       throw new BadRequestException(`Failed to download the selected photo (${res.status})`);
