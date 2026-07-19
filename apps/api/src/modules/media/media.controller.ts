@@ -25,6 +25,7 @@ import {
 } from '@nestjs/swagger';
 
 import { MediaService } from './media.service';
+import { MEDIA_MAX_UPLOAD_BYTES } from './media.constants';
 import { StockPhotoService } from './stock-photo.service';
 import {
   UpdateMediaDto,
@@ -68,7 +69,7 @@ export class MediaController {
 
   @Post('upload')
   @RequirePermissions('media:write')
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MEDIA_MAX_UPLOAD_BYTES } }))
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {

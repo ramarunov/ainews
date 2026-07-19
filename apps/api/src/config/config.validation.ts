@@ -81,4 +81,6 @@ export const configValidationSchema = Joi.object({
 
   RATE_LIMIT_WINDOW_MS: Joi.number().default(60000),
   RATE_LIMIT_MAX_REQUESTS: Joi.number().default(100),
+
+  MEDIA_MAX_UPLOAD_MB: Joi.number().default(25),
 });

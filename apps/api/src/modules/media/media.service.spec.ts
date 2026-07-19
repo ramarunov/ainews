@@ -5,7 +5,12 @@ jest.mock('sharp', () => {
   return jest.fn();
 });
 
+jest.mock('file-type', () => ({
+  fromBuffer: jest.fn(),
+}));
+
 import sharp from 'sharp';
+import { fromBuffer } from 'file-type';
 
 describe('MediaService', () => {
   let service: MediaService;
@@ -25,6 +30,10 @@ describe('MediaService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Matches baseFile()'s claimed 'image/png' by default — individual
+    // tests override this to simulate a mismatch between the claimed
+    // mimetype and the file's real sniffed content.
+    (fromBuffer as jest.Mock).mockResolvedValue({ ext: 'png', mime: 'image/png' });
 
     prisma = {
       mediaFile: {
@@ -52,13 +61,53 @@ describe('MediaService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('rejects an unsupported mime type', async () => {
-      const file = baseFile({ mimetype: 'text/x-executable' });
+    it('rejects a file whose real (sniffed) content type is unsupported', async () => {
+      (fromBuffer as jest.Mock).mockResolvedValue({ ext: 'exe', mime: 'application/x-msdownload' });
+      const file = baseFile();
 
       await expect(service.upload(file, 'user-1', 'org-1', {})).rejects.toThrow(
         BadRequestException,
       );
       expect(storageService.upload).not.toHaveBeenCalled();
+    });
+
+    it('rejects a file whose content type cannot be recognized at all', async () => {
+      (fromBuffer as jest.Mock).mockResolvedValue(undefined);
+      const file = baseFile();
+
+      await expect(service.upload(file, 'user-1', 'org-1', {})).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(storageService.upload).not.toHaveBeenCalled();
+    });
+
+    it('rejects based on the real sniffed content even when the client claims an allowed mimetype', async () => {
+      // The classic disguised-upload attack: claim "image/png" in the
+      // multipart Content-Type while the actual bytes are something else
+      // entirely - the claimed mimetype must never be trusted on its own.
+      (fromBuffer as jest.Mock).mockResolvedValue({ ext: 'html', mime: 'text/html' });
+      const file = baseFile({ mimetype: 'image/png' });
+
+      await expect(service.upload(file, 'user-1', 'org-1', {})).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(storageService.upload).not.toHaveBeenCalled();
+    });
+
+    it('stores the sniffed content type, not the client-claimed one, when they differ', async () => {
+      (fromBuffer as jest.Mock).mockResolvedValue({ ext: 'pdf', mime: 'application/pdf' });
+      prisma.mediaFile.create.mockResolvedValue({ id: 'media-4' });
+
+      const file = baseFile({ mimetype: 'image/png', originalname: 'doc.pdf' });
+      await service.upload(file, 'user-1', 'org-1', {});
+
+      expect(storageService.upload).toHaveBeenCalledWith(
+        file.buffer,
+        expect.objectContaining({ contentType: 'application/pdf' }),
+      );
+      expect(prisma.mediaFile.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ mimeType: 'application/pdf' }) }),
+      );
     });
 
     it('generates a thumbnail variant for a valid image and stores the record', async () => {
@@ -124,6 +173,7 @@ describe('MediaService', () => {
     });
 
     it('skips image processing entirely for non-image uploads', async () => {
+      (fromBuffer as jest.Mock).mockResolvedValue({ ext: 'pdf', mime: 'application/pdf' });
       prisma.mediaFile.create.mockResolvedValue({ id: 'media-3' });
 
       const file = baseFile({ mimetype: 'application/pdf', originalname: 'doc.pdf' });

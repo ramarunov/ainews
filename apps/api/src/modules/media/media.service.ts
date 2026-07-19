@@ -3,13 +3,32 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
 import { basename, extname } from 'path';
 import sharp from 'sharp';
+import { fromBuffer } from 'file-type';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { StorageService } from '../../infrastructure/storage/storage.service';
 import { AIWriterService } from '../ai/ai-writer.service';
 import { UpdateMediaDto, MediaQueryDto } from './dto/media.dto';
 
-const ALLOWED_MIME_PREFIXES = ['image/', 'video/', 'application/', 'audio/'];
+// An explicit allowlist, not just the 4 broad families the media library
+// organizes uploads into (image/video/audio/application) - "application/*"
+// on its own would just as happily admit a real .exe or shell script as a
+// PDF, since they're indistinguishable by top-level MIME family alone.
+// Magic-byte sniffing only closes the security gap if it's checked against
+// concrete types, not a family prefix wide enough to defeat the point.
+const ALLOWED_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+  'audio/mpeg',
+  'audio/wav',
+  'audio/ogg',
+  'application/pdf',
+]);
 
 @Injectable()
 export class MediaService {
@@ -32,12 +51,24 @@ export class MediaService {
       throw new BadRequestException('No file provided');
     }
 
-    if (!ALLOWED_MIME_PREFIXES.some((prefix) => file.mimetype.startsWith(prefix))) {
-      throw new BadRequestException(`Unsupported file type: ${file.mimetype}`);
+    // `file.mimetype` is only the client-supplied multipart Content-Type
+    // header for this part - trivially spoofable, since any file can be
+    // uploaded labeled "image/jpeg" regardless of its real content. Sniff
+    // the actual format from the file's magic bytes and treat that as
+    // authoritative for both the accept/reject decision and what gets
+    // stored, rather than trusting the client's claim (a mismatch here is
+    // exactly how a disguised executable/HTML-with-script upload would try
+    // to slip past a naive mimetype-string check).
+    const detected = await fromBuffer(file.buffer);
+    if (!detected || !ALLOWED_MIME_TYPES.has(detected.mime)) {
+      throw new BadRequestException(
+        detected ? `Unsupported file type: ${detected.mime}` : 'Unrecognized or unsupported file type',
+      );
     }
+    const mimeType = detected.mime;
 
     const folder = meta.folder ?? 'media';
-    const isImage = file.mimetype.startsWith('image/');
+    const isImage = mimeType.startsWith('image/');
 
     let width: number | undefined;
     let height: number | undefined;
@@ -70,7 +101,7 @@ export class MediaService {
     const original = await this.storageService.upload(file.buffer, {
       folder,
       filename: file.originalname,
-      contentType: file.mimetype,
+      contentType: mimeType,
       organizationId,
     });
 
@@ -80,7 +111,7 @@ export class MediaService {
         uploadedBy: uploaderId,
         filename: basename(original.key),
         originalName: file.originalname,
-        mimeType: file.mimetype,
+        mimeType,
         fileSize: BigInt(file.size),
         storageKey: original.key,
         storageBucket: original.bucket,
