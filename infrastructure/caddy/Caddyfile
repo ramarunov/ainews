@@ -5,7 +5,10 @@
 #
 # See docs/DEPLOY.md for the full setup this plugs into.
 
-app.beritabot.com {
+# Both hosts point at the same web app - proxy.ts (apps/web/proxy.ts) is
+# what actually keeps the reader-facing pages on the apex domain and
+# redirects everything else to app.beritabot.com.
+beritabot.com, app.beritabot.com {
 	reverse_proxy web:3100
 }
 
