@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -35,10 +35,18 @@ type LoginForm = z.infer<typeof loginSchema>;
 export default function LoginPage() {
   const router = useRouter();
   const setSession = useAuthStore((s) => s.setSession);
+  const accessToken = useAuthStore((s) => s.accessToken);
   const { data: branding } = usePublicBranding();
   const [submitting, setSubmitting] = useState(false);
   const [challengeToken, setChallengeToken] = useState<string | null>(null);
   const [mfaCode, setMfaCode] = useState("");
+
+  // Reaching /login with a session already active (e.g. the public site's
+  // "Login Redaksi" link, which has no way to know that without checking
+  // this) should land in the dashboard, not show the login form again.
+  useEffect(() => {
+    if (accessToken) router.replace("/articles");
+  }, [accessToken, router]);
 
   const {
     register,

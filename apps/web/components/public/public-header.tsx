@@ -11,6 +11,7 @@ import { getPublishedArticles } from "@/lib/public-api";
 import { SITE_NAME } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 import { CategoryMegaPanel } from "./category-mega-panel";
+import { LoginLink } from "./login-link";
 
 // How long the cursor must stay over a category link before its mega menu
 // opens/its preview articles are fetched — avoids firing a request (and a
@@ -121,9 +122,7 @@ export function PublicHeader({
             <Link href="/search" className="hover:text-background">
               Bantuan
             </Link>
-            <Link href="/login" className="hover:text-background">
-              Login Redaksi
-            </Link>
+            <LoginLink className="hover:text-background" />
           </div>
         </div>
       </div>

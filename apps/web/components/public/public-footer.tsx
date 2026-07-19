@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Category, SiteFooterSetting } from "@/lib/types";
 import { getCategoryColors } from "@/lib/category-colors";
 import { SITE_NAME, SITE_TAGLINE } from "@/lib/brand";
+import { LoginLink } from "./login-link";
 
 export function PublicFooter({
   categories,
@@ -50,9 +51,7 @@ export function PublicFooter({
             <Link href="/about" className="w-fit text-sm hover:text-background">
               Tentang Kami
             </Link>
-            <Link href="/login" className="w-fit text-sm hover:text-background">
-              Login Redaksi
-            </Link>
+            <LoginLink className="w-fit text-sm hover:text-background" />
             {customLinks.map((link, idx) => (
               <Link key={idx} href={link.url} className="w-fit text-sm hover:text-background">
                 {link.label}
