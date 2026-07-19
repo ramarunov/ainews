@@ -4,6 +4,7 @@ import {
   AI_PROVIDER_SETTING_KEYS,
   AI_SERVICES_ENABLED_KEY,
   MEDIA_PROVIDER_SETTING_KEYS,
+  TELEGRAM_SETTING_KEYS,
 } from './system-settings.constants';
 
 describe('SystemSettingsService', () => {
@@ -109,6 +110,67 @@ describe('SystemSettingsService', () => {
 
       await expect(service.getDecryptedValue('ai.openai_api_key')).resolves.toBe(
         'sk-round-trip',
+      );
+    });
+  });
+
+  describe('getTelegramStatus', () => {
+    it('is unconfigured until both the bot token and chat id rows exist', async () => {
+      prisma.systemSetting.findMany.mockResolvedValue([
+        { key: TELEGRAM_SETTING_KEYS.botToken, value: 'irrelevant-encrypted-value' },
+      ]);
+
+      expect(await service.getTelegramStatus()).toEqual({ configured: false, chatId: null });
+    });
+
+    it('reports configured and the (non-secret) chat id once both are set', async () => {
+      prisma.systemSetting.findMany.mockResolvedValue([
+        { key: TELEGRAM_SETTING_KEYS.botToken, value: 'irrelevant-encrypted-value' },
+        { key: TELEGRAM_SETTING_KEYS.chatId, value: '@my-news-channel' },
+      ]);
+
+      expect(await service.getTelegramStatus()).toEqual({
+        configured: true,
+        chatId: '@my-news-channel',
+      });
+    });
+  });
+
+  describe('updateTelegramSettings', () => {
+    it('encrypts the bot token but stores the chat id as plain text', async () => {
+      prisma.systemSetting.upsert.mockResolvedValue({});
+      prisma.systemSetting.findMany.mockResolvedValue([
+        { key: TELEGRAM_SETTING_KEYS.botToken },
+        { key: TELEGRAM_SETTING_KEYS.chatId, value: '@my-news-channel' },
+      ]);
+
+      await service.updateTelegramSettings(
+        { botToken: '123456:real-bot-token', chatId: '@my-news-channel' },
+        'user-1',
+      );
+
+      expect(prisma.systemSetting.upsert).toHaveBeenCalledTimes(2);
+      const tokenCall = prisma.systemSetting.upsert.mock.calls.find(
+        (c: any) => c[0].where.key === TELEGRAM_SETTING_KEYS.botToken,
+      )[0];
+      expect(tokenCall.create.value).not.toBe('123456:real-bot-token');
+      expect(encryption.decrypt(tokenCall.create.value)).toBe('123456:real-bot-token');
+
+      const chatIdCall = prisma.systemSetting.upsert.mock.calls.find(
+        (c: any) => c[0].where.key === TELEGRAM_SETTING_KEYS.chatId,
+      )[0];
+      expect(chatIdCall.create.value).toBe('@my-news-channel');
+    });
+
+    it('only touches the field that was actually provided', async () => {
+      prisma.systemSetting.upsert.mockResolvedValue({});
+      prisma.systemSetting.findMany.mockResolvedValue([]);
+
+      await service.updateTelegramSettings({ chatId: '@only-this' }, 'user-1');
+
+      expect(prisma.systemSetting.upsert).toHaveBeenCalledTimes(1);
+      expect(prisma.systemSetting.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { key: TELEGRAM_SETTING_KEYS.chatId } }),
       );
     });
   });

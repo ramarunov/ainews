@@ -53,6 +53,11 @@ export interface MediaProviderStatus {
   pexels: boolean;
 }
 
+export interface TelegramStatus {
+  configured: boolean;
+  chatId: string | null;
+}
+
 export interface FooterLink {
   label: string;
   url: string;

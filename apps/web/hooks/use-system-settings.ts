@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
-import type { AiProviderStatus, MediaProviderStatus } from "@/lib/types";
+import type { AiProviderStatus, MediaProviderStatus, TelegramStatus } from "@/lib/types";
 
 export interface UpdateAiProviderKeysInput {
   openaiApiKey?: string;
@@ -10,6 +10,11 @@ export interface UpdateAiProviderKeysInput {
 
 export interface UpdateMediaProviderKeysInput {
   pexelsApiKey?: string;
+}
+
+export interface UpdateTelegramSettingsInput {
+  botToken?: string;
+  chatId?: string;
 }
 
 export function useMediaProviderStatus(enabled = true) {
@@ -65,6 +70,25 @@ export function useSetAiServicesEnabled() {
       apiClient.put<{ enabled: boolean }>("/system-settings/ai-services-enabled", { enabled }),
     onSuccess: (data) => {
       queryClient.setQueryData(["system-settings", "ai-services-enabled"], data);
+    },
+  });
+}
+
+export function useTelegramStatus(enabled = true) {
+  return useQuery({
+    queryKey: ["system-settings", "telegram"],
+    queryFn: () => apiClient.get<TelegramStatus>("/system-settings/telegram"),
+    enabled,
+  });
+}
+
+export function useUpdateTelegramSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateTelegramSettingsInput) =>
+      apiClient.put<TelegramStatus>("/system-settings/telegram", input),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["system-settings", "telegram"], data);
     },
   });
 }

@@ -6,6 +6,7 @@ import {
   UpdateAiProviderKeysDto,
   SetAiServicesEnabledDto,
   UpdateMediaProviderKeysDto,
+  UpdateTelegramSettingsDto,
 } from './dto/system-settings.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { SuperadminGuard } from '../../common/guards/superadmin.guard';
@@ -55,5 +56,17 @@ export class SystemSettingsController {
   @ApiOperation({ summary: 'Set platform-wide media provider API keys, e.g. Pexels (superadmin only)' })
   updateMediaProviderKeys(@Body() dto: UpdateMediaProviderKeysDto, @CurrentUser() user: any) {
     return this.systemSettingsService.updateMediaProviderKeys(dto, user.id);
+  }
+
+  @Get('telegram')
+  @ApiOperation({ summary: 'Whether the Telegram publish-notification bot is configured (superadmin only)' })
+  getTelegramStatus() {
+    return this.systemSettingsService.getTelegramStatus();
+  }
+
+  @Put('telegram')
+  @ApiOperation({ summary: 'Set the Telegram bot token and destination channel (superadmin only)' })
+  updateTelegramSettings(@Body() dto: UpdateTelegramSettingsDto, @CurrentUser() user: any) {
+    return this.systemSettingsService.updateTelegramSettings(dto, user.id);
   }
 }

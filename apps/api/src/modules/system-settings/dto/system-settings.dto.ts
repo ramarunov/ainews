@@ -34,3 +34,17 @@ export class UpdateMediaProviderKeysDto {
   @MinLength(1)
   pexelsApiKey?: string;
 }
+
+export class UpdateTelegramSettingsDto {
+  @ApiProperty({ required: false, description: 'Leave unset to keep the current value' })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  botToken?: string;
+
+  @ApiProperty({ required: false, description: 'Channel to post to, e.g. @channelname or a numeric chat id. Leave unset to keep the current value' })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  chatId?: string;
+}

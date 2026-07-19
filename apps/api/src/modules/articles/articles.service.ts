@@ -384,6 +384,7 @@ export class ArticlesService {
         articleId: id,
         organizationId,
         slug: updated.slug,
+        isFirstPublish,
       });
     }
 

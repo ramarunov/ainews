@@ -18,6 +18,14 @@ export const MEDIA_PROVIDER_SETTING_KEYS = {
 
 export type MediaProviderKeyField = keyof typeof MEDIA_PROVIDER_SETTING_KEYS;
 
+// Bot token is a real secret (encrypted like the AI/media provider keys
+// above); chat_id isn't a secret (it's just an identifier of which channel
+// to post to) but is stored the same way for a single read/write path.
+export const TELEGRAM_SETTING_KEYS = {
+  botToken: 'telegram.bot_token',
+  chatId: 'telegram.chat_id',
+} as const;
+
 // Platform-wide emergency kill switch — every AI call path (autonomous
 // pipeline, manual AI Tools, clustering entity extraction, alt-text
 // generation, GEO scoring) ultimately goes through AIGatewayService.complete(),

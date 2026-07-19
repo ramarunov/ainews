@@ -2,13 +2,18 @@ import { Injectable } from '@nestjs/common';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { EncryptionService } from '../../common/crypto/encryption.service';
-import { UpdateAiProviderKeysDto, UpdateMediaProviderKeysDto } from './dto/system-settings.dto';
+import {
+  UpdateAiProviderKeysDto,
+  UpdateMediaProviderKeysDto,
+  UpdateTelegramSettingsDto,
+} from './dto/system-settings.dto';
 import {
   AI_PROVIDER_SETTING_KEYS,
   AI_SERVICES_ENABLED_KEY,
   AiProviderKeyField,
   MEDIA_PROVIDER_SETTING_KEYS,
   MediaProviderKeyField,
+  TELEGRAM_SETTING_KEYS,
 } from './system-settings.constants';
 
 @Injectable()
@@ -92,6 +97,40 @@ export class SystemSettingsService {
     if (!row) return null;
 
     return this.encryption.decrypt(row.value);
+  }
+
+  /** Whether Telegram is configured, and the (non-secret) chat id — never the bot token itself. */
+  async getTelegramStatus() {
+    const rows = await this.prisma.systemSetting.findMany({
+      where: { key: { in: Object.values(TELEGRAM_SETTING_KEYS) } },
+    });
+    const byKey = new Map(rows.map((r) => [r.key, r.value]));
+
+    return {
+      configured: byKey.has(TELEGRAM_SETTING_KEYS.botToken) && byKey.has(TELEGRAM_SETTING_KEYS.chatId),
+      chatId: byKey.get(TELEGRAM_SETTING_KEYS.chatId) ?? null,
+    };
+  }
+
+  async updateTelegramSettings(dto: UpdateTelegramSettingsDto, updatedBy: string) {
+    if (dto.botToken !== undefined) {
+      const encrypted = this.encryption.encrypt(dto.botToken);
+      await this.prisma.systemSetting.upsert({
+        where: { key: TELEGRAM_SETTING_KEYS.botToken },
+        create: { key: TELEGRAM_SETTING_KEYS.botToken, value: encrypted, updatedBy },
+        update: { value: encrypted, updatedBy },
+      });
+    }
+    if (dto.chatId !== undefined) {
+      // Not a secret - stored as plain text, same reasoning as AI_SERVICES_ENABLED_KEY.
+      await this.prisma.systemSetting.upsert({
+        where: { key: TELEGRAM_SETTING_KEYS.chatId },
+        create: { key: TELEGRAM_SETTING_KEYS.chatId, value: dto.chatId, updatedBy },
+        update: { value: dto.chatId, updatedBy },
+      });
+    }
+
+    return this.getTelegramStatus();
   }
 
   /** Master kill switch for every AI call path. Defaults to enabled if never toggled. */
