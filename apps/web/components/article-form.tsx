@@ -244,10 +244,16 @@ export function ArticleForm({ article }: { article?: Article }) {
 
   const buildPayload = (values: ArticleFormValues) => ({
     title: values.title,
-    subtitle: values.subtitle || undefined,
+    // subtitle/excerpt/content are sent as-is, including an empty string -
+    // `|| undefined` here would make it impossible to ever clear a field
+    // back to empty, since the backend only updates a field when it's
+    // explicitly present (not undefined) in the request. slug is the one
+    // exception: empty means "auto-generate from the title", which is the
+    // desired behavior, not a bug to fix.
+    subtitle: values.subtitle,
     slug: values.slug || undefined,
-    excerpt: values.excerpt || undefined,
-    content: values.content || undefined,
+    excerpt: values.excerpt,
+    content: values.content,
     primaryCategoryId,
     categoryIds: [...selectedCategoryIds],
     tagIds: selectedTagIds,
