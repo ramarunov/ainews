@@ -1,14 +1,23 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SchedulerRegistry } from '@nestjs/schedule';
+import type { Redis } from 'ioredis';
 import { ArticleStatus } from '@prisma/client';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { runWithOrgContext } from '../../infrastructure/prisma/org-context';
+import { REDIS_CLIENT } from '../../infrastructure/redis/redis.module';
+import { runWithSchedulerLock } from '../../common/scheduler-lock.util';
 import { ArticlesService } from './articles.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
 const INTERVAL_NAME = 'scheduled-publish-sweep';
+const LOCK_KEY = 'scheduler-lock:scheduled-publish-sweep';
+// publish() itself only touches the DB (internal-linking/notifications are
+// both fire-and-forget, not awaited), so a normal sweep finishes in well
+// under this - it's only a crash safety-net (see runWithSchedulerLock),
+// long enough to comfortably outlast even a slow run across many orgs.
+const LOCK_TTL_SECONDS = 300;
 
 /**
  * Auto-publish sweep (ART-004) — until this existed, `scheduledAt` was
@@ -26,14 +35,15 @@ export class ScheduledPublishSchedulerService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly articlesService: ArticlesService,
     private readonly notificationsService: NotificationsService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
   onModuleInit() {
     const minutes = this.config.get<number>('SCHEDULED_PUBLISH_INTERVAL_MINUTES', 1);
     const interval = setInterval(() => {
-      this.publishDueArticles().catch((err) =>
-        this.logger.error('Scheduled publish sweep failed', err),
-      );
+      runWithSchedulerLock(this.redis, LOCK_KEY, LOCK_TTL_SECONDS, () =>
+        this.publishDueArticles(),
+      ).catch((err) => this.logger.error('Scheduled publish sweep failed', err));
     }, minutes * 60_000);
     this.schedulerRegistry.addInterval(INTERVAL_NAME, interval);
     this.logger.log(`Scheduled auto-publish sweep every ${minutes} minute(s)`);

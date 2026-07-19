@@ -28,6 +28,7 @@ describe('ScheduledPublishSchedulerService', () => {
   let notificationsService: any;
   let schedulerRegistry: any;
   let config: any;
+  let redis: any;
 
   beforeEach(() => {
     prisma = {
@@ -38,12 +39,14 @@ describe('ScheduledPublishSchedulerService', () => {
     notificationsService = { create: jest.fn().mockResolvedValue({}) };
     schedulerRegistry = { addInterval: jest.fn() };
     config = { get: jest.fn((_key: string, fallback: any) => fallback) };
+    redis = { set: jest.fn(), del: jest.fn() };
     service = new ScheduledPublishSchedulerService(
       schedulerRegistry,
       config,
       prisma,
       articlesService,
       notificationsService,
+      redis,
     );
   });
 

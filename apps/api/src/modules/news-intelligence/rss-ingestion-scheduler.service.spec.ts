@@ -6,6 +6,7 @@ describe('RssIngestionSchedulerService', () => {
   let queue: any;
   let schedulerRegistry: any;
   let config: any;
+  let redis: any;
 
   beforeEach(() => {
     prisma = {
@@ -15,7 +16,8 @@ describe('RssIngestionSchedulerService', () => {
     queue = { add: jest.fn() };
     schedulerRegistry = { addInterval: jest.fn() };
     config = { get: jest.fn((_key: string, fallback: any) => fallback) };
-    service = new RssIngestionSchedulerService(schedulerRegistry, config, prisma, queue);
+    redis = { set: jest.fn(), del: jest.fn() };
+    service = new RssIngestionSchedulerService(schedulerRegistry, config, prisma, queue, redis);
   });
 
   describe('onModuleInit', () => {

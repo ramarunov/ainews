@@ -1,16 +1,24 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bull';
 import { ConfigService } from '@nestjs/config';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { Queue } from 'bull';
+import type { Redis } from 'ioredis';
 import { NewsSourceType } from '@prisma/client';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { runWithOrgContext } from '../../infrastructure/prisma/org-context';
+import { REDIS_CLIENT } from '../../infrastructure/redis/redis.module';
+import { runWithSchedulerLock } from '../../common/scheduler-lock.util';
 import { NEWS_INGESTION_QUEUE } from './news-intelligence.constants';
 import { IngestSourceJobData } from './news-intelligence.service';
 
 const INTERVAL_NAME = 'rss-ingestion-poll';
+const LOCK_KEY = 'scheduler-lock:rss-ingestion-poll';
+// This tick only reads sources and calls queue.add() (the actual feed
+// fetches happen later, decoupled, in the queue consumer) - 5 minutes is
+// generous headroom for that even with many orgs/sources.
+const LOCK_TTL_SECONDS = 300;
 
 /**
  * Periodic RSS/Atom ingestion (NEWS-001) — previously 100% manual, someone
@@ -34,14 +42,15 @@ export class RssIngestionSchedulerService implements OnModuleInit {
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
     @InjectQueue(NEWS_INGESTION_QUEUE) private readonly ingestionQueue: Queue<IngestSourceJobData>,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
   onModuleInit() {
     const minutes = this.config.get<number>('RSS_FETCH_INTERVAL_MINUTES', 15);
     const interval = setInterval(() => {
-      this.enqueueAllActiveSources().catch((err) =>
-        this.logger.error('Scheduled RSS ingestion sweep failed', err),
-      );
+      runWithSchedulerLock(this.redis, LOCK_KEY, LOCK_TTL_SECONDS, () =>
+        this.enqueueAllActiveSources(),
+      ).catch((err) => this.logger.error('Scheduled RSS ingestion sweep failed', err));
     }, minutes * 60_000);
     this.schedulerRegistry.addInterval(INTERVAL_NAME, interval);
     this.logger.log(`Scheduled RSS ingestion every ${minutes} minute(s)`);
