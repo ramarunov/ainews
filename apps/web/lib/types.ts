@@ -345,6 +345,7 @@ export interface PublicArticle {
   primaryCategory?: Category | null;
   articleTags?: { tag: Tag }[];
   seoData?: PublicArticleSeo | null;
+  sourceUrl?: string | null;
 }
 
 export interface PublicSetting {
