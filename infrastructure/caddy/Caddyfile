@@ -10,5 +10,13 @@ app.beritabot.com {
 }
 
 api.beritabot.com {
-	reverse_proxy api:4000
+	# Publicly-readable media objects (MinIO) served under the API host at
+	# this one path, rather than a fourth DNS record - avoids needing
+	# another subdomain just to expose the object storage bucket.
+	handle /ainews-media/* {
+		reverse_proxy minio:9000
+	}
+	handle {
+		reverse_proxy api:4000
+	}
 }
