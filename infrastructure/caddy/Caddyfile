@@ -5,10 +5,10 @@
 #
 # See docs/DEPLOY.md for the full setup this plugs into.
 
-app.example.com {
+app.beritabot.com {
 	reverse_proxy web:3100
 }
 
-api.example.com {
+api.beritabot.com {
 	reverse_proxy api:4000
 }
