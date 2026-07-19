@@ -1,0 +1,236 @@
+# Single-VPS production stack: the app itself (api/web, built from their own
+# Dockerfiles) plus every backing service it needs, behind Caddy for
+# automatic HTTPS. See docs/DEPLOY.md for the full walkthrough - this file
+# alone is not self-explanatory about secrets, DNS, or the Postgres role
+# setup it depends on.
+#
+# Deliberately separate from docker-compose.yml (that one is the local dev
+# stack: weak fixed passwords, dev-only tools like Mailhog/Redis Insight/
+# OpenSearch Dashboards, ports bound to non-standard host ports so it can
+# coexist with other local Postgres/Redis instances). Reusing it here would
+# mean either fighting those defaults or drifting further from what's
+# actually documented as "dev".
+#
+# All secrets come from .env.production (see .env.example for the full list
+# and docs/DEPLOY.md for how to generate them) - nothing is hardcoded here.
+#
+# `name:` pins this stack to its own Compose project namespace regardless of
+# which directory it's run from - without it, running this file from the
+# same checkout as docker-compose.yml (e.g. testing locally before deploying
+# for real) would resolve to the same project name as the dev stack, and
+# they'd silently share the same named volumes (postgres_data, redis_data,
+# etc.) despite being two completely different databases.
+name: ainews-prod
+
+services:
+  # ─── PostgreSQL 16 with pgvector ───────────────────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-ainews_db}
+      POSTGRES_USER: ${DATABASE_SUPERUSER:-ainews}
+      POSTGRES_PASSWORD: ${DATABASE_SUPERUSER_PASSWORD}
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Only runs against a brand-new (empty) volume - see docs/DEPLOY.md
+      # for editing the ainews_app/ainews_readonly passwords in this file
+      # BEFORE the first `docker compose up` on a fresh server.
+      - ./infrastructure/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_SUPERUSER:-ainews} -d ${DATABASE_NAME:-ainews_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ainews_network
+
+  # ─── Redis 7 ────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: >
+      redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - ainews_network
+
+  # ─── OpenSearch ─────────────────────────────────────────────────────────────
+  # Single-node, security plugin disabled to match the app's current
+  # OPENSEARCH_USERNAME/PASSWORD-less client config (see .env.example) - put
+  # this behind the same firewall as the rest of the stack (see
+  # docs/DEPLOY.md's firewall section), don't expose 9200 publicly.
+  opensearch:
+    image: opensearchproject/opensearch:2.13.0
+    restart: unless-stopped
+    environment:
+      - cluster.name=ainews-cluster
+      - node.name=ainews-node
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m
+      - DISABLE_SECURITY_PLUGIN=true
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - ainews_network
+
+  # ─── MinIO (S3-compatible object storage) ──────────────────────────────────
+  # Skip this whole service if you're using real AWS S3/Cloudflare R2/etc
+  # instead - just point S3_* in .env.production at that provider and delete
+  # this block plus its volume.
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - ainews_network
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc alias set myminio http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD};
+      /usr/bin/mc mb myminio/${S3_BUCKET:-ainews-media} --ignore-existing;
+      /usr/bin/mc anonymous set download myminio/${S3_BUCKET:-ainews-media};
+      exit 0;
+      "
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    networks:
+      - ainews_network
+
+  # ─── API (NestJS) ───────────────────────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: ainews-api:latest
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # 127.0.0.1, not localhost: both api and web only bind the IPv4
+    # wildcard (main.ts's app.listen(port, '0.0.0.0'), the web Dockerfile's
+    # HOSTNAME=0.0.0.0) - alpine's wget resolves "localhost" to ::1 first,
+    # gets connection refused since nothing's listening on IPv6, and never
+    # falls back to the IPv4 result. Confirmed live: this made both
+    # containers report permanently unhealthy despite the app working fine.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:4000/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - ainews_network
+
+  # One-shot migration runner - deliberately not part of the api service's
+  # own startup, so a rollout never accidentally races two api replicas
+  # into running `prisma migrate deploy` at once. Run explicitly instead:
+  #   docker compose -f docker-compose.prod.yml run --rm api-migrate
+  api-migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: ainews-api:latest
+    env_file:
+      - .env.production
+    entrypoint: []
+    command: ["sh", "-c", "cd apps/api && npx prisma migrate deploy"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - ainews_network
+    profiles:
+      - tools
+
+  # ─── Web (Next.js, standalone output) ──────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_MEDIA_URL: ${NEXT_PUBLIC_MEDIA_URL}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
+    image: ainews-web:latest
+    restart: unless-stopped
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3100/login"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - ainews_network
+
+  # ─── Caddy (reverse proxy + automatic HTTPS) ───────────────────────────────
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infrastructure/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - web
+    networks:
+      - ainews_network
+
+volumes:
+  postgres_data:
+  redis_data:
+  opensearch_data:
+  minio_data:
+  caddy_data:
+  caddy_config:
+
+networks:
+  ainews_network:
+    driver: bridge

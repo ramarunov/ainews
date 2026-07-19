@@ -44,7 +44,9 @@ turnkey production setup — see "Deliberately not included" below.
 # From the repo root — build context must be the monorepo root, not apps/*
 docker build -f apps/api/Dockerfile -t ainews-api:latest .
 docker build -f apps/web/Dockerfile -t ainews-web:latest \
-  --build-arg NEXT_PUBLIC_API_URL=https://api.example.com/api/v1 .
+  --build-arg NEXT_PUBLIC_API_URL=https://api.example.com/api/v1 \
+  --build-arg NEXT_PUBLIC_MEDIA_URL=https://media.example.com/ainews-media \
+  --build-arg NEXT_PUBLIC_SITE_URL=https://app.example.com .
 
 kubectl apply -f infrastructure/k8s/namespace.yaml
 kubectl apply -f infrastructure/k8s/configmap.yaml

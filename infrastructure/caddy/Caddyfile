@@ -1,0 +1,14 @@
+# Reverse proxy for both hosts, with automatic HTTPS (Caddy requests and
+# renews Let's Encrypt certificates on its own - no certbot, no manual
+# renewal cron). Replace both domains below with your real ones; Caddy
+# needs them to resolve to this server's IP before it can issue a cert.
+#
+# See docs/DEPLOY.md for the full setup this plugs into.
+
+app.example.com {
+	reverse_proxy web:3100
+}
+
+api.example.com {
+	reverse_proxy api:4000
+}

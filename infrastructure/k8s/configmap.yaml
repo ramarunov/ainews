@@ -84,4 +84,10 @@ data:
   FEATURE_GEO_ENGINE: "true"
   FEATURE_PLUGIN_SYSTEM: "true"
 
+  # These three are only meaningful at image build time (see the web
+  # Dockerfile's build args) - Next.js bakes NEXT_PUBLIC_* vars into the
+  # client bundle, so setting them here documents intent but does not
+  # retroactively affect an already-built image's client-side code.
   NEXT_PUBLIC_API_URL: "https://api.example.com/api/v1"
+  NEXT_PUBLIC_MEDIA_URL: "https://media.example.com/ainews-media"
+  NEXT_PUBLIC_SITE_URL: "https://app.example.com"

@@ -19,10 +19,16 @@ COPY --from=pruner /app/out/json/ .
 COPY --from=pruner /app/out/pnpm-lock.yaml ./pnpm-lock.yaml
 RUN pnpm install --frozen-lockfile
 COPY --from=pruner /app/out/full/ .
-# Public, build-time API base URL. Override with --build-arg if the API
-# lives at a different origin for a given environment.
+# Public, build-time URLs. Both get baked into the client bundle AND read
+# synchronously by next.config.ts itself (images.remotePatterns / the CSP's
+# connect-src) - override both with --build-arg for a real deployment, or
+# next/image will 400 on every image and API calls will violate the CSP.
 ARG NEXT_PUBLIC_API_URL=http://localhost:4000/api/v1
+ARG NEXT_PUBLIC_MEDIA_URL=http://localhost:9002/ainews-media
+ARG NEXT_PUBLIC_SITE_URL=http://localhost:3100
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+ENV NEXT_PUBLIC_MEDIA_URL=${NEXT_PUBLIC_MEDIA_URL}
+ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
 RUN pnpm turbo run build --filter=@ainews/web
 
 FROM base AS runner
