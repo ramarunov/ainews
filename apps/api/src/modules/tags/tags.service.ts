@@ -84,9 +84,24 @@ export class TagsService {
   // ─── Find or Create by Names (helper, no route) ───────────────────────────
 
   async findOrCreateByNames(names: string[], organizationId: string) {
-    const uniqueNames = Array.from(
-      new Set(names.map((name) => name.trim()).filter((name) => name.length > 0)),
-    );
+    // Case-insensitive from the start: the DB lookup/existence check below
+    // already treats "AI" and "ai" as the same tag, but this dedup used to
+    // be a case-SENSITIVE Set, so a batch containing both case variants
+    // (e.g. from the AI writer) would pass both through untouched here,
+    // then both survive the "not already in the DB" filter below (neither
+    // matches on its own), and both get created - two tags for one name,
+    // slugs `ai` / `ai-1`. Keeping the first-seen casing per lowercase key
+    // fixes that at the source.
+    const uniqueNames: string[] = [];
+    const seenLower = new Set<string>();
+    for (const raw of names) {
+      const name = raw.trim();
+      if (!name) continue;
+      const lower = name.toLowerCase();
+      if (seenLower.has(lower)) continue;
+      seenLower.add(lower);
+      uniqueNames.push(name);
+    }
 
     if (uniqueNames.length === 0) {
       return [];

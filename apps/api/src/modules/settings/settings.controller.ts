@@ -62,13 +62,7 @@ export class SettingsController {
   @ApiOperation({ summary: 'Create or update a setting' })
   set(@Param('key') key: string, @Body() dto: SetSettingDto, @CurrentUser() user: any) {
     this.assertNotSuperadminOnlyKey(key, user);
-    return this.settingsService.set(
-      user.organizationId,
-      key,
-      dto.value,
-      user.id,
-      dto.isPublic ?? false,
-    );
+    return this.settingsService.set(user.organizationId, key, dto.value, user.id, dto.isPublic);
   }
 
   @Delete(':key')

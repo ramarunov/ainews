@@ -52,6 +52,33 @@ describe('SettingsService', () => {
         }),
       });
     });
+
+    it('defaults a brand-new setting to private when isPublic is not given', async () => {
+      prisma.setting.upsert.mockResolvedValue({});
+
+      await service.set('org-1', 'theme.color', { hex: '#000' }, 'user-1');
+
+      const call = prisma.setting.upsert.mock.calls[0][0];
+      expect(call.create.isPublic).toBe(false);
+    });
+
+    it('does not touch isPublic on update when the caller does not specify it - updating a value must never silently unpublish an already-public setting', async () => {
+      prisma.setting.upsert.mockResolvedValue({});
+
+      await service.set('org-1', 'theme.color', { hex: '#000' }, 'user-1');
+
+      const call = prisma.setting.upsert.mock.calls[0][0];
+      expect(call.update).not.toHaveProperty('isPublic');
+    });
+
+    it('still updates isPublic when the caller does explicitly specify it, including setting it to false', async () => {
+      prisma.setting.upsert.mockResolvedValue({});
+
+      await service.set('org-1', 'theme.color', { hex: '#000' }, 'user-1', false);
+
+      const call = prisma.setting.upsert.mock.calls[0][0];
+      expect(call.update.isPublic).toBe(false);
+    });
   });
 
   describe('list', () => {

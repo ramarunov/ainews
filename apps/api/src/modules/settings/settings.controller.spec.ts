@@ -36,12 +36,17 @@ describe('SettingsController', () => {
 
       await controller.set('site.footer', { value: { links: [] } } as any, user);
 
+      // isPublic is passed through as-is (undefined here, since the DTO
+      // didn't include it) rather than collapsed to false - see
+      // settings.service.ts for why forcing false on every write would be
+      // a bug (it would silently unpublish an already-public setting on
+      // any update that only touches the value).
       expect(settingsService.set).toHaveBeenCalledWith(
         'org-1',
         'site.footer',
         { links: [] },
         'user-1',
-        false,
+        undefined,
       );
     });
   });
@@ -66,7 +71,7 @@ describe('SettingsController', () => {
         'ads.header',
         { enabled: true },
         'user-1',
-        false,
+        undefined,
       );
     });
   });
@@ -82,7 +87,7 @@ describe('SettingsController', () => {
         'theme.color',
         { hex: '#000' },
         'user-1',
-        false,
+        undefined,
       );
     });
   });

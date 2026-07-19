@@ -122,17 +122,23 @@ describe('TagsService', () => {
       ]);
     });
 
-    it('de-duplicates exact repeats but treats different casing as distinct names', async () => {
+    it('de-duplicates case-variant repeats down to one tag, keeping the first-seen casing', async () => {
       prisma.tag.findMany.mockResolvedValue([]);
       prisma.tag.findFirst.mockResolvedValue(null);
       prisma.tag.create.mockResolvedValue({ id: 'tag-1', name: 'AI' });
 
       await service.findOrCreateByNames(['AI', 'AI', 'ai'], 'org-1');
 
-      // The pre-query dedup Set is case-sensitive, so 'AI' and 'ai' are two
-      // distinct entries (only the exact repeat 'AI'/'AI' collapses) -- and
-      // since findMany found neither in the DB, both get created.
-      expect(prisma.tag.create).toHaveBeenCalledTimes(2);
+      // Previously the pre-query dedup was a case-sensitive Set, so 'AI'
+      // and 'ai' survived as two distinct entries and both got created
+      // (two tags for one name, slugs `ai`/`ai-1`) whenever neither existed
+      // in the DB yet - e.g. the AI writer emitting both casings in one
+      // batch. Dedup is now case-insensitive up front, so only one create
+      // call happens, using whichever casing appeared first.
+      expect(prisma.tag.create).toHaveBeenCalledTimes(1);
+      expect(prisma.tag.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ name: 'AI' }) }),
+      );
     });
   });
 });

@@ -15,12 +15,18 @@ export class SettingsService {
     return setting?.value ?? null;
   }
 
+  // isPublic is left optional (not defaulted) so an update that doesn't
+  // mention it can't silently flip an already-public setting back to
+  // private - PUT /settings/:key with just { value } would otherwise reset
+  // isPublic to false and quietly drop the setting off the public site.
+  // A brand-new setting with no isPublic given still defaults to private,
+  // same as before.
   async set(
     organizationId: string,
     key: string,
     value: any,
     updatedBy: string,
-    isPublic = false,
+    isPublic?: boolean,
   ) {
     return this.prisma.setting.upsert({
       where: { organizationId_key: { organizationId, key } },
@@ -28,12 +34,12 @@ export class SettingsService {
         organizationId,
         key,
         value: value as Prisma.InputJsonValue,
-        isPublic,
+        isPublic: isPublic ?? false,
         updatedBy,
       },
       update: {
         value: value as Prisma.InputJsonValue,
-        isPublic,
+        ...(isPublic !== undefined && { isPublic }),
         updatedBy,
       },
     });
