@@ -146,8 +146,17 @@ export class ArticlesService {
       this.prisma.article.count({ where }),
     ]);
 
+    // List views (the internal dashboard's Articles list and the public
+    // reader site's homepage/category/related-article grids, which both
+    // call this same method) only ever render title/excerpt/image/meta,
+    // never the full body - but `include` returns every scalar column
+    // regardless, so every list response was carrying 20 full article
+    // bodies over the wire for no reason. Full content is still available
+    // via findOne()/findBySlug() for the single-article views that need it.
+    const data = articles.map(({ content: _content, contentJson: _contentJson, ...rest }) => rest);
+
     return {
-      data: articles,
+      data,
       meta: {
         total,
         page: Math.max(1, page),
