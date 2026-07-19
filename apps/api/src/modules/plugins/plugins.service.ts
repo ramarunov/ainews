@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
@@ -9,6 +9,13 @@ export class PluginsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async install(dto: InstallPluginDto, organizationId: string) {
+    const existing = await this.prisma.plugin.findUnique({
+      where: { organizationId_slug: { organizationId, slug: dto.slug } },
+    });
+    if (existing) {
+      throw new ConflictException(`A plugin with slug "${dto.slug}" is already installed`);
+    }
+
     return this.prisma.plugin.create({
       data: {
         organizationId,

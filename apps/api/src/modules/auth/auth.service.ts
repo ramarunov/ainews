@@ -197,9 +197,15 @@ export class AuthService {
 
   // ─── Login ─────────────────────────────────────────────────────────────────
 
-  async validateUser(email: string, password: string) {
-    // Check rate limit
-    const attemptsKey = `${LOGIN_ATTEMPTS_PREFIX}${email.toLowerCase()}`;
+  async validateUser(email: string, password: string, ipAddress?: string) {
+    // Keyed on IP+email together, not email alone - an email-only lockout
+    // lets an attacker lock a victim out of their own account from
+    // anywhere just by deliberately failing their password a few times,
+    // with no need to guess it (a classic account-lockout DoS). Combining
+    // with the source IP means that only actually locks out attempts from
+    // that same attacker's IP, while the real account owner - almost
+    // certainly logging in from a different IP - is unaffected.
+    const attemptsKey = `${LOGIN_ATTEMPTS_PREFIX}${email.toLowerCase()}:${ipAddress ?? 'unknown'}`;
     const attempts = await this.redis.get(attemptsKey);
     if (attempts && parseInt(attempts) >= MAX_LOGIN_ATTEMPTS) {
       throw new ForbiddenException(

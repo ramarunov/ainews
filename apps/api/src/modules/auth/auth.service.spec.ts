@@ -248,6 +248,48 @@ describe('AuthService', () => {
         service.validateUser('inactive@example.com', 'correct-password'),
       ).rejects.toThrow(ForbiddenException);
     });
+
+    it('keys the lockout counter by IP and email together, not email alone', async () => {
+      await expect(
+        service.validateUser('victim@example.com', 'whatever', '203.0.113.9'),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(redis.get).toHaveBeenCalledWith('login_attempts:victim@example.com:203.0.113.9');
+    });
+
+    it("does not lock out the account owner's own IP just because an attacker locked theirs", async () => {
+      // An attacker deliberately fails the password 5 times from their own
+      // IP to try to lock the victim out entirely - the real owner, logging
+      // in correctly from a different IP, must be unaffected.
+      redis.get.mockImplementation((key: string) =>
+        Promise.resolve(key.endsWith(':198.51.100.1') ? '5' : null),
+      );
+      const passwordHash = await bcrypt.hash('correct-password', 4);
+      prisma.user.findFirst.mockResolvedValue({
+        id: 'user-victim',
+        passwordHash,
+        isActive: true,
+      });
+
+      const result = await service.validateUser(
+        'victim@example.com',
+        'correct-password',
+        '203.0.113.9',
+      );
+
+      expect(result.id).toBe('user-victim');
+    });
+
+    it("still locks out repeated failures from the attacker's own IP+email combination", async () => {
+      redis.get.mockImplementation((key: string) =>
+        Promise.resolve(key.endsWith(':198.51.100.1') ? '5' : null),
+      );
+
+      await expect(
+        service.validateUser('victim@example.com', 'whatever', '198.51.100.1'),
+      ).rejects.toThrow(ForbiddenException);
+      expect(prisma.user.findFirst).not.toHaveBeenCalled();
+    });
   });
 
   describe('MFA', () => {

@@ -21,6 +21,7 @@ export class PublicCommentsController {
   constructor(private readonly commentsService: CommentsService) {}
 
   @Get(':slug/comments')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   @ApiOperation({ summary: 'List approved comments for a published article, threaded' })
   list(@Param('slug') slug: string) {
     return this.commentsService.listApprovedComments(slug);
