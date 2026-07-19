@@ -94,17 +94,52 @@ export async function createDatabaseBackup(opts: {
     const gzip = createGzip();
     const out = createWriteStream(filePath);
 
+    // Node gives no ordering guarantee between a child process's 'close'
+    // event and 'finish' on a stream downstream of a piped transform - if
+    // pg_dump fails partway (dropped connection, a table read error), its
+    // stdout still closes, which can flush `out` to 'finish' *before* the
+    // 'close' handler below has reported the nonzero exit code. Resolving
+    // on whichever fires first meant a failed dump could resolve() before
+    // the reject() ever ran, reporting success on a truncated backup - and
+    // pruneOldBackups() would then delete good backups on schedule,
+    // trusting the corrupt one. Only resolve once BOTH the exit code is
+    // known-zero and the file is known-flushed; any failure signal wins
+    // regardless of arrival order and is never overridden by a later one.
     let stderr = '';
+    let settled = false;
+    let dumpExitedZero = false;
+    let outFinished = false;
+
+    const fail = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
+    const maybeResolve = () => {
+      if (settled || !dumpExitedZero || !outFinished) return;
+      settled = true;
+      resolve();
+    };
+
     dump.stderr.on('data', (chunk) => (stderr += chunk.toString()));
-    dump.on('error', reject);
+    dump.on('error', fail);
 
     dump.stdout.pipe(gzip).pipe(out);
 
-    out.on('error', reject);
+    gzip.on('error', fail);
+    out.on('error', fail);
     dump.on('close', (code) => {
-      if (code !== 0) reject(new Error(`pg_dump exited with code ${code}: ${stderr}`));
+      if (code !== 0) {
+        fail(new Error(`pg_dump exited with code ${code}: ${stderr}`));
+        return;
+      }
+      dumpExitedZero = true;
+      maybeResolve();
     });
-    out.on('finish', () => resolve());
+    out.on('finish', () => {
+      outFinished = true;
+      maybeResolve();
+    });
   });
 
   const { size } = await stat(filePath);
@@ -121,12 +156,26 @@ export async function restoreDatabaseBackup(opts: { connectionUrl: string; backu
     const input = createReadStream(opts.backupFilePath);
 
     let stderr = '';
+    let settled = false;
+    const fail = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
+
     psql.stderr?.on('data', (chunk) => (stderr += chunk.toString()));
-    psql.on('error', reject);
+    psql.on('error', fail);
+    // A missing/corrupt backup file errors here, breaking the pipe to
+    // psql's stdin - without these handlers psql just sits waiting on
+    // stdin forever, and the promise never settles either way.
+    input.on('error', fail);
+    gunzip.on('error', fail);
 
     input.pipe(gunzip).pipe(psql.stdin);
 
     psql.on('close', (code) => {
+      if (settled) return;
+      settled = true;
       if (code !== 0) reject(new Error(`psql restore exited with code ${code}: ${stderr}`));
       else resolve();
     });
