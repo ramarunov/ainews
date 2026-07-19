@@ -123,6 +123,29 @@ describe('NewsIntelligenceService', () => {
       );
     });
 
+    it('omits sourceUrl rather than storing a Google News redirect link that would confuse readers', async () => {
+      prisma.newsItem.findFirst.mockResolvedValue({
+        id: 'item-1',
+        organizationId: 'org-1',
+        articleId: null,
+        title: 'Some headline',
+        excerpt: 'An excerpt',
+        content: '<p>Body</p>',
+        url: 'https://news.google.com/rss/articles/CBMi-some-token?oc=5',
+        sourceName: 'Example Source',
+        language: 'en',
+        category: 'Politik',
+      });
+
+      await service.createDraftFromItem('item-1', 'user-1', 'org-1');
+
+      expect(prisma.article.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ sourceUrl: undefined }),
+        }),
+      );
+    });
+
     it('leaves the draft uncategorized when the hint matches no current category', async () => {
       categoriesService.resolveByHint.mockResolvedValue(null);
 

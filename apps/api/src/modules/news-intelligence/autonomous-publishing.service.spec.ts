@@ -236,6 +236,24 @@ describe('AutonomousPublishingService', () => {
     expect(ageMs).toBeLessThan(48 * 60 * 60_000 + 5000);
   });
 
+  it('omits sourceUrl rather than storing a Google News redirect link that would confuse readers', async () => {
+    const clusterFromGoogleNews = {
+      ...cluster,
+      newsItems: [
+        { ...cluster.newsItems[0], url: 'https://news.google.com/rss/articles/CBMi-some-token?oc=5' },
+      ],
+    };
+    prisma.newsCluster.findMany.mockResolvedValue([clusterFromGoogleNews]);
+
+    await service.runCycle(ORG_ID);
+
+    expect(prisma.article.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ sourceUrl: undefined }),
+      }),
+    );
+  });
+
   it('routes to review with a passed-gate signal, never auto-publishing, when the quality gate passes', async () => {
     const result = await service.runCycle(ORG_ID);
 

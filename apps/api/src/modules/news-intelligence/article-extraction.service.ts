@@ -12,6 +12,11 @@ export interface ExtractedArticle {
   content: string;
   excerpt: string | null;
   textContent: string;
+  // The URL the fetch actually landed on after following redirects - for
+  // aggregator feeds (Google News in particular) `url` passed in is a
+  // redirect wrapper, never the publisher's real article URL. `fetch`
+  // follows redirects by default, so `res.url` is the real destination.
+  resolvedUrl: string;
 }
 
 @Injectable()
@@ -64,6 +69,7 @@ export class ArticleExtractionService {
         content: sanitizeArticleHtml(parsed.content),
         excerpt: parsed.excerpt ?? null,
         textContent,
+        resolvedUrl: res.url,
       };
     } catch (err: any) {
       this.logger.warn(`Extraction failed for ${url}: ${err?.message ?? err}`);

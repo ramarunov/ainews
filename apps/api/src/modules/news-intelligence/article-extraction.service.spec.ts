@@ -53,6 +53,7 @@ describe('ArticleExtractionService', () => {
         <body><article><h1>Test Article</h1><p>${paragraph}</p><script>alert(1)</script></article></body></html>`;
       (global.fetch as jest.Mock).mockResolvedValue({
         ok: true,
+        url: 'https://example.com/article',
         text: async () => html,
       });
 
@@ -62,6 +63,24 @@ describe('ArticleExtractionService', () => {
       expect(result!.content).toContain('full paragraph');
       expect(result!.content).not.toContain('<script>');
       expect(result!.textContent.length).toBeGreaterThan(200);
+    });
+
+    it('returns the real destination URL after following a redirect (e.g. a Google News wrapper link)', async () => {
+      const html = `<!doctype html><html><head><title>Test Article</title></head>
+        <body><article><h1>Test Article</h1><p>${paragraph}</p></article></body></html>`;
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: true,
+        url: 'https://www.nytimes.com/2026/07/17/opinion/andy-burnham-britain-prime-minister.html',
+        text: async () => html,
+      });
+
+      const result = await service.extractFromUrl(
+        'https://news.google.com/rss/articles/CBMi-some-wrapper-token',
+      );
+
+      expect(result!.resolvedUrl).toBe(
+        'https://www.nytimes.com/2026/07/17/opinion/andy-burnham-britain-prime-minister.html',
+      );
     });
 
     it('returns null when the fetch response is not ok', async () => {

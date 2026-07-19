@@ -15,6 +15,7 @@ import { ArticlesService } from '../articles/articles.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { StockPhotoService } from '../media/stock-photo.service';
 import { buildStockPhotoQuery } from '../media/category-stock-query.util';
+import { isGoogleNewsUrl } from './google-news-url.util';
 
 const CLUSTER_LOCK_PREFIX = 'autonomous-pipeline:lock:cluster:';
 // Safety-net expiry, not the normal release path (that's the try/finally
@@ -268,7 +269,7 @@ export class AutonomousPublishingService {
         readingTime: 0,
         status: ArticleStatus.DRAFT,
         isAiAssisted: true,
-        sourceUrl: primary.url,
+        sourceUrl: isGoogleNewsUrl(primary.url) ? undefined : primary.url,
         sourceName: primary.sourceName ?? undefined,
         newsItemId: primary.id,
       },

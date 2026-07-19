@@ -19,6 +19,7 @@ import {
 import { NEWS_INGESTION_QUEUE } from './news-intelligence.constants';
 import { NewsClusteringService } from './news-clustering.service';
 import { ArticleExtractionService } from './article-extraction.service';
+import { isGoogleNewsUrl } from './google-news-url.util';
 import { CategoriesService } from '../categories/categories.service';
 
 export interface IngestSourceJobData {
@@ -176,6 +177,13 @@ export class NewsIntelligenceService {
           const feedContent = item.contentSnippet ?? item.content ?? null;
           let content = feedContent ? sanitizeArticleHtml(feedContent) : null;
           let excerpt: string | undefined;
+          // Aggregator feeds (Google News in particular) give a redirect
+          // wrapper here, never the publisher's real article URL - replaced
+          // below with the real destination when extraction resolves it.
+          // urlHash stays keyed off the original item.link regardless, so
+          // dedup/re-ingestion behavior is unaffected by whether resolution
+          // succeeds.
+          let resolvedUrl = item.link;
 
           // Best-effort: publishers often truncate RSS content to a teaser
           // to drive traffic to their own site. When that looks like what
@@ -186,6 +194,7 @@ export class NewsIntelligenceService {
             if (extracted) {
               content = extracted.content;
               excerpt = extracted.excerpt ?? undefined;
+              resolvedUrl = extracted.resolvedUrl;
             }
           }
 
@@ -196,7 +205,7 @@ export class NewsIntelligenceService {
               title: item.title ?? 'Untitled',
               content,
               excerpt,
-              url: item.link,
+              url: resolvedUrl,
               urlHash,
               authorName: item.creator ?? item.author ?? null,
               sourceName: source.name,
@@ -441,7 +450,7 @@ export class NewsIntelligenceService {
         readingTime,
         status: ArticleStatus.DRAFT,
         isAiAssisted: false,
-        sourceUrl: newsItem.url,
+        sourceUrl: isGoogleNewsUrl(newsItem.url) ? undefined : newsItem.url,
         sourceName: newsItem.sourceName,
         newsItemId: newsItem.id,
         language: newsItem.language,
