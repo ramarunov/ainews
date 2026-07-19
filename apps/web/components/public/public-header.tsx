@@ -144,7 +144,6 @@ export function PublicHeader({
               alt={SITE_NAME}
               width={1606}
               height={433}
-              unoptimized
               priority
               className="h-9 w-auto"
             />

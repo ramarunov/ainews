@@ -32,7 +32,7 @@ export default async function AuthorPage({ params }: Props) {
         <div className="mx-auto flex w-full max-w-6xl items-center gap-5 px-4">
           {author.avatarUrl ? (
             <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-full bg-muted shadow-sm">
-              <Image src={author.avatarUrl} alt={author.displayName ?? ""} fill className="object-cover" unoptimized />
+              <Image src={author.avatarUrl} alt={author.displayName ?? ""} fill className="object-cover" />
             </div>
           ) : (
             <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-primary text-2xl font-black text-primary-foreground shadow-sm">

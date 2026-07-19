@@ -67,7 +67,6 @@ export function SmartArticleImage({
         src={src}
         alt={alt}
         fill
-        unoptimized
         className="object-cover transition-transform duration-300 group-hover:scale-105"
         onLoad={(e) => {
           const img = e.currentTarget;
