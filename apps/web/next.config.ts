@@ -56,6 +56,12 @@ const nextConfig: NextConfig = {
       },
     ],
     formats: ["image/avif", "image/webp"],
+    // Next 16 refuses by default to optimize an image whose hostname
+    // resolves to a private/local IP (a real SSRF guard) - dev's media
+    // host is localhost (MinIO), which is exactly that, so it needs this
+    // opt-in locally. Left off in production, where the media host is a
+    // real public domain (S3/CDN) and this guard should stay active.
+    dangerouslyAllowLocalIP: isDev,
   },
   async headers() {
     return [
