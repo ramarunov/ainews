@@ -22,6 +22,14 @@ const SUBCATEGORIES: Record<string, string[]> = {
   hiburan: ['Film & Series', 'Musik', 'Selebriti', 'TV', 'K-Pop & K-Drama'],
 };
 
+// A category's slug doesn't necessarily match its current name - e.g. in
+// production the "Hiburan" category still has slug "selebriti" (only its
+// subdomain was renamed in an earlier pass, not the slug). Maps a known
+// drifted slug to the SUBCATEGORIES key that actually applies to it.
+const SLUG_ALIASES: Record<string, string> = {
+  selebriti: 'hiburan',
+};
+
 async function generateSlug(name: string, organizationId: string): Promise<string> {
   const base = slugify(name, { lower: true, strict: true, trim: true }).substring(0, 240);
   let slug = base;
@@ -39,16 +47,18 @@ async function generateSlug(name: string, organizationId: string): Promise<strin
 async function main() {
   const organizations = await prisma.organization.findMany({ select: { id: true, slug: true } });
 
+  const recognizedSlugs = [...Object.keys(SUBCATEGORIES), ...Object.keys(SLUG_ALIASES)];
+
   for (const org of organizations) {
     const parents = await prisma.category.findMany({
-      where: { organizationId: org.id, deletedAt: null, slug: { in: Object.keys(SUBCATEGORIES) } },
+      where: { organizationId: org.id, deletedAt: null, slug: { in: recognizedSlugs } },
       select: { id: true, slug: true, name: true },
     });
 
     if (parents.length === 0) continue;
 
     for (const parent of parents) {
-      const names = SUBCATEGORIES[parent.slug];
+      const names = SUBCATEGORIES[SLUG_ALIASES[parent.slug] ?? parent.slug];
       const existingChildren = await prisma.category.findMany({
         where: { organizationId: org.id, parentId: parent.id, deletedAt: null },
         select: { name: true },
