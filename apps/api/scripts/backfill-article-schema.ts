@@ -9,11 +9,13 @@ import { getRootDomain } from '../src/common/url/site-url.util';
 
 // One-time backfill for the NewsArticle/Person schema enrichment
 // (articleSection, keywords, wordCount, inLanguage, isAccessibleForFree,
-// author.url, image dimensions, NewsMediaOrganization) - SeoService only
-// regenerates schemaJsonld on the article.published EVENT, so every
-// already-published article keeps its old schema shape until it's next
-// saved. This recomputes and updates ONLY the schemaJsonld column via
-// generateArticleSchema() directly - deliberately not the full
+// author.url, image dimensions, NewsMediaOrganization) plus canonicalUrl
+// (which turned out to have its own pre-existing bug - see the siteUrl
+// comment below) - SeoService only regenerates these on the
+// article.published EVENT, so every already-published article keeps its
+// old values until it's next saved. This recomputes and updates ONLY the
+// schemaJsonld/canonicalUrl columns via generateArticleSchema()/
+// buildCanonicalUrl() directly - deliberately not the full
 // generateSeoData()/onArticlePublished() pipeline, which also calls the AI
 // gateway for meta title/description on every article. Safe to re-run.
 (async () => {
@@ -81,9 +83,11 @@ import { getRootDomain } from '../src/common/url/site-url.util';
             { name: org.name, logoUrl: org.logoUrl },
           );
 
+          const canonicalUrl = seoService.buildCanonicalUrl(siteUrl, article.slug, article.primaryCategory);
+
           await prisma.articleSeo.update({
             where: { articleId: article.id },
-            data: { schemaJsonld: schemaJsonld as any },
+            data: { schemaJsonld: schemaJsonld as any, canonicalUrl },
           });
           updated++;
         } catch (err) {

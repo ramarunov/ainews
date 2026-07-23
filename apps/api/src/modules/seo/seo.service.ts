@@ -455,7 +455,11 @@ Return ONLY the title text, no quotes or explanation.`,
   // manual admin schema/canonical endpoints, which don't have category data)
   // working exactly as before, while the auto-generation flow in
   // onArticlePublished below gets a real category-subdomain canonical URL.
-  private buildCanonicalUrl(
+  // Public (not just used internally by generateSeoData) so
+  // scripts/backfill-article-schema.ts can reuse this exact logic instead
+  // of a third divergent copy - see that script's own comment on the
+  // siteUrl-duplication bug this avoided repeating.
+  buildCanonicalUrl(
     siteUrl: string,
     slug: string,
     category?: { slug: string; subdomain?: string | null; parent?: { subdomain?: string | null } | null } | null,
