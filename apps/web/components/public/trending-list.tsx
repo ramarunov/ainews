@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { PublicArticle } from "@/lib/types";
+import { getArticleUrl } from "@/lib/site-url";
 
 // The detik.com/kompas.com "Terpopuler" sidebar: a numbered ranking list,
 // deliberately text-only (no thumbnails) so the oversized rank number does
@@ -16,7 +17,7 @@ export function TrendingList({ articles, title = "Terpopuler" }: { articles: Pub
       <ol className="flex flex-col divide-y">
         {articles.map((article, index) => (
           <li key={article.id} className="py-3 first:pt-0 last:pb-0">
-            <Link href={`/news/${article.slug}`} className="group flex items-start gap-3">
+            <Link href={getArticleUrl(article)} className="group flex items-start gap-3">
               <span className="text-3xl leading-none font-black text-muted-foreground/30 group-hover:text-primary/50">
                 {index + 1}
               </span>

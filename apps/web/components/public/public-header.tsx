@@ -7,6 +7,7 @@ import Link from "next/link";
 import { Menu, Search, X } from "lucide-react";
 import type { Category, PublicArticle } from "@/lib/types";
 import { getCategoryColors } from "@/lib/category-colors";
+import { getCategoryUrl } from "@/lib/site-url";
 import { getPublishedArticles } from "@/lib/public-api";
 import { SITE_NAME } from "@/lib/brand";
 import { cn } from "@/lib/utils";
@@ -209,7 +210,7 @@ export function PublicHeader({
               return (
                 <Link
                   key={category.id}
-                  href={`/category/${category.slug}`}
+                  href={getCategoryUrl(category)}
                   onMouseEnter={() => scheduleOpen(category.slug)}
                   className={cn(
                     "shrink-0 border-b-2 px-3 py-2.5 text-sm font-bold tracking-wide uppercase transition-colors hover:border-current",
@@ -245,7 +246,7 @@ export function PublicHeader({
             return (
               <Link
                 key={category.id}
-                href={`/category/${category.slug}`}
+                href={getCategoryUrl(category)}
                 className={cn(
                   "rounded-md px-2 py-2 text-sm font-bold tracking-wide uppercase hover:bg-muted",
                   isActive && colors.text,

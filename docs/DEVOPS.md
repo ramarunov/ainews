@@ -58,6 +58,58 @@ pnpm dev
 | Mailhog (Email) | http://localhost:8025 |
 | BullMQ Dashboard | http://localhost:4000/queues |
 
+### 1.4 Testing category subdomains locally
+
+Category subdomains (`ENABLE_CATEGORY_SUBDOMAINS=true`, see
+`docs/DEPLOY.md` §7.1 for production) can be exercised locally too.
+`apps/web/proxy.ts` strips the port off the `Host` header before comparing
+it to `ROOT_DOMAIN`, so **`ROOT_DOMAIN` itself must never include a port**
+even though you're browsing on `:3000` locally — the two are independent.
+
+**Quickest option — no DNS/hosts changes at all.** Send the `Host` header
+directly with curl against your already-running `pnpm dev`:
+
+```bash
+# .env.local (apps/web)
+ROOT_DOMAIN=beritabot.local
+NEXT_PUBLIC_ROOT_DOMAIN=beritabot.local
+ENABLE_CATEGORY_SUBDOMAINS=true
+```
+
+```bash
+curl -H "Host: beritabot.local" http://localhost:3000/                # apex aggregator
+curl -H "Host: kesehatan.beritabot.local" http://localhost:3000/      # that category's homepage (rewritten)
+curl -I -H "Host: www.beritabot.local" http://localhost:3000/         # 308 -> beritabot.local
+curl -I -H "Host: sembarang.beritabot.local" http://localhost:3000/   # 404, not a fake category
+```
+
+This verifies `proxy.ts`'s hostname routing, the www redirect, and the
+unknown-subdomain 404 without touching DNS or the hosts file at all.
+
+**Browser option.** On macOS/Linux, `*.localhost` already resolves to
+`127.0.0.1` with no setup — set `ROOT_DOMAIN=localhost` and visit
+`http://kesehatan.localhost:3000` directly. **Windows does not resolve
+`*.localhost` this way**, so add entries to the hosts file instead:
+
+```
+# C:\Windows\System32\drivers\etc\hosts (edit as Administrator)
+127.0.0.1   beritabot.local
+127.0.0.1   kesehatan.beritabot.local
+127.0.0.1   teknologi.beritabot.local
+```
+
+then visit `http://kesehatan.beritabot.local:3000`. Note that
+`getCategoryUrl`/`getArticleUrl` (`apps/web/lib/site-url.ts`) always build
+`https://` URLs with no port — correct for production, but it means
+in-app nav links generated while testing this way point at
+`https://kesehatan.beritabot.local` (wrong scheme/port for a local dev
+server), not back to `:3000`. Retype the address bar's port after
+following a link, or prefer the curl option above for anything beyond a
+quick visual check.
+
+Leave `ENABLE_CATEGORY_SUBDOMAINS` unset (defaults to `false`) for normal
+local development that doesn't touch this feature — it's fully opt-in.
+
 ---
 
 ## 2. Docker Setup

@@ -287,6 +287,11 @@ model Category {
   imageUrl        String?   @db.VarChar(500)
   metaTitle       String?   @db.VarChar(255)
   metaDescription String?   @db.VarChar(500)
+  // Public-site subdomain for this category (e.g. "kesehatan" ->
+  // kesehatan.beritabot.com). Null until an admin opts the category into
+  // subdomain-based routing; existing categories/articles keep resolving to
+  // apex-relative URLs via the fallback in site-url.util.ts until then.
+  subdomain       String?   @db.VarChar(63)
   seoData         Json      @default("{}")
   sortOrder       Int       @default(0)
   isActive        Boolean   @default(true)
@@ -301,6 +306,7 @@ model Category {
   articleCategories ArticleCategory[]
 
   @@unique([organizationId, slug])
+  @@unique([organizationId, subdomain])
   @@index([organizationId])
   @@map("categories")
 }

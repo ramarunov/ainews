@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { PublicArticle } from "@/lib/types";
 import type { Category } from "@/lib/types";
 import { getCategoryColors } from "@/lib/category-colors";
+import { getArticleUrl, getCategoryUrl } from "@/lib/site-url";
 
 // The compact "more channels" block real news portals use to give every
 // category a presence on the homepage without a full lead-image section
@@ -21,7 +22,7 @@ export function CategoryMosaicCard({
     <div className="flex flex-col gap-3 rounded-lg border bg-card p-4">
       <div className="flex items-center justify-between">
         <Link
-          href={`/category/${category.slug}`}
+          href={getCategoryUrl(category)}
           className={`text-sm font-black tracking-wide uppercase hover:underline ${colors.text}`}
         >
           {category.name}
@@ -32,7 +33,7 @@ export function CategoryMosaicCard({
         {articles.map((article) => (
           <li key={article.id} className="py-2 first:pt-0 last:pb-0">
             <Link
-              href={`/news/${article.slug}`}
+              href={getArticleUrl(article)}
               className="line-clamp-2 text-sm leading-snug font-semibold hover:text-primary hover:underline"
             >
               {article.title}

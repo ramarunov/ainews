@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -11,6 +11,8 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -47,12 +49,29 @@ import {
   useUpdateCategory,
 } from "@/hooks/use-taxonomy";
 import { ApiError } from "@/lib/api-client";
+import { getRootDomain } from "@/lib/site-url";
 import type { Category } from "@/lib/types";
+
+// Mirrors apps/api/src/modules/categories/dto/category.dto.ts's
+// SUBDOMAIN_PATTERN (RFC 1035 DNS label) — this is client-side UX only
+// (immediate feedback instead of a round-trip); the API re-validates and
+// enforces uniqueness/reserved-word rejection regardless.
+const SUBDOMAIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 const categorySchema = z.object({
   name: z.string().min(1, "Name is required").max(255),
   slug: z.string().max(255).optional().or(z.literal("")),
   description: z.string().optional().or(z.literal("")),
+  imageUrl: z.string().max(500).optional().or(z.literal("")),
+  metaTitle: z.string().max(255).optional().or(z.literal("")),
+  metaDescription: z.string().max(500).optional().or(z.literal("")),
+  subdomain: z
+    .string()
+    .max(63)
+    .regex(SUBDOMAIN_PATTERN, "Use lowercase letters, numbers, and hyphens only")
+    .optional()
+    .or(z.literal("")),
+  isActive: z.boolean(),
   parentId: z.string().optional(),
 });
 
@@ -72,11 +91,14 @@ function CategoryFormDialog({
   const isEditing = !!category;
   const createCategory = useCreateCategory();
   const updateCategory = useUpdateCategory(category?.id ?? "");
+  const rootDomain = getRootDomain();
 
   const {
     register,
     handleSubmit,
     reset,
+    watch,
+    control,
     formState: { errors },
   } = useForm<CategoryFormValues>({
     resolver: zodResolver(categorySchema),
@@ -84,17 +106,34 @@ function CategoryFormDialog({
       name: category?.name ?? "",
       slug: category?.slug ?? "",
       description: category?.description ?? "",
+      imageUrl: category?.imageUrl ?? "",
+      metaTitle: category?.metaTitle ?? "",
+      metaDescription: category?.metaDescription ?? "",
+      subdomain: category?.subdomain ?? "",
+      isActive: category?.isActive ?? true,
       parentId: category?.parentId ?? undefined,
     },
   });
 
   const [parentId, setParentId] = useState<string | undefined>(category?.parentId ?? undefined);
+  const subdomainValue = watch("subdomain");
 
   const onSubmit = async (values: CategoryFormValues) => {
+    // Same normalization as the API's CreateCategoryDto.subdomain
+    // @Transform - applied here too so the live preview and the value sent
+    // to the server always agree with each other.
+    const subdomain = values.subdomain
+      ? values.subdomain.trim().toLowerCase().replace(/[\s_]+/g, "-")
+      : undefined;
     const payload = {
       name: values.name,
       slug: values.slug || undefined,
       description: values.description || undefined,
+      imageUrl: values.imageUrl || undefined,
+      metaTitle: values.metaTitle || undefined,
+      metaDescription: values.metaDescription || undefined,
+      subdomain,
+      isActive: values.isActive,
       parentId,
     };
     try {
@@ -137,6 +176,54 @@ function CategoryFormDialog({
             <Textarea id="cat-description" rows={2} {...register("description")} />
           </div>
           <div className="flex flex-col gap-2">
+            <Label htmlFor="cat-subdomain">Subdomain</Label>
+            <Input
+              id="cat-subdomain"
+              placeholder="e.g. kesehatan"
+              {...register("subdomain")}
+            />
+            {errors.subdomain && (
+              <p className="text-sm text-destructive">{errors.subdomain.message}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              {subdomainValue
+                ? `Preview: https://${subdomainValue.trim().toLowerCase().replace(/[\s_]+/g, "-")}.${rootDomain}`
+                : `Leave blank to keep this category on ${rootDomain}/category/…`}
+            </p>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="cat-image">Logo / image URL</Label>
+            <Input id="cat-image" placeholder="https://…" {...register("imageUrl")} />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="cat-meta-title">Meta title</Label>
+            <Input
+              id="cat-meta-title"
+              placeholder={category ? `${category.name} Terbaru Hari Ini | BeritaBot` : undefined}
+              {...register("metaTitle")}
+            />
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="cat-meta-description">Meta description</Label>
+            <Textarea id="cat-meta-description" rows={2} {...register("metaDescription")} />
+          </div>
+          <div className="flex items-center gap-2">
+            <Controller
+              name="isActive"
+              control={control}
+              render={({ field }) => (
+                <Checkbox
+                  id="cat-active"
+                  checked={field.value}
+                  onCheckedChange={(v) => field.onChange(!!v)}
+                />
+              )}
+            />
+            <Label htmlFor="cat-active" className="font-normal">
+              Active (publicly reachable)
+            </Label>
+          </div>
+          <div className="flex flex-col gap-2">
             <Label>Parent category</Label>
             {(() => {
               // Base UI's <Select.Value> only reliably shows the matched
@@ -177,6 +264,7 @@ export default function CategoriesPage() {
   const deleteCategory = useDeleteCategory();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | undefined>(undefined);
+  const rootDomain = getRootDomain();
 
   const openCreate = () => {
     setEditingCategory(undefined);
@@ -233,7 +321,9 @@ export default function CategoriesPage() {
                 <TableRow>
                   <TableHead>Name</TableHead>
                   <TableHead>Slug</TableHead>
+                  <TableHead>Subdomain</TableHead>
                   <TableHead>Parent</TableHead>
+                  <TableHead>Status</TableHead>
                   <TableHead className="w-10" />
                 </TableRow>
               </TableHeader>
@@ -243,7 +333,15 @@ export default function CategoriesPage() {
                     <TableCell className="font-medium">{cat.name}</TableCell>
                     <TableCell className="text-muted-foreground">{cat.slug}</TableCell>
                     <TableCell className="text-muted-foreground">
+                      {cat.subdomain ? `${cat.subdomain}.${rootDomain}` : "—"}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
                       {categories.find((c) => c.id === cat.parentId)?.name ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={cat.isActive === false ? "secondary" : "default"}>
+                        {cat.isActive === false ? "Inactive" : "Active"}
+                      </Badge>
                     </TableCell>
                     <TableCell>
                       <DropdownMenu>

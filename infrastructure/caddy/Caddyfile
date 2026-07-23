@@ -3,14 +3,35 @@
 # renewal cron). Replace both domains below with your real ones; Caddy
 # needs them to resolve to this server's IP before it can issue a cert.
 #
-# See docs/DEPLOY.md for the full setup this plugs into.
+# See docs/DEPLOY.md for the full setup this plugs into, and
+# docs/DEPLOY.md §7.1 specifically for the wildcard block below (category
+# subdomains) - it needs a DNS-01 challenge, which the plain `caddy:2-alpine`
+# image in docker-compose.prod.yml does NOT support out of the box.
 
-# Both hosts point at the same web app - proxy.ts (apps/web/proxy.ts) is
-# what actually keeps the reader-facing pages on the apex domain and
-# redirects everything else to app.beritabot.com.
-beritabot.com, app.beritabot.com {
+# Apex + dashboard host + www (redirected to the apex by apps/web/proxy.ts
+# itself, not here) all point at the same web app - proxy.ts is what
+# actually keeps the reader-facing pages on the apex domain and redirects
+# everything else to app.beritabot.com.
+beritabot.com, app.beritabot.com, www.beritabot.com {
 	reverse_proxy web:3100
 }
+
+# Every category subdomain (kesehatan.beritabot.com, teknologi.beritabot.com,
+# ...) also goes to the same web app - apps/web/proxy.ts decides per-hostname
+# whether it's a known, active category (renders that category's homepage)
+# or an unrecognized subdomain (plain 404, never a fake/guessable site).
+# Caddy automatically prefers the more specific host blocks above (app./www.)
+# over this wildcard for a request that matches both, so this only ever
+# catches subdomains other than app/www/api.
+#
+# INACTIVE BY DEFAULT: a wildcard hostname cannot get a certificate via the
+# default HTTP-01 challenge, only DNS-01 (see docs/DEPLOY.md §7.1). Until
+# that's set up, leave this block commented out and keep
+# ENABLE_CATEGORY_SUBDOMAINS=false in .env.production - apps/web/proxy.ts's
+# kill switch means no code path needs this block to exist yet.
+# *.beritabot.com {
+# 	reverse_proxy web:3100
+# }
 
 api.beritabot.com {
 	# Publicly-readable media objects (MinIO) served under the API host at

@@ -4,7 +4,12 @@ import { Prisma } from '@prisma/client';
 import slugify from 'slugify';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
-import { CreateCategoryDto, UpdateCategoryDto, CategoryQueryDto } from './dto/category.dto';
+import {
+  CreateCategoryDto,
+  UpdateCategoryDto,
+  CategoryQueryDto,
+  RESERVED_SUBDOMAINS,
+} from './dto/category.dto';
 
 @Injectable()
 export class CategoriesService {
@@ -44,6 +49,10 @@ export class CategoriesService {
 
     const slug = await this.generateSlug(dto.slug ?? dto.name, organizationId);
 
+    if (dto.subdomain) {
+      await this.assertSubdomainAvailable(dto.subdomain, organizationId);
+    }
+
     const category = await this.prisma.category.create({
       data: {
         organizationId,
@@ -54,7 +63,9 @@ export class CategoriesService {
         imageUrl: dto.imageUrl,
         metaTitle: dto.metaTitle,
         metaDescription: dto.metaDescription,
+        subdomain: dto.subdomain,
         sortOrder: dto.sortOrder ?? 0,
+        ...(dto.isActive !== undefined && { isActive: dto.isActive }),
       },
     });
 
@@ -195,6 +206,12 @@ export class CategoriesService {
       slug = await this.generateSlug(dto.name, organizationId, id);
     }
 
+    if (dto.subdomain !== undefined && dto.subdomain !== existing.subdomain) {
+      if (dto.subdomain) {
+        await this.assertSubdomainAvailable(dto.subdomain, organizationId, id);
+      }
+    }
+
     const updated = await this.prisma.category.update({
       where: { id },
       data: {
@@ -204,8 +221,12 @@ export class CategoriesService {
         ...(dto.imageUrl !== undefined && { imageUrl: dto.imageUrl }),
         ...(dto.metaTitle !== undefined && { metaTitle: dto.metaTitle }),
         ...(dto.metaDescription !== undefined && { metaDescription: dto.metaDescription }),
+        // dto.subdomain === "" (cleared in the admin form) intentionally
+        // nulls it out - only `undefined` (field omitted) leaves it alone.
+        ...(dto.subdomain !== undefined && { subdomain: dto.subdomain || null }),
         ...(dto.parentId !== undefined && { parentId: dto.parentId }),
         ...(dto.sortOrder !== undefined && { sortOrder: dto.sortOrder }),
+        ...(dto.isActive !== undefined && { isActive: dto.isActive }),
       },
       include: {
         parent: true,
@@ -275,6 +296,33 @@ export class CategoriesService {
       });
 
       cursor = node?.parentId ?? null;
+    }
+  }
+
+  // Unlike generateSlug's auto-suffix-on-collision behavior, a colliding
+  // subdomain is a hard rejection (400) - it's a public-facing hostname a
+  // human deliberately chose, so silently renaming it to something else
+  // would be surprising, not helpful.
+  private async assertSubdomainAvailable(
+    subdomain: string,
+    organizationId: string,
+    excludeId?: string,
+  ): Promise<void> {
+    if (RESERVED_SUBDOMAINS.includes(subdomain)) {
+      throw new BadRequestException(`"${subdomain}" is a reserved subdomain and cannot be used`);
+    }
+
+    const existing = await this.prisma.category.findFirst({
+      where: {
+        organizationId,
+        subdomain,
+        deletedAt: null,
+        ...(excludeId && { id: { not: excludeId } }),
+      },
+    });
+
+    if (existing) {
+      throw new BadRequestException(`Subdomain "${subdomain}" is already in use`);
     }
   }
 

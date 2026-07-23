@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { PublicArticle, PublicSearchResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { getCategoryColors } from "@/lib/category-colors";
+import { getArticleUrl } from "@/lib/site-url";
 import { SmartArticleImage, CategoryPlaceholder } from "./smart-article-image";
 
 type CardArticle = PublicArticle | PublicSearchResult;
@@ -65,7 +66,7 @@ export function ArticleCard({
 
   if (variant === "list") {
     return (
-      <Link href={`/news/${article.slug}`} className={cn("group flex gap-3", className)}>
+      <Link href={getArticleUrl(article)} className={cn("group flex gap-3", className)}>
         <CardImage article={article} className="aspect-square h-16 w-16 shrink-0 rounded-md" />
         <div className="flex min-w-0 flex-col justify-center gap-1">
           <CategoryTag article={article} />
@@ -82,7 +83,7 @@ export function ArticleCard({
 
   if (variant === "horizontal") {
     return (
-      <Link href={`/news/${article.slug}`} className={cn("group flex gap-4", className)}>
+      <Link href={getArticleUrl(article)} className={cn("group flex gap-4", className)}>
         <CardImage article={article} className="aspect-4/3 w-36 shrink-0 rounded-md sm:w-48" />
         <div className="flex min-w-0 flex-col justify-center gap-1.5">
           <CategoryTag article={article} />
@@ -104,7 +105,7 @@ export function ArticleCard({
 
   if (variant === "secondary") {
     return (
-      <Link href={`/news/${article.slug}`} className={cn("group flex gap-3", className)}>
+      <Link href={getArticleUrl(article)} className={cn("group flex gap-3", className)}>
         <CardImage article={article} className="aspect-square h-20 w-20 shrink-0 rounded-md" />
         <div className="flex min-w-0 flex-col justify-center gap-1">
           <CategoryTag article={article} />
@@ -121,7 +122,7 @@ export function ArticleCard({
 
   if (variant === "hero") {
     return (
-      <Link href={`/news/${article.slug}`} className={cn("group flex flex-col gap-4", className)}>
+      <Link href={getArticleUrl(article)} className={cn("group flex flex-col gap-4", className)}>
         <CardImage article={article} className="aspect-video w-full rounded-xl shadow-sm" />
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
@@ -150,7 +151,7 @@ export function ArticleCard({
   }
 
   return (
-    <Link href={`/news/${article.slug}`} className={cn("group flex flex-col gap-3", className)}>
+    <Link href={getArticleUrl(article)} className={cn("group flex flex-col gap-3", className)}>
       <CardImage article={article} className="aspect-video w-full rounded-lg shadow-sm" />
       <div className="flex flex-col gap-1.5">
         <CategoryTag article={article} />

@@ -145,8 +145,20 @@ export class SearchService {
       const total =
         typeof hits.total === 'object' ? hits.total.value : (hits.total ?? hits.hits.length);
 
+      const categoryMap = await this.fetchCategoryMap(
+        hits.hits.map((hit: any) => hit._source.categoryId),
+      );
+
       return {
-        data: hits.hits.map((hit: any) => ({ id: hit._id, score: hit._score, ...hit._source })),
+        data: hits.hits.map((hit: any) => {
+          const { categoryId, ...source } = hit._source;
+          return {
+            id: hit._id,
+            score: hit._score,
+            ...source,
+            primaryCategory: categoryId ? (categoryMap.get(categoryId) ?? null) : null,
+          };
+        }),
         meta: { total, page: Math.max(1, page), limit: take },
       };
     } catch (error) {
@@ -309,6 +321,25 @@ export class SearchService {
     });
   }
 
+  // OpenSearch documents only store categoryId (see indexArticle above) —
+  // resolving it to {slug, subdomain} needed for cross-subdomain result
+  // links (getArticleUrl on the frontend) is done here, in one batched
+  // query per search response, rather than denormalizing slug/subdomain
+  // into the index itself, which would go stale the moment an admin edits
+  // a category without every indexed article being reindexed.
+  private async fetchCategoryMap(
+    categoryIds: Array<string | undefined>,
+  ): Promise<Map<string, { id: string; name: string; slug: string; subdomain: string | null; isActive: boolean }>> {
+    const ids = [...new Set(categoryIds.filter((id): id is string => Boolean(id)))];
+    if (ids.length === 0) return new Map();
+
+    const categories = await this.prisma.category.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true, slug: true, subdomain: true, isActive: true },
+    });
+    return new Map(categories.map((category) => [category.id, category]));
+  }
+
   private stripHtml(html: string): string {
     return html
       .replace(/<[^>]+>/g, ' ')
@@ -345,6 +376,9 @@ export class SearchService {
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
+        include: {
+          primaryCategory: { select: { id: true, name: true, slug: true, subdomain: true, isActive: true } },
+        },
       }),
       this.prisma.article.count({ where }),
     ]);

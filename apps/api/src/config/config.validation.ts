@@ -31,6 +31,10 @@ export const configValidationSchema = Joi.object({
   PORT: Joi.number().default(4000),
   APP_URL: Joi.string().default('http://localhost:3000'),
   API_URL: Joi.string().default('http://localhost:4000'),
+  // Bare root domain (no protocol/subdomain) used to build category-subdomain
+  // URLs — see common/url/site-url.util.ts. Also the suffix CORS_ORIGINS'
+  // wildcard check matches *.{ROOT_DOMAIN} against.
+  ROOT_DOMAIN: Joi.string().default('beritabot.com'),
 
   DATABASE_URL: Joi.string().required(),
 

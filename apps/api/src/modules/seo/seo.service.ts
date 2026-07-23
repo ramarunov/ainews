@@ -1,8 +1,10 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AIGatewayService } from '../ai/ai-gateway.service';
 import { AIWriterService } from '../ai/ai-writer.service';
+import { getArticleUrl, getRootDomain } from '../../common/url/site-url.util';
 
 export interface SeoData {
   metaTitle: string;
@@ -43,6 +45,10 @@ export class SeoService {
     private readonly aiGateway: AIGatewayService,
     private readonly aiWriter: AIWriterService,
     private readonly eventEmitter: EventEmitter2,
+    // Optional (tests instantiate this service with only the four
+    // collaborators above) - only needed to resolve ROOT_DOMAIN for the
+    // category-subdomain canonical-URL branch in buildCanonicalUrl().
+    private readonly config?: ConfigService,
   ) {}
 
   // ─── Generate Full SEO Package ─────────────────────────────────────────────
@@ -54,7 +60,7 @@ export class SeoService {
       content: string;
       excerpt?: string;
       slug: string;
-      primaryCategorySlug?: string;
+      primaryCategory?: { slug: string; subdomain?: string | null } | null;
       featuredImageUrl?: string;
       author?: { displayName: string };
       publishedAt?: Date;
@@ -79,7 +85,7 @@ export class SeoService {
       this.generateArticleSchema(article, siteUrl, organization),
     ]);
 
-    const canonicalUrl = this.buildCanonicalUrl(siteUrl, article.slug);
+    const canonicalUrl = this.buildCanonicalUrl(siteUrl, article.slug, article.primaryCategory);
     const seoScore = this.calculateSeoScore(article.content, article.title, {
       metaTitle,
       metaDescription,
@@ -130,6 +136,7 @@ Return ONLY the title text, no quotes or explanation.`,
       content?: string;
       excerpt?: string;
       slug: string;
+      primaryCategory?: { slug: string; subdomain?: string | null } | null;
       featuredImageUrl?: string;
       author?: { displayName: string };
       publishedAt?: Date;
@@ -138,7 +145,7 @@ Return ONLY the title text, no quotes or explanation.`,
     siteUrl: string,
     organization?: { name: string; logoUrl?: string | null },
   ): Promise<object> {
-    const url = this.buildCanonicalUrl(siteUrl, article.slug);
+    const url = this.buildCanonicalUrl(siteUrl, article.slug, article.primaryCategory);
 
     const schema: Record<string, any> = {
       '@context': 'https://schema.org',
@@ -376,7 +383,11 @@ Return ONLY the title text, no quotes or explanation.`,
 
   // ─── Sitemap Data Generation ────────────────────────────────────────────────
 
-  async getSitemapEntries(organizationId: string): Promise<
+  // categoryId, when given, restricts this to one category's articles - the
+  // per-hostname sitemap split (apex-only vs. this-category-only) needs
+  // that, since a category's articles now belong to its own subdomain, not
+  // the flat single-sitemap list this used to always return.
+  async getSitemapEntries(organizationId: string, categoryId?: string): Promise<
     Array<{
       url: string;
       lastmod: string;
@@ -389,17 +400,20 @@ Return ONLY the title text, no quotes or explanation.`,
         organizationId,
         status: 'PUBLISHED',
         deletedAt: null,
+        ...(categoryId && { primaryCategoryId: categoryId }),
       },
       select: {
         slug: true,
         updatedAt: true,
-        primaryCategory: { select: { slug: true } },
+        primaryCategory: { select: { slug: true, subdomain: true } },
       },
       orderBy: { publishedAt: 'desc' },
     });
 
+    const rootDomain = this.config ? getRootDomain(this.config) : 'beritabot.com';
+
     return articles.map((article) => ({
-      url: `/${article.primaryCategory?.slug ?? 'news'}/${article.slug}`,
+      url: getArticleUrl(article, rootDomain),
       lastmod: article.updatedAt.toISOString().split('T')[0],
       changefreq: 'weekly',
       priority: 0.8,
@@ -408,7 +422,20 @@ Return ONLY the title text, no quotes or explanation.`,
 
   // ─── Private Helpers ──────────────────────────────────────────────────────
 
-  private buildCanonicalUrl(siteUrl: string, slug: string): string {
+  // Falls back to the org's freeform siteUrl setting (`/news/:slug`) unless
+  // both a category with a subdomain assigned AND ConfigService (for
+  // ROOT_DOMAIN) are available - this keeps every existing call site (the
+  // manual admin schema/canonical endpoints, which don't have category data)
+  // working exactly as before, while the auto-generation flow in
+  // onArticlePublished below gets a real category-subdomain canonical URL.
+  private buildCanonicalUrl(
+    siteUrl: string,
+    slug: string,
+    category?: { slug: string; subdomain?: string | null } | null,
+  ): string {
+    if (category?.subdomain && this.config) {
+      return getArticleUrl({ slug, primaryCategory: category }, getRootDomain(this.config));
+    }
     return `${siteUrl.replace(/\/$/, '')}/news/${slug}`;
   }
 
@@ -421,7 +448,7 @@ Return ONLY the title text, no quotes or explanation.`,
         where: { id: event.articleId },
         include: {
           primaryAuthor: { select: { displayName: true } },
-          primaryCategory: { select: { slug: true } },
+          primaryCategory: { select: { slug: true, subdomain: true } },
           seoData: true,
         },
       });
@@ -448,6 +475,7 @@ Return ONLY the title text, no quotes or explanation.`,
           content: article.content,
           excerpt: article.excerpt ?? undefined,
           slug: article.slug,
+          primaryCategory: article.primaryCategory,
           featuredImageUrl: article.featuredImageUrl ?? undefined,
           author: { displayName: article.primaryAuthor.displayName ?? 'Staff' },
           publishedAt: article.publishedAt ?? undefined,

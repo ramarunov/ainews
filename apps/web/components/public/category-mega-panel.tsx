@@ -1,13 +1,14 @@
 import Link from "next/link";
 import type { Category, PublicArticle } from "@/lib/types";
 import { getCategoryColors } from "@/lib/category-colors";
+import { getArticleUrl, getCategoryUrl } from "@/lib/site-url";
 import { SmartArticleImage, CategoryPlaceholder } from "./smart-article-image";
 
 function PreviewCard({ article }: { article: PublicArticle }) {
   const url = article.featuredImageUrl;
   return (
     <Link
-      href={`/news/${article.slug}`}
+      href={getArticleUrl(article)}
       className="group flex flex-col gap-2"
     >
       {url ? (
@@ -68,7 +69,7 @@ export function CategoryMegaPanel({
             {category.name}
           </span>
           <Link
-            href={`/category/${category.slug}`}
+            href={getCategoryUrl(category)}
             className={`text-xs font-semibold hover:underline ${colors.text}`}
           >
             Lihat semua &rarr;

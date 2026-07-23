@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Category, HomepageWidget as HomepageWidgetConfig, PublicArticle } from "@/lib/types";
 import { getCategoryColors } from "@/lib/category-colors";
+import { getCategoryUrl } from "@/lib/site-url";
 import { TrendingList } from "./trending-list";
 import { AdSlot } from "./ad-slot";
 
@@ -33,7 +34,7 @@ export function HomepageWidget({
             return (
               <Link
                 key={category.id}
-                href={`/category/${category.slug}`}
+                href={getCategoryUrl(category)}
                 className="flex items-center gap-1.5 text-sm hover:underline"
               >
                 <span className={`h-2 w-2 rounded-full ${colors.badge}`} />

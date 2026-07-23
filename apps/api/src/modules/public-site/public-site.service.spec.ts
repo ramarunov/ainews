@@ -132,6 +132,39 @@ describe('PublicSiteService', () => {
       );
       expect(result.data).toEqual([{ id: 'a' }, { id: 'b' }]);
     });
+
+    it('drops articles whose primary category has been deactivated (excludeId branch)', async () => {
+      articlesService.findAll.mockResolvedValue({
+        data: [
+          { id: 'current' },
+          { id: 'a', primaryCategory: { isActive: true } },
+          { id: 'b', primaryCategory: { isActive: false } },
+        ],
+        meta: { total: 3 },
+      });
+
+      const result = await service.listPublished({ excludeId: 'current', limit: 2 } as any);
+
+      expect(result.data).toEqual([{ id: 'a', primaryCategory: { isActive: true } }]);
+    });
+
+    it('drops articles whose primary category has been deactivated (default branch)', async () => {
+      articlesService.findAll.mockResolvedValue({
+        data: [
+          { id: 'a', primaryCategory: { isActive: true } },
+          { id: 'b', primaryCategory: { isActive: false } },
+          { id: 'c' }, // no category at all - must not be dropped
+        ],
+        meta: { total: 3 },
+      });
+
+      const result = await service.listPublished({} as any);
+
+      expect(result.data).toEqual([
+        { id: 'a', primaryCategory: { isActive: true } },
+        { id: 'c' },
+      ]);
+    });
   });
 
   describe('findPublishedBySlug', () => {
@@ -148,6 +181,24 @@ describe('PublicSiteService', () => {
       await expect(service.findPublishedBySlug('x')).resolves.toBe(article);
       expect(articlesService.findBySlug).toHaveBeenCalledWith('x', 'org-1');
     });
+
+    it('throws NotFoundException when the published article\'s category has been deactivated', async () => {
+      articlesService.findBySlug.mockResolvedValue({
+        id: 'a1',
+        status: 'PUBLISHED',
+        slug: 'x',
+        primaryCategory: { isActive: false },
+      });
+
+      await expect(service.findPublishedBySlug('x')).rejects.toThrow(NotFoundException);
+    });
+
+    it('returns the article when it has no primary category at all', async () => {
+      const article = { id: 'a1', status: 'PUBLISHED', slug: 'x', primaryCategory: null };
+      articlesService.findBySlug.mockResolvedValue(article);
+
+      await expect(service.findPublishedBySlug('x')).resolves.toBe(article);
+    });
   });
 
   describe('listCategories', () => {
@@ -161,6 +212,19 @@ describe('PublicSiteService', () => {
         'org-1',
       );
       expect(result).toEqual([{ id: 'cat-1' }]);
+    });
+
+    it('drops inactive categories - this list also drives hostname-to-category resolution', async () => {
+      categoriesService.findAll.mockResolvedValue({
+        data: [
+          { id: 'cat-1', isActive: true },
+          { id: 'cat-2', isActive: false },
+        ],
+      });
+
+      const result = await service.listCategories();
+
+      expect(result).toEqual([{ id: 'cat-1', isActive: true }]);
     });
   });
 
@@ -204,6 +268,24 @@ describe('PublicSiteService', () => {
         1,
         20,
       );
+    });
+
+    it('drops results whose primary category has been deactivated', async () => {
+      searchService.search.mockResolvedValue({
+        data: [
+          { id: 'a', primaryCategory: { isActive: true } },
+          { id: 'b', primaryCategory: { isActive: false } },
+          { id: 'c' },
+        ],
+        meta: { total: 3 },
+      });
+
+      const result = await service.search('ai regulation');
+
+      expect(result.data).toEqual([
+        { id: 'a', primaryCategory: { isActive: true } },
+        { id: 'c' },
+      ]);
     });
   });
 

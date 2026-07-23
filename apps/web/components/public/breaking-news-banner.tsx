@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { PublicArticle } from "@/lib/types";
+import { getArticleUrl } from "@/lib/site-url";
 
 export function BreakingNewsBanner({ articles }: { articles: PublicArticle[] }) {
   if (articles.length === 0) return null;
@@ -20,7 +21,7 @@ export function BreakingNewsBanner({ articles }: { articles: PublicArticle[] }) 
           {items.map((article, i) => (
             <Link
               key={`${article.id}-${i}`}
-              href={`/news/${article.slug}`}
+              href={getArticleUrl(article)}
               className="shrink-0 text-sm font-semibold whitespace-nowrap hover:underline"
             >
               {article.title}

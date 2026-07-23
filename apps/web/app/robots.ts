@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3100";
+import { headers } from "next/headers";
+import { getAbsoluteUrl } from "@/lib/site-url";
 
 // The admin dashboard and the public reader site share this one Next.js
 // app/domain (route groups like `(dashboard)`/`(public)` don't add a URL
@@ -15,7 +15,12 @@ const DASHBOARD_PATHS = [
   "/users", "/api-keys", "/activity", "/system-settings", "/account",
 ];
 
-export default function robots(): MetadataRoute.Robots {
+// Each host (apex or a category subdomain) gets its own robots.txt pointing
+// at its own sitemap/feed - see sitemap.ts and app/feed/route.ts, both of
+// which already branch on the same `Host` header.
+export default async function robots(): Promise<MetadataRoute.Robots> {
+  const hostname = (await headers()).get("host")?.split(":")[0] ?? "";
+
   return {
     rules: {
       userAgent: "*",
@@ -23,9 +28,9 @@ export default function robots(): MetadataRoute.Robots {
       disallow: DASHBOARD_PATHS,
     },
     sitemap: [
-      `${SITE_URL}/sitemap.xml`,
-      `${SITE_URL}/news-sitemap.xml`,
-      `${SITE_URL}/image-sitemap.xml`,
+      getAbsoluteUrl("/sitemap.xml", hostname),
+      getAbsoluteUrl("/news-sitemap.xml", hostname),
+      getAbsoluteUrl("/image-sitemap.xml", hostname),
     ],
   };
 }

@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { headers } from "next/headers";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { ArticleCard } from "@/components/public/article-card";
 import { TrendingList } from "@/components/public/trending-list";
+import { Breadcrumb } from "@/components/public/breadcrumb";
 import { getCategoryColors } from "@/lib/category-colors";
 import { getCategoryBySlug, getPublishedArticles } from "@/lib/public-api";
+import { getCategoryUrl, getRootDomain } from "@/lib/site-url";
 import { SITE_NAME } from "@/lib/brand";
 
 interface Props {
@@ -18,8 +21,15 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const category = await getCategoryBySlug(slug);
   if (!category) return {};
   return {
-    title: `${category.name} — ${SITE_NAME}`,
-    description: category.description ?? `Latest ${category.name} stories from ${SITE_NAME}.`,
+    title: category.metaTitle || `${category.name} — ${SITE_NAME}`,
+    description:
+      category.metaDescription ||
+      category.description ||
+      `${category.name} Terbaru Hari Ini | ${SITE_NAME}`,
+    alternates: {
+      canonical: getCategoryUrl(category),
+      types: { "application/rss+xml": `${getCategoryUrl(category).replace(/\/$/, "")}/feed` },
+    },
   };
 }
 
@@ -31,6 +41,20 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   const category = await getCategoryBySlug(slug);
   if (!category) notFound();
 
+  // Same reasoning as the article page's wrong-host redirect: this route is
+  // reachable from every host (apex, any category subdomain) via
+  // PUBLIC_PATH_PREFIXES' "/category" entry, but a category only has one
+  // canonical URL - its own subdomain if it has one, else the apex. Visiting
+  // it from any other host must redirect there, not render a second copy.
+  const requestHostname = (await headers()).get("host")?.split(":")[0] ?? "";
+  const canonicalCategoryUrl = getCategoryUrl(category, getRootDomain());
+  const canonicalHostname = new URL(canonicalCategoryUrl).hostname;
+  if (requestHostname && requestHostname !== canonicalHostname) {
+    const redirectUrl = new URL(canonicalCategoryUrl);
+    if (page > 1) redirectUrl.searchParams.set("page", String(page));
+    permanentRedirect(redirectUrl.toString());
+  }
+
   const [{ data: articles, meta }, trending] = await Promise.all([
     getPublishedArticles({ categorySlug: slug, page, limit: 13 }),
     getPublishedArticles({ categorySlug: slug, sortBy: "viewCount", limit: 5 }),
@@ -38,11 +62,39 @@ export default async function CategoryPage({ params, searchParams }: Props) {
 
   const colors = getCategoryColors(category.slug ?? category.name);
   const [lead, ...rest] = articles;
+  const rootDomain = getRootDomain();
+  const categoryUrl = getCategoryUrl(category, rootDomain);
+
+  const categorySchema = [
+    {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      name: category.metaTitle || category.name,
+      description: category.metaDescription || category.description || undefined,
+      url: categoryUrl,
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: SITE_NAME, item: `https://${rootDomain}` },
+        { "@type": "ListItem", position: 2, name: category.name, item: categoryUrl },
+      ],
+    },
+  ];
 
   return (
     <div className="flex flex-col gap-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(categorySchema) }}
+      />
       <div className={`${colors.badge} py-10`}>
         <div className="mx-auto w-full max-w-6xl px-4">
+          <Breadcrumb
+            className="mb-3 text-white"
+            items={[{ label: "Beranda", href: `https://${rootDomain}` }, { label: category.name }]}
+          />
           <h1 className="text-4xl font-black tracking-tight text-white uppercase md:text-5xl">
             {category.name}
           </h1>
@@ -74,7 +126,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
               {meta.totalPages > 1 && (
                 <div className="flex items-center justify-center gap-4 border-t pt-6">
                   <Link
-                    href={`/category/${slug}?page=${page - 1}`}
+                    href={`?page=${page - 1}`}
                     aria-disabled={page <= 1}
                     className={`flex items-center gap-1 text-sm font-semibold hover:text-primary ${page <= 1 ? "pointer-events-none opacity-30" : ""}`}
                   >
@@ -84,7 +136,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
                     Halaman {page} dari {meta.totalPages}
                   </span>
                   <Link
-                    href={`/category/${slug}?page=${page + 1}`}
+                    href={`?page=${page + 1}`}
                     aria-disabled={page >= meta.totalPages}
                     className={`flex items-center gap-1 text-sm font-semibold hover:text-primary ${page >= meta.totalPages ? "pointer-events-none opacity-30" : ""}`}
                   >

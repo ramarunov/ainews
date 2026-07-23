@@ -45,8 +45,7 @@ import { AiToolsPanel } from "@/components/ai-tools-panel";
 import { AiPipelinePanel } from "@/components/ai-pipeline-panel";
 import { MediaPickerDialog } from "@/components/media-picker-dialog";
 import { StockPhotoDialog } from "@/components/stock-photo-dialog";
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3100";
+import { getArticleUrl } from "@/lib/site-url";
 
 const articleSchema = z.object({
   title: z.string().min(10, "Title must be at least 10 characters").max(500),
@@ -678,7 +677,7 @@ export function ArticleForm({ article }: { article?: Article }) {
             </Button>
             {article?.status === "PUBLISHED" && (
               <a
-                href={`${SITE_URL}/news/${article.slug}`}
+                href={article ? getArticleUrl(article) : "#"}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={buttonVariants({ variant: "outline" })}

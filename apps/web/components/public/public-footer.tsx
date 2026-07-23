@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Category, SiteFooterSetting } from "@/lib/types";
 import { getCategoryColors } from "@/lib/category-colors";
+import { getCategoryUrl } from "@/lib/site-url";
 import { SITE_NAME, SITE_TAGLINE } from "@/lib/brand";
 import { LoginLink } from "./login-link";
 
@@ -31,7 +32,7 @@ export function PublicFooter({
               return (
                 <Link
                   key={category.id}
-                  href={`/category/${category.slug}`}
+                  href={getCategoryUrl(category)}
                   className="w-fit text-sm hover:text-background"
                 >
                   <span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${colors.badge}`} />

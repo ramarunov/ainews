@@ -1,7 +1,8 @@
-import { getPublishedArticles } from "@/lib/public-api";
+import { headers } from "next/headers";
+import { getCategories, getPublishedArticles } from "@/lib/public-api";
+import { getArticleUrl, getRootDomain, resolveHostCategory } from "@/lib/site-url";
 import { SITE_NAME } from "@/lib/brand";
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3100";
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
 
 // Escapes the five XML special characters - titles/excerpts are free-text
@@ -20,7 +21,15 @@ function escapeXml(value: string): string {
 // sitemap.ts for that), Google explicitly recommends against listing
 // older content in a news sitemap.
 export async function GET() {
-  const { data: articles } = await getPublishedArticles({ limit: 50 });
+  const hostname = (await headers()).get("host")?.split(":")[0] ?? "";
+  const rootDomain = getRootDomain();
+  const categories = await getCategories();
+  const activeCategory = resolveHostCategory(hostname, rootDomain, categories);
+
+  const { data: articles } = await getPublishedArticles({
+    limit: 50,
+    categorySlug: activeCategory?.slug,
+  });
   const cutoff = Date.now() - TWO_DAYS_MS;
 
   const recentArticles = articles.filter(
@@ -30,7 +39,7 @@ export async function GET() {
   const urls = recentArticles
     .map(
       (article) => `  <url>
-    <loc>${SITE_URL}/news/${article.slug}</loc>
+    <loc>${getArticleUrl(article, rootDomain)}</loc>
     <news:news>
       <news:publication>
         <news:name>${escapeXml(SITE_NAME)}</news:name>

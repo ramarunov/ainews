@@ -74,6 +74,23 @@ app.example.com   A   <your-server-ip>
 api.example.com   A   <your-server-ip>
 ```
 
+### 2.1 Optional: wildcard DNS for category subdomains
+
+If you want per-category subdomains (`kesehatan.example.com`,
+`teknologi.example.com`, ...) rather than every category living at
+`example.com/category/kesehatan`, also add:
+
+```
+example.com        A   <your-server-ip>
+*.example.com       A   <your-server-ip>
+```
+
+A single wildcard `A` record covers every category subdomain — you don't
+add a new DNS record each time an admin assigns a category a subdomain.
+This is entirely optional and off by default (`ENABLE_CATEGORY_SUBDOMAINS=
+false`); skip this if you only want the apex + `app.`/`api.` split. See
+§7.1 for the matching Caddy/TLS side of this and the full rollout order.
+
 ---
 
 ## 3. Initial server setup
@@ -173,6 +190,13 @@ NEXT_PUBLIC_API_URL=https://api.example.com/api/v1
 NEXT_PUBLIC_MEDIA_URL=https://media.example.com/ainews-media
 NEXT_PUBLIC_SITE_URL=https://app.example.com
 
+# Category subdomains (§2.1/§7.1) - safe to leave at these defaults even if
+# you don't want the feature; ROOT_DOMAIN only matters once
+# ENABLE_CATEGORY_SUBDOMAINS is true.
+ROOT_DOMAIN=example.com
+NEXT_PUBLIC_ROOT_DOMAIN=example.com
+ENABLE_CATEGORY_SUBDOMAINS=false
+
 SMTP_HOST=<your real SMTP provider>
 SMTP_PORT=587
 SMTP_SECURE=true
@@ -261,6 +285,87 @@ docker compose -f docker-compose.prod.yml --env-file .env.production ps
 
 All services should show `healthy` within about a minute (OpenSearch is
 the slowest to start).
+
+### 7.1 Enabling category subdomains (optional)
+
+Skip this entirely if you didn't set up the wildcard DNS record in §2.1 —
+`ENABLE_CATEGORY_SUBDOMAINS=false` (the default) means none of this is
+needed and every category lives at `example.com/category/:slug`.
+
+**Why a wildcard cert needs extra setup.** Let's Encrypt can only issue a
+certificate covering `*.example.com` via the **DNS-01** challenge (proving
+you control the domain by creating a TXT record), not the plain **HTTP-01**
+challenge Caddy uses by default for `app.example.com`/`api.example.com`
+above (proving control by serving a file over HTTP). The stock
+`caddy:2-alpine` image in `docker-compose.prod.yml` does not include a
+DNS-01 provider module — you need a custom-built Caddy image with one.
+
+1. **Build a Caddy image with your DNS provider's module.** Using
+   Cloudflare as an example (swap for your own DNS provider — Caddy has
+   modules for most major ones, see https://caddyserver.com/download):
+
+   ```dockerfile
+   # infrastructure/caddy/Dockerfile
+   FROM caddy:2-builder AS builder
+   RUN xcaddy build --with github.com/caddy-dns/cloudflare
+
+   FROM caddy:2-alpine
+   COPY --from=builder /usr/bin/caddy /usr/bin/caddy
+   ```
+
+   Then point `docker-compose.prod.yml`'s `caddy` service at
+   `build: ./infrastructure/caddy` instead of `image: caddy:2-alpine`, and
+   `docker compose -f docker-compose.prod.yml --env-file .env.production
+   build caddy`.
+
+2. **Add the DNS provider's global option and API token to the Caddyfile.**
+   At the very top of `infrastructure/caddy/Caddyfile`, before any site
+   block:
+
+   ```caddyfile
+   {
+   	acme_dns cloudflare {env.CF_API_TOKEN}
+   }
+   ```
+
+   Add `CF_API_TOKEN=<a token scoped to Zone:DNS:Edit for this domain
+   only>` to `.env.production`, and pass it through to the `caddy` service
+   in `docker-compose.prod.yml` (`environment: - CF_API_TOKEN`).
+
+3. **Uncomment the wildcard site block** in
+   `infrastructure/caddy/Caddyfile` (`*.example.com { reverse_proxy
+   web:3100 }`) and replace `beritabot.com`/`example.com` throughout the
+   file with your real domain.
+
+4. **Confirm the wildcard cert actually issues** before flipping the app
+   flag on: `docker compose -f docker-compose.prod.yml --env-file
+   .env.production up -d caddy` and watch `docker compose ... logs -f
+   caddy` for a successful ACME DNS-01 completion for `*.example.com`.
+
+5. **Assign at least one category a subdomain** in the admin dashboard
+   (Categories → edit a category → Subdomain field) before turning the
+   feature on — otherwise there's nothing to test.
+
+6. **Flip the flag and restart:**
+
+   ```bash
+   # .env.production
+   ENABLE_CATEGORY_SUBDOMAINS=true
+   ```
+   ```bash
+   docker compose -f docker-compose.prod.yml --env-file .env.production restart web
+   ```
+
+   `apps/web/proxy.ts` reads this at request time from `process.env`
+   inside the running container, so a `restart` (not a rebuild) is enough
+   — unlike the `NEXT_PUBLIC_*` build-time vars in §6.
+
+**Rollback:** set `ENABLE_CATEGORY_SUBDOMAINS=false` and `restart web`.
+Every URL-building helper (`apps/web/lib/site-url.ts`,
+`apps/api/src/common/url/site-url.util.ts`) falls back to the apex
+`/category/:slug` and `/news/:slug` form the instant the flag is off, with
+no other state to clean up — category subdomain values already saved on
+categories are simply ignored again, not deleted.
 
 ---
 
@@ -399,6 +504,18 @@ pointing at this server yet, or ports 80/443 aren't actually reachable
 (check `ufw status`, and check your cloud provider's own firewall/security
 group too — some providers block inbound traffic at the network level
 separately from the OS firewall).
+
+**Caddy won't get a certificate for `*.example.com` specifically** (while
+`app.`/`api.` work fine) — this is expected with the stock `caddy:2-alpine`
+image; a wildcard cert requires the DNS-01 setup in §7.1 (custom image +
+DNS provider module + `acme_dns` block), not just DNS pointing at the
+server. Check `docker compose ... logs caddy` for the specific ACME error
+(wrong API token scope is the most common one).
+
+**A category subdomain 404s even though the category has one assigned** —
+either `ENABLE_CATEGORY_SUBDOMAINS` is still `false`/not yet restarted
+(§7.1 step 6), or the category is not `isActive` (an inactive category's
+subdomain is deliberately unreachable — see the admin category form).
 
 **`api-migrate` hangs or fails** — almost always Postgres not yet healthy;
 `depends_on: condition: service_healthy` should prevent this, but if you

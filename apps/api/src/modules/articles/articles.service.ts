@@ -570,7 +570,7 @@ export class ArticlesService {
         },
       },
       primaryCategory: {
-        select: { id: true, name: true, slug: true },
+        select: { id: true, name: true, slug: true, subdomain: true, isActive: true },
       },
       articleTags: {
         include: {

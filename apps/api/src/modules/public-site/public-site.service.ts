@@ -63,16 +63,29 @@ export class PublicSiteService {
       organizationId,
     );
 
+    type ResultArticle = { id: string; primaryCategory?: { isActive: boolean } | null };
+
     if (query.excludeId) {
       return {
         ...result,
-        data: (result.data as Array<{ id: string }>)
+        data: (result.data as ResultArticle[])
           .filter((article) => article.id !== query.excludeId)
+          .filter((article) => article.primaryCategory?.isActive !== false)
           .slice(0, requestedLimit),
       };
     }
 
-    return result;
+    // Same reasoning as findPublishedBySlug()/listCategories(): an inactive
+    // category's articles must not surface on public listings either. Not
+    // padded like the excludeId branch above - inactive categories are rare
+    // enough that a slightly-short page here is an acceptable trade-off
+    // versus the complexity of re-querying to keep pagination exact.
+    return {
+      ...result,
+      data: (result.data as ResultArticle[]).filter(
+        (article) => article.primaryCategory?.isActive !== false,
+      ),
+    };
   }
 
   async findPublishedBySlug(slug: string) {
@@ -86,6 +99,13 @@ export class PublicSiteService {
       throw new NotFoundException(`Article with slug "${slug}" not found`);
     }
 
+    // Same reasoning as listCategories()'s isActive filter: an article
+    // whose primary category has been deactivated must not stay reachable
+    // by slug just because the article row itself is still PUBLISHED.
+    if (article.primaryCategory && !article.primaryCategory.isActive) {
+      throw new NotFoundException(`Article with slug "${slug}" not found`);
+    }
+
     return article;
   }
 
@@ -94,7 +114,13 @@ export class PublicSiteService {
       { flat: true, limit: 100 },
       this.getPublicOrgId(),
     );
-    return result.data;
+    // findAll() is shared with the authenticated CMS category list, which
+    // legitimately needs to see inactive categories to re-enable them -
+    // the public listing must not, since this is also what drives
+    // hostname-to-category resolution (apps/web/proxy.ts) and per-host
+    // rendering. An inactive category disappearing from here is what makes
+    // its subdomain/articles publicly unreachable.
+    return result.data.filter((category) => category.isActive !== false);
   }
 
   async getAuthorProfile(id: string) {
@@ -111,13 +137,23 @@ export class PublicSiteService {
   }
 
   async search(q: string, page = 1, limit = 20) {
-    return this.searchService.search(
+    const result = await this.searchService.search(
       q,
       this.getPublicOrgId(),
       { status: ArticleStatus.PUBLISHED },
       page,
       limit,
     );
+
+    // Same reasoning as listPublished()/listCategories(): an inactive
+    // category's articles must not be surfaced to public search either.
+    type ResultArticle = { primaryCategory?: { isActive: boolean } | null };
+    return {
+      ...result,
+      data: (result.data as ResultArticle[]).filter(
+        (article) => article.primaryCategory?.isActive !== false,
+      ),
+    };
   }
 
   async getPublicSettings() {

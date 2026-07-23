@@ -9,6 +9,7 @@ import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { AppModule } from './app.module';
 import { initSentry } from './infrastructure/sentry/sentry';
 import { SentryExceptionFilter } from './common/filters/sentry-exception.filter';
+import { getRootDomain } from './common/url/site-url.util';
 
 // Prisma returns BigInt for columns like Article.viewCount / MediaFile.fileSize;
 // JSON.stringify can't serialize BigInt natively, so every response touching
@@ -71,9 +72,28 @@ async function bootstrap() {
     .get<string>('CORS_ORIGINS', 'http://localhost:3000')
     .split(',')
     .map((o) => o.trim());
+  const rootDomain = getRootDomain(configService);
 
   app.enableCors({
-    origin: corsOrigins,
+    // Keeps exact-match support for CORS_ORIGINS (app./api. hosts, local
+    // dev) and additionally accepts any *.{ROOT_DOMAIN} origin - one entry
+    // per category subdomain would otherwise need a config edit + restart
+    // every time an admin adds a category subdomain. The leading-dot check
+    // is deliberate: a naive `hostname.endsWith(rootDomain)` would wrongly
+    // accept "evilberitabot.com" as a match for "beritabot.com".
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (corsOrigins.includes(origin)) return callback(null, true);
+      try {
+        const hostname = new URL(origin).hostname;
+        if (hostname === rootDomain || hostname.endsWith(`.${rootDomain}`)) {
+          return callback(null, true);
+        }
+      } catch {
+        // Malformed Origin header - fall through to rejection below.
+      }
+      return callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: [

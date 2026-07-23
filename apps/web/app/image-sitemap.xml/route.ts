@@ -1,6 +1,6 @@
-import { getPublishedArticles } from "@/lib/public-api";
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3100";
+import { headers } from "next/headers";
+import { getCategories, getPublishedArticles } from "@/lib/public-api";
+import { getArticleUrl, getRootDomain, resolveHostCategory } from "@/lib/site-url";
 
 function escapeXml(value: string): string {
   return value
@@ -15,13 +15,21 @@ function escapeXml(value: string): string {
 // sitemap extension is for image discovery generally, not a "recent news"
 // signal. Only articles that actually have a featured image are listed.
 export async function GET() {
-  const { data: articles } = await getPublishedArticles({ limit: 100 });
+  const hostname = (await headers()).get("host")?.split(":")[0] ?? "";
+  const rootDomain = getRootDomain();
+  const categories = await getCategories();
+  const activeCategory = resolveHostCategory(hostname, rootDomain, categories);
+
+  const { data: articles } = await getPublishedArticles({
+    limit: 100,
+    categorySlug: activeCategory?.slug,
+  });
   const articlesWithImages = articles.filter((article) => article.featuredImageUrl);
 
   const urls = articlesWithImages
     .map(
       (article) => `  <url>
-    <loc>${SITE_URL}/news/${article.slug}</loc>
+    <loc>${getArticleUrl(article, rootDomain)}</loc>
     <image:image>
       <image:loc>${escapeXml(article.featuredImageUrl!)}</image:loc>
       <image:title>${escapeXml(article.featuredImageAlt || article.title)}</image:title>

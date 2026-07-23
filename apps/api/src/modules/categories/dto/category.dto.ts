@@ -7,8 +7,21 @@ import {
   MaxLength,
   MinLength,
   IsBoolean,
+  Matches,
 } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
+
+// Reserved subdomain labels - "app"/"api" are this deployment's own
+// dashboard/API hosts (infrastructure/caddy/Caddyfile), the rest are
+// conventional reservations no category should be able to shadow.
+export const RESERVED_SUBDOMAINS = [
+  'app', 'api', 'www', 'admin', 'mail', 'ftp', 'cdn', 'static', 'assets',
+];
+
+// Valid DNS label: lowercase letters/digits, hyphens allowed in the middle
+// only, 1-63 chars (RFC 1035) - Category.subdomain is @db.VarChar(63).
+export const SUBDOMAIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 export class CreateCategoryDto {
   @ApiProperty({ example: 'World News' })
@@ -46,6 +59,28 @@ export class CreateCategoryDto {
   @MaxLength(500)
   metaDescription?: string;
 
+  @ApiProperty({
+    required: false,
+    example: 'world-news',
+    description:
+      'Public-site subdomain (e.g. "world-news" -> world-news.beritabot.com). ' +
+      'Lowercased and spaces/underscores turned into hyphens automatically; ' +
+      'reserved words and uniqueness are enforced in CategoriesService.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(63)
+  @Transform(({ value }) =>
+    typeof value === 'string'
+      ? value.trim().toLowerCase().replace(/[\s_]+/g, '-')
+      : value,
+  )
+  @Matches(SUBDOMAIN_PATTERN, {
+    message:
+      'subdomain must be 1-63 characters of lowercase letters, numbers, and hyphens (not leading/trailing)',
+  })
+  subdomain?: string;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsUUID()
@@ -56,6 +91,18 @@ export class CreateCategoryDto {
   @IsInt()
   @Min(0)
   sortOrder?: number;
+
+  @ApiProperty({
+    required: false,
+    default: true,
+    description:
+      'Publicly reachable when true (default). Setting this false makes the ' +
+      "category's subdomain/articles publicly unreachable without affecting " +
+      'CMS/dashboard access to it.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class UpdateCategoryDto extends PartialType(CreateCategoryDto) {}

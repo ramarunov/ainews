@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { getCategories } from "@/lib/public-api";
+import { getRootDomain, resolveHostCategory } from "@/lib/site-url";
+import type { Category } from "@/lib/types";
 
 // Route groups like (public)/(dashboard) don't appear in the URL, so this
 // is an explicit allowlist of path prefixes that stay reachable on the
@@ -14,6 +17,7 @@ const PUBLIC_PATH_PREFIXES = [
   "/category",
   "/news",
   "/search",
+  "/feed",
   "/robots.txt",
   "/sitemap.xml",
   "/image-sitemap.xml",
@@ -29,11 +33,41 @@ function isPublicPath(pathname: string): boolean {
   );
 }
 
-export function proxy(request: NextRequest) {
+// proxy.ts runs on every request, so a bare fetch per-request would double
+// the API's read load for no benefit - the category list changes rarely
+// (only when an admin edits one). This is a plain in-module cache rather
+// than relying on Next's fetch-cache behaving a particular way inside
+// middleware, which isn't something documented to depend on.
+let categoryCache: { data: Category[]; expiresAt: number } | null = null;
+const CATEGORY_CACHE_TTL_MS = 60_000;
+
+async function getCachedCategories(): Promise<Category[]> {
+  const now = Date.now();
+  if (categoryCache && categoryCache.expiresAt > now) return categoryCache.data;
+  try {
+    const categories = await getCategories();
+    categoryCache = { data: categories, expiresAt: now + CATEGORY_CACHE_TTL_MS };
+    return categories;
+  } catch {
+    // Fail open on the last known-good list rather than treating every
+    // category subdomain as unknown just because one fetch hiccuped.
+    return categoryCache?.data ?? [];
+  }
+}
+
+function redirectToApp(request: NextRequest, appUrl: URL) {
+  const redirectUrl = new URL(request.nextUrl);
+  redirectUrl.hostname = appUrl.hostname;
+  redirectUrl.protocol = appUrl.protocol;
+  redirectUrl.port = appUrl.port;
+  return NextResponse.redirect(redirectUrl, 307);
+}
+
+export async function proxy(request: NextRequest) {
   // NEXT_PUBLIC_SITE_URL is already the single source of truth for "where
-  // the app lives" (next.config.ts's CSP, canonical URLs, sitemaps) - reuse
-  // it here instead of hardcoding a domain, so this keeps working if the
-  // app subdomain ever changes without a code edit.
+  // the app/dashboard lives" (next.config.ts's CSP, canonical URLs,
+  // sitemaps) - reuse it here instead of hardcoding a domain, so this keeps
+  // working if the app subdomain ever changes without a code edit.
   const appUrl = new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3100");
   // request.nextUrl.hostname doesn't reliably reflect the client-facing Host
   // header behind a reverse proxy (confirmed live: it fell back to the
@@ -41,13 +75,61 @@ export function proxy(request: NextRequest) {
   // Caddy actually forwards, so read that directly instead.
   const hostname = (request.headers.get("host") ?? "").split(":")[0];
   const { pathname } = request.nextUrl;
+  const rootDomain = getRootDomain();
 
-  if (hostname !== appUrl.hostname && !isPublicPath(pathname)) {
+  // www -> apex, permanent. Independent of the category-subdomain feature
+  // flag below (this is "pick one canonical domain version", not part of
+  // the subdomain rollout) - checked first, before the kill switch, so it
+  // always applies even while ENABLE_CATEGORY_SUBDOMAINS is off.
+  if (hostname === `www.${rootDomain}`) {
     const redirectUrl = new URL(request.nextUrl);
-    redirectUrl.hostname = appUrl.hostname;
-    redirectUrl.protocol = appUrl.protocol;
-    redirectUrl.port = appUrl.port;
-    return NextResponse.redirect(redirectUrl, 307);
+    redirectUrl.hostname = rootDomain;
+    redirectUrl.protocol = "https:";
+    redirectUrl.port = "";
+    return NextResponse.redirect(redirectUrl, 308);
+  }
+
+  // Kill switch for the whole category-subdomain feature - while this is
+  // false (the default until Phase 6's rollout flips it on), behavior is
+  // byte-for-byte the original binary apex/app split.
+  if (process.env.ENABLE_CATEGORY_SUBDOMAINS !== "true") {
+    if (hostname !== appUrl.hostname && !isPublicPath(pathname)) {
+      return redirectToApp(request, appUrl);
+    }
+    return NextResponse.next();
+  }
+
+  // The dashboard host's existing behavior is untouched - every path stays
+  // reachable there regardless of the public-path allowlist.
+  if (hostname === appUrl.hostname) {
+    return NextResponse.next();
+  }
+
+  // Apex: cross-category aggregator, same public-path allowlist as always.
+  if (hostname === rootDomain) {
+    if (!isPublicPath(pathname)) return redirectToApp(request, appUrl);
+    return NextResponse.next();
+  }
+
+  // Anything else must be a known, active category subdomain - unrecognized
+  // hosts get a real 404, not a redirect (no fake/guessable sites).
+  const categories = await getCachedCategories();
+  const category = resolveHostCategory(hostname, rootDomain, categories);
+
+  if (!category) {
+    return new NextResponse("Not Found", { status: 404 });
+  }
+
+  if (!isPublicPath(pathname)) return redirectToApp(request, appUrl);
+
+  // A category subdomain's own root renders that category's homepage
+  // directly (internally the same page category/[slug]/page.tsx already
+  // renders for /category/:slug) rather than forcing a further redirect -
+  // the URL bar stays at "/", only the internal routing changes.
+  if (pathname === "/") {
+    const rewriteUrl = new URL(request.nextUrl);
+    rewriteUrl.pathname = `/category/${category.slug}`;
+    return NextResponse.rewrite(rewriteUrl);
   }
 
   return NextResponse.next();

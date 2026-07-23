@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { notFound, redirect } from "next/navigation";
+import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { ArticleCard } from "@/components/public/article-card";
 import { ShareButtons } from "@/components/public/share-buttons";
 import { AdSlot } from "@/components/public/ad-slot";
@@ -9,6 +9,7 @@ import { AuthorBox } from "@/components/public/author-box";
 import { CommentSection } from "@/components/public/comment-section";
 import { SmartArticleImage, CategoryPlaceholder } from "@/components/public/smart-article-image";
 import { TrendingList } from "@/components/public/trending-list";
+import { Breadcrumb } from "@/components/public/breadcrumb";
 import { Badge } from "@/components/ui/badge";
 import { getCategoryColors } from "@/lib/category-colors";
 import {
@@ -19,13 +20,12 @@ import {
   resolveRedirect,
 } from "@/lib/public-api";
 import { SITE_NAME } from "@/lib/brand";
+import { getArticleUrl, getCategoryUrl, getRootDomain } from "@/lib/site-url";
 import type { PublicSetting } from "@/lib/types";
 
 interface Props {
   params: Promise<{ slug: string }>;
 }
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3100";
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
@@ -36,12 +36,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const title = seo?.metaTitle ?? article.title;
   const description = seo?.metaDescription ?? article.excerpt ?? undefined;
   const ogImage = seo?.ogImageUrl ?? article.featuredImageUrl ?? undefined;
+  const rootDomain = getRootDomain();
+  const feedUrl = article.primaryCategory
+    ? `${getCategoryUrl(article.primaryCategory, rootDomain).replace(/\/$/, "")}/feed`
+    : `https://${rootDomain}/feed`;
 
   return {
     title,
     description,
     robots: seo?.robots ?? undefined,
-    alternates: seo?.canonicalUrl ? { canonical: seo.canonicalUrl } : undefined,
+    alternates: {
+      canonical: seo?.canonicalUrl ?? getArticleUrl(article),
+      types: { "application/rss+xml": feedUrl },
+    },
     openGraph: {
       title: seo?.ogTitle ?? title,
       description: seo?.ogDescription ?? description,
@@ -89,6 +96,18 @@ export default async function NewsArticlePage({ params }: Props) {
     notFound();
   }
 
+  // The article exists, but this host isn't its category's own subdomain
+  // (or is the apex/an unassigned category) - send the visitor to the one
+  // canonical URL for this article instead of rendering it twice under two
+  // hostnames. Categories without a subdomain assigned yet resolve to the
+  // apex via getArticleUrl's fallback, so this is a no-op for them.
+  const requestHostname = (await headers()).get("host")?.split(":")[0] ?? "";
+  const canonicalArticleUrl = getArticleUrl(article, getRootDomain());
+  const canonicalHostname = new URL(canonicalArticleUrl).hostname;
+  if (requestHostname && requestHostname !== canonicalHostname) {
+    permanentRedirect(canonicalArticleUrl);
+  }
+
   const [related, settings, comments, trending] = await Promise.all([
     article.primaryCategory
       ? getPublishedArticles({
@@ -104,6 +123,24 @@ export default async function NewsArticlePage({ params }: Props) {
 
   const colors = getCategoryColors(article.primaryCategory?.slug ?? article.primaryCategory?.name);
   const tags = article.articleTags ?? [];
+  const rootDomain = getRootDomain();
+  const breadcrumbItems = [
+    { label: "Beranda", href: `https://${rootDomain}` },
+    ...(article.primaryCategory
+      ? [{ label: article.primaryCategory.name, href: getCategoryUrl(article.primaryCategory, rootDomain) }]
+      : []),
+    { label: article.title },
+  ];
+  const breadcrumbSchema = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: breadcrumbItems.map((item, i) => ({
+      "@type": "ListItem",
+      position: i + 1,
+      name: item.label,
+      item: item.href ?? canonicalArticleUrl,
+    })),
+  };
 
   return (
     <article className="flex flex-col">
@@ -122,11 +159,20 @@ export default async function NewsArticlePage({ params }: Props) {
           }}
         />
       )}
-      <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 pt-10 lg:grid-cols-[1fr_320px]">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(breadcrumbSchema).replace(/</g, "\\u003c"),
+        }}
+      />
+      <div className="mx-auto w-full max-w-6xl px-4 pt-6">
+        <Breadcrumb items={breadcrumbItems} />
+      </div>
+      <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 pt-4 lg:grid-cols-[1fr_320px]">
         <div className="flex min-w-0 flex-col gap-5">
           {article.primaryCategory && (
             <Link
-              href={`/category/${article.primaryCategory.slug}`}
+              href={getCategoryUrl(article.primaryCategory)}
               className={`w-fit rounded px-2.5 py-1 text-xs font-black tracking-wide text-white uppercase ${colors.badge}`}
             >
               {article.primaryCategory.name}
@@ -173,7 +219,7 @@ export default async function NewsArticlePage({ params }: Props) {
                 </div>
               </div>
             </div>
-            <ShareButtons url={`${SITE_URL}/news/${article.slug}`} title={article.title} />
+            <ShareButtons url={getArticleUrl(article)} title={article.title} />
           </div>
 
           <div className="mt-1">

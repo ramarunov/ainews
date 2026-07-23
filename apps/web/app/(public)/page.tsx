@@ -6,6 +6,7 @@ import { HomepageWidget } from "@/components/public/homepage-widget";
 import { CategoryMosaicCard } from "@/components/public/category-mosaic-card";
 import { AdSlot } from "@/components/public/ad-slot";
 import { getCategoryColors } from "@/lib/category-colors";
+import { getCategoryUrl, getRootDomain } from "@/lib/site-url";
 import {
   findPublicSetting,
   getCategories,
@@ -13,7 +14,7 @@ import {
   getPublishedArticles,
 } from "@/lib/public-api";
 import { SITE_NAME, SITE_TAGLINE } from "@/lib/brand";
-import type { HomepageSeoSetting, HomepageWidgetsSetting } from "@/lib/types";
+import type { HomepageSeoSetting, HomepageWidgetsSetting, SiteBrandingSetting } from "@/lib/types";
 
 // Only this many categories get the full lead+grid treatment on the
 // homepage - the rest still get real visibility via the compact mosaic
@@ -34,6 +35,10 @@ export async function generateMetadata(): Promise<Metadata> {
     title: seo?.title || `${SITE_NAME} — ${SITE_TAGLINE}`,
     description:
       seo?.description || `The latest breaking news, analysis, and stories from ${SITE_NAME}.`,
+    alternates: {
+      canonical: `https://${getRootDomain()}`,
+      types: { "application/rss+xml": `https://${getRootDomain()}/feed` },
+    },
     ...(seo?.ogImageUrl && { openGraph: { images: [seo.ogImageUrl] } }),
   };
 }
@@ -74,8 +79,42 @@ export default async function HomePage() {
     ),
   ]);
 
+  const rootDomain = getRootDomain();
+  const apexUrl = `https://${rootDomain}`;
+  const branding = findPublicSetting<SiteBrandingSetting>(settings, "site.branding");
+  // Organization/WebSite (with a sitelinks-search-box SearchAction) — the
+  // homepage-level schema.org types; NewsArticle lives on the article page
+  // itself, CollectionPage/BreadcrumbList on category pages.
+  const homeSchema = [
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      name: SITE_NAME,
+      url: apexUrl,
+      ...(branding?.logoUrl && { logo: branding.logoUrl }),
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: SITE_NAME,
+      url: apexUrl,
+      potentialAction: {
+        "@type": "SearchAction",
+        target: `${apexUrl}/search?q={search_term_string}`,
+        "query-input": "required name=search_term_string",
+      },
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-10 pb-16">
+      <script
+        type="application/ld+json"
+        // Static, app-defined values only (SITE_NAME/URLs) - no
+        // user-authored content flows through here, unlike the article
+        // page's schema, so no "</script>"-breakout escaping is needed.
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(homeSchema) }}
+      />
       <BreakingNewsBanner articles={breaking.data} />
 
       {heroArticle && (
@@ -127,7 +166,7 @@ export default async function HomePage() {
                     {category.name}
                   </h2>
                   <Link
-                    href={`/category/${category.slug}`}
+                    href={getCategoryUrl(category)}
                     className={`text-sm font-semibold hover:underline ${colors.text}`}
                   >
                     Lihat semua &rarr;

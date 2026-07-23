@@ -15,6 +15,7 @@ describe('SearchService', () => {
         groupBy: jest.fn(),
       },
       article: { findMany: jest.fn(), count: jest.fn() },
+      category: { findMany: jest.fn() },
       $queryRaw: jest.fn(),
     };
     aiGateway = { embed: jest.fn() };
@@ -58,6 +59,75 @@ describe('SearchService', () => {
       expect(prisma.searchLog.create).toHaveBeenCalledWith({
         data: { organizationId: 'org-1', query: 'missing term', resultCount: 0, userId: 'user-1' },
       });
+    });
+  });
+
+  describe('primaryCategory hydration', () => {
+    it('resolves categoryId to primaryCategory via a single batched query, on the OpenSearch path', async () => {
+      opensearch.search.mockResolvedValue({
+        body: {
+          hits: {
+            total: { value: 2 },
+            hits: [
+              { _id: 'a1', _score: 1, _source: { title: 'Health tip', slug: 'health-tip', categoryId: 'cat-1' } },
+              { _id: 'a2', _score: 1, _source: { title: 'No category', slug: 'no-cat' } },
+            ],
+          },
+        },
+      });
+      prisma.category.findMany.mockResolvedValue([
+        { id: 'cat-1', name: 'Kesehatan', slug: 'kesehatan', subdomain: 'kesehatan', isActive: true },
+      ]);
+
+      const result = await service.search('health', 'org-1', {});
+
+      // Only the one distinct, defined categoryId actually present in the
+      // hits is looked up - not one query per hit.
+      expect(prisma.category.findMany).toHaveBeenCalledTimes(1);
+      expect(prisma.category.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: { in: ['cat-1'] } } }),
+      );
+
+      expect(result.data[0]).toEqual(
+        expect.objectContaining({
+          id: 'a1',
+          slug: 'health-tip',
+          primaryCategory: { id: 'cat-1', name: 'Kesehatan', slug: 'kesehatan', subdomain: 'kesehatan', isActive: true },
+        }),
+      );
+      // No categoryId leaking through onto the response shape - it's
+      // resolved into primaryCategory instead.
+      expect(result.data[0]).not.toHaveProperty('categoryId');
+      expect(result.data[1]).toEqual(expect.objectContaining({ id: 'a2', primaryCategory: null }));
+    });
+
+    it('skips the category lookup entirely when no hit has a categoryId', async () => {
+      opensearch.search.mockResolvedValue({
+        body: { hits: { total: { value: 1 }, hits: [{ _id: 'a1', _score: 1, _source: { slug: 'x' } }] } },
+      });
+
+      await service.search('x', 'org-1', {});
+
+      expect(prisma.category.findMany).not.toHaveBeenCalled();
+    });
+
+    it('includes primaryCategory (via Prisma include) on the DB fallback path too', async () => {
+      opensearch.search.mockRejectedValue(new Error('opensearch unreachable'));
+      prisma.article.findMany.mockResolvedValue([
+        { id: 'a1', slug: 'x', primaryCategory: { id: 'cat-1', slug: 'kesehatan', subdomain: 'kesehatan', isActive: true } },
+      ]);
+      prisma.article.count.mockResolvedValue(1);
+
+      const result = await service.search('x', 'org-1', {});
+
+      expect(prisma.article.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: { primaryCategory: expect.objectContaining({ select: expect.objectContaining({ subdomain: true }) }) },
+        }),
+      );
+      expect(result.data[0].primaryCategory).toEqual(
+        expect.objectContaining({ slug: 'kesehatan', subdomain: 'kesehatan' }),
+      );
     });
   });
 

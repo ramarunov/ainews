@@ -188,4 +188,105 @@ describe('CategoriesService', () => {
       expect(result).toBeNull();
     });
   });
+
+  describe('subdomain', () => {
+    it('rejects a reserved subdomain on create', async () => {
+      await expect(
+        service.create({ name: 'App News', subdomain: 'app' } as any, 'org-1'),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.category.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a subdomain already used by another category in the same org', async () => {
+      // generateSlug's collision check (where.slug) finds nothing; the
+      // subsequent assertSubdomainAvailable check (where.subdomain) does.
+      prisma.category.findFirst.mockImplementation((args: any) =>
+        Promise.resolve(args.where?.subdomain ? { id: 'cat-existing' } : null),
+      );
+
+      await expect(
+        service.create({ name: 'Kesehatan', subdomain: 'kesehatan' } as any, 'org-1'),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.category.create).not.toHaveBeenCalled();
+    });
+
+    it('creates a category with a unique, non-reserved subdomain', async () => {
+      prisma.category.findFirst.mockResolvedValue(null);
+      const created = { id: 'cat-1', name: 'Kesehatan', slug: 'kesehatan', subdomain: 'kesehatan' };
+      prisma.category.create.mockResolvedValue(created);
+
+      const result = await service.create(
+        { name: 'Kesehatan', subdomain: 'kesehatan' } as any,
+        'org-1',
+      );
+
+      expect(prisma.category.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ subdomain: 'kesehatan' }) }),
+      );
+      expect(result).toBe(created);
+    });
+
+    describe('update', () => {
+      it('rejects assigning a reserved subdomain', async () => {
+        jest.spyOn(service, 'findOne').mockResolvedValue({ id: 'cat-1', subdomain: null } as any);
+
+        await expect(
+          service.update('cat-1', { subdomain: 'api' } as any, 'org-1'),
+        ).rejects.toThrow(BadRequestException);
+        expect(prisma.category.update).not.toHaveBeenCalled();
+      });
+
+      it('rejects assigning a subdomain already used by another category', async () => {
+        jest.spyOn(service, 'findOne').mockResolvedValue({ id: 'cat-1', subdomain: null } as any);
+        prisma.category.findFirst.mockResolvedValue({ id: 'other-cat' });
+
+        await expect(
+          service.update('cat-1', { subdomain: 'teknologi' } as any, 'org-1'),
+        ).rejects.toThrow(BadRequestException);
+        expect(prisma.category.update).not.toHaveBeenCalled();
+      });
+
+      it('clears the subdomain to null when an empty string is submitted', async () => {
+        jest
+          .spyOn(service, 'findOne')
+          .mockResolvedValue({ id: 'cat-1', subdomain: 'kesehatan' } as any);
+        prisma.category.update.mockResolvedValue({});
+
+        await service.update('cat-1', { subdomain: '' } as any, 'org-1');
+
+        expect(prisma.category.update).toHaveBeenCalledWith(
+          expect.objectContaining({ data: expect.objectContaining({ subdomain: null }) }),
+        );
+      });
+
+      it('leaves the subdomain untouched when the field is omitted from the update', async () => {
+        jest
+          .spyOn(service, 'findOne')
+          .mockResolvedValue({ id: 'cat-1', name: 'Kesehatan', subdomain: 'kesehatan' } as any);
+        prisma.category.findFirst.mockResolvedValue(null);
+        prisma.category.update.mockResolvedValue({});
+
+        await service.update('cat-1', { name: 'Kesehatan Update' } as any, 'org-1');
+
+        const data = prisma.category.update.mock.calls[0][0].data;
+        expect(data).not.toHaveProperty('subdomain');
+      });
+
+      it('allows re-saving the same subdomain the category already has', async () => {
+        jest
+          .spyOn(service, 'findOne')
+          .mockResolvedValue({ id: 'cat-1', subdomain: 'kesehatan' } as any);
+        prisma.category.update.mockResolvedValue({});
+
+        await service.update('cat-1', { subdomain: 'kesehatan' } as any, 'org-1');
+
+        // No availability check needed since it's unchanged - the update
+        // should go straight through without a findFirst collision lookup.
+        expect(prisma.category.findFirst).not.toHaveBeenCalled();
+        expect(prisma.category.update).toHaveBeenCalledWith(
+          expect.objectContaining({ data: expect.objectContaining({ subdomain: 'kesehatan' }) }),
+        );
+      });
+    });
+  });
 });

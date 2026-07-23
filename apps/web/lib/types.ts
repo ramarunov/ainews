@@ -196,8 +196,16 @@ export interface Category {
   name: string;
   slug: string;
   description?: string | null;
+  imageUrl?: string | null;
+  metaTitle?: string | null;
+  metaDescription?: string | null;
   parentId?: string | null;
   sortOrder?: number;
+  // Public-site subdomain (e.g. "kesehatan" -> kesehatan.beritabot.com).
+  // Null/undefined until an admin opts this category into subdomain
+  // routing — see apps/web/lib/site-url.ts.
+  subdomain?: string | null;
+  isActive?: boolean;
 }
 
 export interface Tag {
@@ -212,7 +220,12 @@ export interface CreateCategoryInput {
   name: string;
   slug?: string;
   description?: string;
+  imageUrl?: string;
+  metaTitle?: string;
+  metaDescription?: string;
   parentId?: string;
+  subdomain?: string;
+  isActive?: boolean;
 }
 
 export interface CreateTagInput {
@@ -368,6 +381,10 @@ export interface PublicSearchResult {
   content?: string | null;
   publishedAt?: string | null;
   featuredImageUrl?: string | null;
+  // Hydrated server-side from categoryId (OpenSearch results only index the
+  // id) so result links can resolve to the article's category subdomain —
+  // see SearchService.fetchCategoryMap in the API.
+  primaryCategory?: Category | null;
 }
 
 export interface CreateArticleInput {
