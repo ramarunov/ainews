@@ -1,18 +1,21 @@
 import Link from "next/link";
-import type { Category, SiteFooterSetting } from "@/lib/types";
+import type { Category, Page, SiteFooterSetting } from "@/lib/types";
 import { getCategoryColors } from "@/lib/category-colors";
-import { getCategoryUrl } from "@/lib/site-url";
+import { getCategoryUrl, getRootDomain } from "@/lib/site-url";
 import { SITE_NAME, SITE_TAGLINE } from "@/lib/brand";
 import { LoginLink } from "./login-link";
 
 export function PublicFooter({
   categories,
+  pages,
   footerSetting,
 }: {
   categories: Category[];
+  pages: Page[];
   footerSetting?: SiteFooterSetting;
 }) {
   const customLinks = footerSetting?.links ?? [];
+  const rootDomain = getRootDomain();
 
   return (
     <footer className="mt-12 border-t bg-foreground text-background/80">
@@ -49,9 +52,15 @@ export function PublicFooter({
             <Link href="/search" className="w-fit text-sm hover:text-background">
               Cari Berita
             </Link>
-            <Link href="/about" className="w-fit text-sm hover:text-background">
-              Tentang Kami
-            </Link>
+            {pages.map((page) => (
+              <Link
+                key={page.id}
+                href={`https://${rootDomain}/${page.slug}`}
+                className="w-fit text-sm hover:text-background"
+              >
+                {page.title}
+              </Link>
+            ))}
             <LoginLink className="w-fit text-sm hover:text-background" />
             {customLinks.map((link, idx) => (
               <Link key={idx} href={link.url} className="w-fit text-sm hover:text-background">

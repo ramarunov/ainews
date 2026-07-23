@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { headers } from "next/headers";
-import { getCategories, getPublishedArticles } from "@/lib/public-api";
+import { getCategories, getPages, getPublishedArticles } from "@/lib/public-api";
 import { getArticleUrl, getCategoryUrl, getRootDomain, resolveHostCategory } from "@/lib/site-url";
 
 // Per-host: the apex sitemap lists apex-only pages plus a cross-category
@@ -39,7 +39,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // (first page only, up to 20 articles across the whole aggregator — fine
   // for now given how few published articles exist; paginate this once
   // that stops being true).
-  const { data: articles } = await getPublishedArticles();
+  const [{ data: articles }, pages] = await Promise.all([getPublishedArticles(), getPages()]);
   const apexUrl = `https://${rootDomain}`;
 
   return [
@@ -55,6 +55,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "hourly",
       priority: 0.8,
     },
+    ...pages.map((page) => ({
+      url: `${apexUrl}/${page.slug}`,
+      lastModified: new Date(page.updatedAt),
+      changeFrequency: "monthly" as const,
+      priority: 0.3,
+    })),
     ...categories.map((category) => ({
       url: getCategoryUrl(category, rootDomain),
       lastModified: new Date(),

@@ -7,6 +7,7 @@ export interface DefaultRoleDefinition {
 
 const ARTICLES_ALL = ['articles:read', 'articles:write', 'articles:publish', 'articles:delete'];
 const CATEGORIES_ALL = ['categories:read', 'categories:write', 'categories:delete'];
+const PAGES_ALL = ['pages:read', 'pages:write', 'pages:delete'];
 const TAGS_ALL = ['tags:read', 'tags:write', 'tags:delete'];
 const MEDIA_ALL = ['media:read', 'media:write', 'media:delete'];
 const WORKFLOW_ALL = ['workflow:read', 'workflow:write'];
@@ -22,6 +23,7 @@ const COMMENTS_ALL = ['comments:read', 'comments:moderate'];
 export const ALL_PERMISSIONS = [
   ...ARTICLES_ALL,
   ...CATEGORIES_ALL,
+  ...PAGES_ALL,
   ...TAGS_ALL,
   ...MEDIA_ALL,
   ...WORKFLOW_ALL,
@@ -53,6 +55,7 @@ export const DEFAULT_ROLES: DefaultRoleDefinition[] = [
     permissions: [
       ...ARTICLES_ALL,
       ...CATEGORIES_ALL,
+      ...PAGES_ALL,
       ...TAGS_ALL,
       ...MEDIA_ALL,
       ...WORKFLOW_ALL,

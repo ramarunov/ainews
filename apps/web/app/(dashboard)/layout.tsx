@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Newspaper, FolderTree, Tags, Layers, Image as ImageIcon, Search, History, UserCircle, LogOut, ShieldCheck, Globe, KanbanSquare, Radio, BarChart3, Users, Link2, KeyRound, CalendarDays, Webhook, MessageSquare } from "lucide-react";
+import { Newspaper, FolderTree, Tags, Layers, Image as ImageIcon, Search, History, UserCircle, LogOut, ShieldCheck, Globe, KanbanSquare, Radio, BarChart3, Users, Link2, KeyRound, CalendarDays, Webhook, MessageSquare, FileText, Megaphone, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { NotificationBell } from "@/components/notification-bell";
@@ -83,6 +83,18 @@ export default function DashboardLayout({
               {label}
             </Link>
           ))}
+          {hasPermission(user, "pages:read") && (
+            <Link
+              href="/pages"
+              className={cn(
+                "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-muted",
+                pathname.startsWith("/pages") && "bg-muted text-foreground",
+              )}
+            >
+              <FileText className="h-4 w-4" />
+              Pages
+            </Link>
+          )}
           {hasPermission(user, "workflow:read") && (
             <Link
               href="/workflow"
@@ -217,6 +229,18 @@ export default function DashboardLayout({
           )}
           {user?.isSuperadmin && (
             <Link
+              href="/ai-settings"
+              className={cn(
+                "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-muted",
+                pathname.startsWith("/ai-settings") && "bg-muted text-foreground",
+              )}
+            >
+              <Sparkles className="h-4 w-4" />
+              AI Settings
+            </Link>
+          )}
+          {user?.isSuperadmin && (
+            <Link
               href="/site-settings"
               className={cn(
                 "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-muted",
@@ -225,6 +249,18 @@ export default function DashboardLayout({
             >
               <Globe className="h-4 w-4" />
               Site Settings
+            </Link>
+          )}
+          {user?.isSuperadmin && (
+            <Link
+              href="/ads"
+              className={cn(
+                "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-muted",
+                pathname.startsWith("/ads") && "bg-muted text-foreground",
+              )}
+            >
+              <Megaphone className="h-4 w-4" />
+              Ads
             </Link>
           )}
         </nav>

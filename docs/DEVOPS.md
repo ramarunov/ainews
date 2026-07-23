@@ -30,6 +30,13 @@ pnpm install
 # 3. Copy environment file
 cp .env.example .env
 # Edit .env with your values
+# IMPORTANT: also change ROOT_DOMAIN/NEXT_PUBLIC_ROOT_DOMAIN from the
+# .env.example default (a real production-shaped domain) to `localhost` -
+# the article/category/page canonical-redirect logic
+# (apps/web/app/(public)/**/page.tsx) redirects to `https://{ROOT_DOMAIN}`
+# whenever the request hostname doesn't match it, so leaving the prod
+# default in place sends every local page view straight to the real
+# production site instead of rendering locally.
 
 # 4. Start infrastructure services
 pnpm docker:up
@@ -48,15 +55,22 @@ pnpm dev
 
 | Service | URL |
 |---------|-----|
-| Frontend (Next.js) | http://localhost:3000 |
+| Frontend (Next.js) | http://localhost:3100 (`apps/web/package.json`'s dev script is `next dev -p 3100`, not 3000) |
 | Backend API (NestJS) | http://localhost:4000 |
 | API Documentation | http://localhost:4000/api-docs |
-| Database Studio (Prisma) | http://localhost:5555 |
-| MinIO Console | http://localhost:9001 |
-| Redis Insight | http://localhost:8001 |
-| OpenSearch Dashboards | http://localhost:5601 |
-| Mailhog (Email) | http://localhost:8025 |
+| Database Studio (Prisma) | http://localhost:5555 (`cd apps/api && npx prisma studio`) |
+| PostgreSQL | localhost:5433 (docker-compose.yml maps host 5433 -> container 5432, to coexist with a local Postgres install) |
+| Redis | localhost:6380 (host 6380 -> container 6379, same reasoning) |
+| MinIO API / Console | http://localhost:9002 / http://localhost:9003 |
+| OpenSearch | http://localhost:9200 |
+| Mailhog (Email) | check `docker-compose.yml`'s current port mapping - varies by checkout |
 | BullMQ Dashboard | http://localhost:4000/queues |
+
+The non-standard host ports above (5433/6380/9002/9003 instead of the
+"obvious" 5432/6379/9000/9001) mean `.env`'s `DATABASE_URL`/
+`DIRECT_DATABASE_URL`/`REDIS_URL`/`S3_ENDPOINT`/`S3_PUBLIC_URL` need those
+ports too, even though `.env.example`'s placeholders show the standard
+ones - copy `.env.example` and then fix the ports, don't use it verbatim.
 
 ### 1.4 Testing category subdomains locally
 

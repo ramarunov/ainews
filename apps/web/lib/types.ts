@@ -208,6 +208,26 @@ export interface Category {
   isActive?: boolean;
 }
 
+export interface Page {
+  id: string;
+  title: string;
+  slug: string;
+  content: string;
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+  isPublished: boolean;
+  updatedAt: string;
+}
+
+export interface CreatePageInput {
+  title: string;
+  slug?: string;
+  content?: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  isPublished?: boolean;
+}
+
 export interface Tag {
   id: string;
   name: string;

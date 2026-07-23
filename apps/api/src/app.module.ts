@@ -23,6 +23,7 @@ import { UsersModule } from './modules/users/users.module';
 import { OrganizationsModule } from './modules/organizations/organizations.module';
 import { ArticlesModule } from './modules/articles/articles.module';
 import { CategoriesModule } from './modules/categories/categories.module';
+import { PagesModule } from './modules/pages/pages.module';
 import { TagsModule } from './modules/tags/tags.module';
 import { SeriesModule } from './modules/series/series.module';
 import { MediaModule } from './modules/media/media.module';
@@ -167,6 +168,7 @@ import { MetricsInterceptor } from './modules/metrics/metrics.interceptor';
     OrganizationsModule,
     ArticlesModule,
     CategoriesModule,
+    PagesModule,
     TagsModule,
     SeriesModule,
     MediaModule,

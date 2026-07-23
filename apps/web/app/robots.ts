@@ -10,7 +10,7 @@ import { getAbsoluteUrl } from "@/lib/site-url";
 // boundary in itself.
 const DASHBOARD_PATHS = [
   "/login", "/register", "/forgot-password", "/reset-password", "/oauth-callback",
-  "/articles", "/categories", "/tags", "/series", "/media", "/article-search",
+  "/articles", "/categories", "/pages", "/tags", "/series", "/media", "/article-search",
   "/workflow", "/calendar", "/news-intelligence", "/analytics", "/redirects",
   "/users", "/api-keys", "/activity", "/system-settings", "/account",
 ];

@@ -6,6 +6,7 @@ import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { getPublicSiteOrgId } from '../../common/config/public-site-org.util';
 import { ArticlesService } from '../articles/articles.service';
 import { CategoriesService } from '../categories/categories.service';
+import { PagesService } from '../pages/pages.service';
 import { SearchService } from '../search/search.service';
 import { SettingsService } from '../settings/settings.service';
 import { PublicArticlesQueryDto } from './dto/public-articles-query.dto';
@@ -16,6 +17,7 @@ export class PublicSiteService {
     private readonly prisma: PrismaService,
     private readonly articlesService: ArticlesService,
     private readonly categoriesService: CategoriesService,
+    private readonly pagesService: PagesService,
     private readonly searchService: SearchService,
     private readonly settingsService: SettingsService,
     private readonly config: ConfigService,
@@ -121,6 +123,24 @@ export class PublicSiteService {
     // rendering. An inactive category disappearing from here is what makes
     // its subdomain/articles publicly unreachable.
     return result.data.filter((category) => category.isActive !== false);
+  }
+
+  async listPages() {
+    const result = await this.pagesService.findAll({ limit: 100 }, this.getPublicOrgId());
+    // Same reasoning as listCategories()'s isActive filter: an unpublished
+    // page is a draft an admin is still writing, not something to list on
+    // the public site (e.g. in the footer) or resolve by slug below.
+    return result.data.filter((page) => page.isPublished);
+  }
+
+  async getPublishedPageBySlug(slug: string) {
+    const page = await this.pagesService.findBySlug(slug, this.getPublicOrgId());
+
+    if (!page.isPublished) {
+      throw new NotFoundException(`Page with slug "${slug}" not found`);
+    }
+
+    return page;
   }
 
   async getAuthorProfile(id: string) {

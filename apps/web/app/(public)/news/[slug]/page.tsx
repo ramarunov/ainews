@@ -74,6 +74,33 @@ function findSetting(settings: PublicSetting[], key: string) {
     | undefined;
 }
 
+// Splits sanitized article HTML in two at the block-level closing tag
+// closest to the midpoint, so the "mid-content" ad slot lands between two
+// blocks instead of inside one. Checks several tag types, not just </p> -
+// AI-drafted articles in this app often come back as bare text nodes
+// separated by blank lines with only <h2>/<h3> headings as markup (no <p>
+// wrapping at all), so </p>-only splitting would silently never fire for
+// most of them. Returns null when there's fewer than two candidate
+// boundaries - a very short/unstructured article has no meaningful
+// "middle", so that ad slot is skipped rather than forced in awkwardly.
+const MID_CONTENT_SPLIT_TAGS = ["</p>", "</h2>", "</h3>", "</h4>", "</blockquote>", "</ul>", "</ol>"];
+
+function splitContentAtMidpoint(html: string): { before: string; after: string } | null {
+  const positions: number[] = [];
+  for (const tag of MID_CONTENT_SPLIT_TAGS) {
+    for (let idx = html.indexOf(tag); idx !== -1; idx = html.indexOf(tag, idx + tag.length)) {
+      positions.push(idx + tag.length);
+    }
+  }
+  if (positions.length < 2) return null;
+
+  const midpoint = html.length / 2;
+  const cut = positions.reduce((best, pos) =>
+    Math.abs(pos - midpoint) < Math.abs(best - midpoint) ? pos : best,
+  );
+  return { before: html.slice(0, cut), after: html.slice(cut) };
+}
+
 function AuthorAvatar({ name }: { name?: string | null }) {
   const initial = name?.trim()?.[0]?.toUpperCase() ?? "?";
   return (
@@ -123,6 +150,9 @@ export default async function NewsArticlePage({ params }: Props) {
 
   const colors = getCategoryColors(article.primaryCategory?.slug ?? article.primaryCategory?.name);
   const tags = article.articleTags ?? [];
+  const contentSplit = splitContentAtMidpoint(article.content ?? "");
+  const contentProseClassName =
+    "flex flex-col gap-5 text-lg leading-relaxed break-words [&_a]:text-primary [&_a]:underline [&_blockquote]:border-l-4 [&_blockquote]:border-primary [&_blockquote]:pl-4 [&_blockquote]:text-xl [&_blockquote]:font-medium [&_blockquote]:text-foreground/80 [&_blockquote]:italic [&_h2]:mt-2 [&_h2]:text-2xl [&_h2]:font-black [&_h3]:text-xl [&_h3]:font-bold [&_img]:rounded-lg [&_li]:ml-5 [&_ol]:list-decimal [&_ul]:list-disc";
   const rootDomain = getRootDomain();
   const breadcrumbItems = [
     { label: "Beranda", href: `https://${rootDomain}` },
@@ -167,6 +197,9 @@ export default async function NewsArticlePage({ params }: Props) {
       />
       <div className="mx-auto w-full max-w-6xl px-4 pt-6">
         <Breadcrumb items={breadcrumbItems} />
+      </div>
+      <div className="mx-auto w-full max-w-6xl px-4">
+        <AdSlot value={findSetting(settings, "ads.article_top")} className="my-3 flex justify-center" />
       </div>
       <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 pt-4 lg:grid-cols-[1fr_320px]">
         <div className="flex min-w-0 flex-col gap-5">
@@ -240,12 +273,30 @@ export default async function NewsArticlePage({ params }: Props) {
             )}
           </div>
 
+          <AdSlot value={findSetting(settings, "ads.article_after_image")} className="my-3 flex justify-center" />
+
           {/* Content is sanitized server-side (DOMPurify) at write time, before
-              it's ever stored — see ArticlesService.sanitizeContent(). */}
-          <div
-            className="mt-3 flex flex-col gap-5 text-lg leading-relaxed break-words [&_a]:text-primary [&_a]:underline [&_blockquote]:border-l-4 [&_blockquote]:border-primary [&_blockquote]:pl-4 [&_blockquote]:text-xl [&_blockquote]:font-medium [&_blockquote]:text-foreground/80 [&_blockquote]:italic [&_h2]:mt-2 [&_h2]:text-2xl [&_h2]:font-black [&_h3]:text-xl [&_h3]:font-bold [&_img]:rounded-lg [&_li]:ml-5 [&_ol]:list-decimal [&_ul]:list-disc"
-            dangerouslySetInnerHTML={{ __html: article.content ?? "" }}
-          />
+              it's ever stored — see ArticlesService.sanitizeContent(). Split in
+              two around a mid-content ad slot when there's a good paragraph
+              boundary to split at (see splitContentAtMidpoint above). */}
+          {contentSplit ? (
+            <>
+              <div
+                className={`mt-3 ${contentProseClassName}`}
+                dangerouslySetInnerHTML={{ __html: contentSplit.before }}
+              />
+              <AdSlot value={findSetting(settings, "ads.article_middle")} className="my-3 flex justify-center" />
+              <div
+                className={contentProseClassName}
+                dangerouslySetInnerHTML={{ __html: contentSplit.after }}
+              />
+            </>
+          ) : (
+            <div
+              className={`mt-3 ${contentProseClassName}`}
+              dangerouslySetInnerHTML={{ __html: article.content ?? "" }}
+            />
+          )}
 
           {tags.length > 0 && (
             <div className="flex flex-wrap items-center gap-2 border-t pt-6">

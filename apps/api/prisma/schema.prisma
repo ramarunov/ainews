@@ -97,6 +97,7 @@ model Organization {
   roles        Role[]
   articles     Article[]
   categories   Category[]
+  pages        Page[]
   tags         Tag[]
   articleSeries ArticleSeries[]
   mediaFiles   MediaFile[]
@@ -309,6 +310,31 @@ model Category {
   @@unique([organizationId, subdomain])
   @@index([organizationId])
   @@map("categories")
+}
+
+// Admin-managed static pages (About Us, Contact, Disclaimer, Privacy
+// Policy, ...) served at the apex domain root, e.g. beritabot.com/kontak -
+// see apps/web/app/(public)/[slug]/page.tsx. Deliberately flat (no
+// parent/tree like Category) since these are standalone informational
+// pages, not a taxonomy.
+model Page {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId  String    @db.Uuid
+  slug            String    @db.VarChar(255)
+  title           String    @db.VarChar(255)
+  content         String    @default("")
+  metaTitle       String?   @db.VarChar(255)
+  metaDescription String?   @db.VarChar(500)
+  isPublished     Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  deletedAt       DateTime?
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@unique([organizationId, slug])
+  @@index([organizationId])
+  @@map("pages")
 }
 
 model Tag {

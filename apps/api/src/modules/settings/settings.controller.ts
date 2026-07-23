@@ -30,6 +30,16 @@ import { SITE_SETTING_KEY_PREFIX } from '../site-settings/site-settings.constant
 // directly through this generic endpoint.
 const AD_WIDGET_KEY_PREFIX = 'ads.';
 
+// Autonomous Publishing (AI Settings > "Autonomous Publishing") - same
+// reasoning as AD_WIDGET_KEY_PREFIX above, but the stakes are higher than
+// script injection: since AUTONOMOUS_PIPELINE_SETTINGS.autoPublishConfidenceThreshold
+// was added, a write to this prefix can make the pipeline publish AI-drafted
+// articles with zero human review. The dedicated UI (AI Settings) has always
+// been superadmin-gated; this closes the same "generic endpoint bypasses the
+// gate" hole for the whole autonomous-pipeline settings family, not just the
+// new key.
+const AUTONOMOUS_PIPELINE_KEY_PREFIX = 'news.autonomous_pipeline.';
+
 @ApiTags('Settings')
 @ApiBearerAuth('JWT')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
@@ -82,7 +92,9 @@ export class SettingsController {
   // public site despite the dedicated UI being superadmin-only.
   private assertNotSuperadminOnlyKey(key: string, user: any) {
     const isSuperadminOnlyKey =
-      key.startsWith(SITE_SETTING_KEY_PREFIX) || key.startsWith(AD_WIDGET_KEY_PREFIX);
+      key.startsWith(SITE_SETTING_KEY_PREFIX) ||
+      key.startsWith(AD_WIDGET_KEY_PREFIX) ||
+      key.startsWith(AUTONOMOUS_PIPELINE_KEY_PREFIX);
     if (isSuperadminOnlyKey && !user.isSuperadmin) {
       throw new ForbiddenException('Superadmin access required for this setting');
     }

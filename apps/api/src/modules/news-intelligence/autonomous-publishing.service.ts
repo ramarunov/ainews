@@ -34,7 +34,18 @@ export const AUTONOMOUS_PIPELINE_SETTINGS = {
   // don't count against the autonomous pipeline's own quota.
   dailyLimit: 'news.autonomous_pipeline.daily_limit',
   hourlyLimit: 'news.autonomous_pipeline.hourly_limit',
+  // One of 70/80/90/100 (percent), or unset/null - null (the default)
+  // means "always IN_REVIEW", matching this pipeline's original
+  // never-auto-publish behavior. When set, a draft that both passes the
+  // quality gate AND reaches this combined confidence skips review and
+  // is published directly - see processCluster()'s combinedConfidencePct.
+  autoPublishConfidenceThreshold: 'news.autonomous_pipeline.auto_publish_confidence_threshold',
 } as const;
+
+// The only levels the admin UI's checklist offers - a plain number setting
+// could technically hold anything, so this is re-validated server-side too
+// (see runCycle's coercion below) rather than trusting whatever's stored.
+export const AUTO_PUBLISH_CONFIDENCE_LEVELS = [70, 80, 90, 100] as const;
 
 export interface AutonomousPipelineUsage {
   draftedToday: number;
@@ -44,18 +55,23 @@ export interface AutonomousPipelineUsage {
 }
 
 /**
- * Discover -> AI rewrite -> quality-gate -> IN_REVIEW, with zero schema
- * migrations: reuses NewsCluster/NewsItem (discovery+clustering, already
- * built), ArticleAiAnalysis (already used for AI cost tracking), and the
- * org-scoped Setting model (same reuse pattern as the ad-widget feature)
- * for per-org opt-in config.
+ * Discover -> AI rewrite -> quality-gate -> IN_REVIEW (or PUBLISHED), with
+ * zero schema migrations: reuses NewsCluster/NewsItem (discovery+
+ * clustering, already built), ArticleAiAnalysis (already used for AI cost
+ * tracking), and the org-scoped Setting model (same reuse pattern as the
+ * ad-widget feature) for per-org opt-in config.
  *
- * Deliberately never auto-publishes (product decision, 2026-07-18): every
- * article this pipeline produces lands at ArticleStatus.IN_REVIEW - the
- * quality gate (hallucination + quality-score check) still runs and its
- * pass/fail result still matters, but only as a priority signal for the
- * human reviewer, never as an auto-publish trigger. A human must always
- * take the actual publish action via the normal editor flow.
+ * Defaults to never auto-publishing (original product decision,
+ * 2026-07-18, re: Google News' 2026 publisher guidance requiring
+ * AI-assisted content be human-curated before publication): every article
+ * lands at ArticleStatus.IN_REVIEW unless a superadmin has explicitly
+ * opted in via `AUTONOMOUS_PIPELINE_SETTINGS.autoPublishConfidenceThreshold`
+ * (70/80/90/100%, unset = off). Even opted in, a draft only skips review
+ * when BOTH the qualitative gate passes (hallucination recommendation ===
+ * SAFE_TO_PUBLISH AND qualityScore.canPublish === true) AND its combined
+ * numeric confidence meets the configured threshold - a high confidence
+ * number never overrides a failed gate. See processCluster() for the
+ * exact combination rule.
  *
  * Off by default per org (requires both `enabled` and `authorUserId`
  * settings) and inert platform-wide until an AI provider key is configured
@@ -79,23 +95,33 @@ export class AutonomousPublishingService {
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
-  async runCycle(organizationId: string): Promise<{ processed: number; readyForReview: number; flagged: number }> {
-    const [enabled, authorUserId, outputLanguage] = await Promise.all([
+  async runCycle(
+    organizationId: string,
+  ): Promise<{ processed: number; readyForReview: number; flagged: number; autoPublished: number }> {
+    const [enabled, authorUserId, outputLanguage, autoPublishThresholdRaw] = await Promise.all([
       this.settings.get(organizationId, AUTONOMOUS_PIPELINE_SETTINGS.enabled),
       this.settings.get(organizationId, AUTONOMOUS_PIPELINE_SETTINGS.authorUserId),
       this.settings.get(organizationId, AUTONOMOUS_PIPELINE_SETTINGS.outputLanguage),
+      this.settings.get(organizationId, AUTONOMOUS_PIPELINE_SETTINGS.autoPublishConfidenceThreshold),
     ]);
 
     if (!enabled || !authorUserId) {
-      return { processed: 0, readyForReview: 0, flagged: 0 };
+      return { processed: 0, readyForReview: 0, flagged: 0, autoPublished: 0 };
     }
+
+    // Only one of the checklist's 4 levels is a valid threshold - anything
+    // else stored under this key (cleared, corrupted, hand-edited via the
+    // API) is treated the same as unset: always review, never auto-publish.
+    const autoPublishThreshold = AUTO_PUBLISH_CONFIDENCE_LEVELS.includes(autoPublishThresholdRaw as any)
+      ? (autoPublishThresholdRaw as (typeof AUTO_PUBLISH_CONFIDENCE_LEVELS)[number])
+      : null;
 
     const providerStatus = await this.systemSettings.getAiProviderStatus();
     if (!providerStatus.openai && !providerStatus.anthropic && !providerStatus.google) {
       this.logger.debug(
         `Autonomous pipeline enabled for org ${organizationId} but no AI provider key is configured yet - skipping.`,
       );
-      return { processed: 0, readyForReview: 0, flagged: 0 };
+      return { processed: 0, readyForReview: 0, flagged: 0, autoPublished: 0 };
     }
 
     const usage = await this.getUsageStats(organizationId);
@@ -107,7 +133,7 @@ export class AutonomousPublishingService {
       this.logger.debug(
         `Autonomous pipeline for org ${organizationId} is at its drafting quota (${usage.draftedToday}/${usage.dailyLimit ?? '∞'} today, ${usage.draftedThisHour}/${usage.hourlyLimit ?? '∞'} this hour) - skipping cycle.`,
       );
-      return { processed: 0, readyForReview: 0, flagged: 0 };
+      return { processed: 0, readyForReview: 0, flagged: 0, autoPublished: 0 };
     }
 
     const minSources = this.config.get<number>('AUTONOMOUS_PIPELINE_MIN_SOURCES', 1);
@@ -141,6 +167,7 @@ export class AutonomousPublishingService {
 
     let readyForReview = 0;
     let flagged = 0;
+    let autoPublished = 0;
 
     for (const cluster of clusters) {
       // Claims the cluster before doing any work, so two overlapping
@@ -161,9 +188,11 @@ export class AutonomousPublishingService {
           organizationId,
           authorUserId as string,
           (outputLanguage as string | null) ?? undefined,
+          autoPublishThreshold,
         );
         if (outcome === 'ready_for_review') readyForReview++;
         if (outcome === 'flagged') flagged++;
+        if (outcome === 'auto_published') autoPublished++;
       } catch (err: any) {
         this.logger.error(`Autonomous pipeline failed for cluster ${cluster.id}: ${err?.message ?? err}`);
       } finally {
@@ -173,11 +202,11 @@ export class AutonomousPublishingService {
 
     if (clusters.length > 0) {
       this.logger.log(
-        `Autonomous pipeline processed ${clusters.length} cluster(s) for org ${organizationId}: ${readyForReview} ready for review, ${flagged} flagged for review`,
+        `Autonomous pipeline processed ${clusters.length} cluster(s) for org ${organizationId}: ${readyForReview} ready for review, ${flagged} flagged for review, ${autoPublished} auto-published`,
       );
     }
 
-    return { processed: clusters.length, readyForReview, flagged };
+    return { processed: clusters.length, readyForReview, flagged, autoPublished };
   }
 
   // Read-only: powers the usage readout on the Autonomous Publishing
@@ -229,7 +258,8 @@ export class AutonomousPublishingService {
     organizationId: string,
     authorUserId: string,
     outputLanguage: string | undefined,
-  ): Promise<'ready_for_review' | 'flagged'> {
+    autoPublishThreshold: (typeof AUTO_PUBLISH_CONFIDENCE_LEVELS)[number] | null,
+  ): Promise<'ready_for_review' | 'flagged' | 'auto_published'> {
     const items = [...cluster.newsItems].sort((a, b) => {
       const aTime = (a.publishedAt ?? a.fetchedAt).getTime();
       const bTime = (b.publishedAt ?? b.fetchedAt).getTime();
@@ -298,6 +328,19 @@ export class AutonomousPublishingService {
       const pass =
         hallucination.recommendation === 'SAFE_TO_PUBLISH' && qualityScore.canPublish === true;
 
+      // hallucination.overallConfidence is a 0.0-1.0 fraction,
+      // qualityScore.overall is already 0-100 - normalize both to the same
+      // percent scale and take the more conservative (lower) of the two,
+      // since either signal being weak is reason enough to hold for human
+      // review rather than average them into a falsely reassuring middle.
+      const combinedConfidencePct = Math.min(hallucination.overallConfidence * 100, qualityScore.overall);
+      // A high confidence number never overrides a failed qualitative gate
+      // - `pass` (the existing SAFE_TO_PUBLISH + canPublish check) is a
+      // hard prerequisite, the threshold only decides whether a passing
+      // draft *additionally* skips human review.
+      const shouldAutoPublish =
+        pass && autoPublishThreshold != null && combinedConfidencePct >= autoPublishThreshold;
+
       // Real (non-AI-generated) stock photo, auto-picked with no human
       // choice involved - see StockPhotoService's docstring for why this
       // pipeline specifically must never attach an AI-generated image to a
@@ -322,16 +365,19 @@ export class AutonomousPublishingService {
         organizationId,
       );
 
-      // Always IN_REVIEW - this pipeline never auto-publishes (product
-      // decision, 2026-07-18: Google News' 2026 publisher guidance requires
-      // AI-assisted content be human-curated, reviewed before publication).
-      // `pass` still matters as a priority signal for the reviewer, just
-      // never as a publish trigger.
+      // IN_REVIEW by default (product decision, 2026-07-18: Google News'
+      // 2026 publisher guidance requires AI-assisted content be
+      // human-curated, reviewed before publication) - PUBLISHED only when
+      // a superadmin has opted into an auto-publish confidence threshold
+      // AND this draft both passed the gate and met it (shouldAutoPublish).
+      // ArticlesService.update() already handles every PUBLISHED-specific
+      // side effect (publishedAt, the article.published event, internal
+      // linking) via this same call, so no separate publish step is needed.
       await this.articlesService.update(
         shell.id,
         {
           content,
-          status: ArticleStatus.IN_REVIEW,
+          status: shouldAutoPublish ? ArticleStatus.PUBLISHED : ArticleStatus.IN_REVIEW,
           ...(localizedTitle && { title: localizedTitle }),
           ...(outputLanguage && { language: outputLanguage }),
           ...(attachedImage && { featuredImageId: attachedImage.id }),
@@ -349,7 +395,13 @@ export class AutonomousPublishingService {
           result: {
             hallucination,
             qualityScore,
-            decision: pass ? 'passed_gate_pending_review' : 'flagged_for_review',
+            combinedConfidencePct,
+            autoPublishThreshold,
+            decision: shouldAutoPublish
+              ? 'auto_published'
+              : pass
+                ? 'passed_gate_pending_review'
+                : 'flagged_for_review',
           } as unknown as Prisma.InputJsonValue,
         },
       });
@@ -364,24 +416,31 @@ export class AutonomousPublishingService {
 
       const finalTitle = localizedTitle ?? title;
       // Fire-and-forget: a notification failure must never undo a
-      // successful draft/flag decision (this runs after every write above
-      // has already committed, unlike the try/catch's own cleanup path,
-      // which only ever deletes a shell that never got this far).
+      // successful draft/flag/publish decision (this runs after every
+      // write above has already committed, unlike the try/catch's own
+      // cleanup path, which only ever deletes a shell that never got this
+      // far).
       this.notificationsService
         .create(
           authorUserId,
-          pass ? 'ai_article_ready_for_review' : 'ai_article_flagged',
-          pass ? `AI draft ready for review: ${finalTitle}` : `AI draft needs review: ${finalTitle}`,
-          pass
-            ? 'Passed automated fact-check and quality checks - still needs a human review before publishing.'
-            : `Fact-check: ${hallucination.recommendation.replaceAll('_', ' ')}. Quality score: ${qualityScore.overall}/100.`,
+          shouldAutoPublish ? 'ai_article_published' : pass ? 'ai_article_ready_for_review' : 'ai_article_flagged',
+          shouldAutoPublish
+            ? `AI article auto-published: ${finalTitle}`
+            : pass
+              ? `AI draft ready for review: ${finalTitle}`
+              : `AI draft needs review: ${finalTitle}`,
+          shouldAutoPublish
+            ? `Passed automated fact-check and quality checks at ${Math.round(combinedConfidencePct)}% confidence (threshold: ${autoPublishThreshold}%) - published automatically, no review needed.`
+            : pass
+              ? 'Passed automated fact-check and quality checks - still needs a human review before publishing.'
+              : `Fact-check: ${hallucination.recommendation.replaceAll('_', ' ')}. Quality score: ${qualityScore.overall}/100.`,
           { articleId: shell.id },
         )
         .catch((err) =>
           this.logger.error(`Failed to notify ${authorUserId} about article ${shell.id}: ${err?.message ?? err}`),
         );
 
-      return pass ? 'ready_for_review' : 'flagged';
+      return shouldAutoPublish ? 'auto_published' : pass ? 'ready_for_review' : 'flagged';
     } catch (err) {
       await this.prisma.article.delete({ where: { id: shell.id } });
       throw err;

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getCategories } from "@/lib/public-api";
+import { getCategories, getPages } from "@/lib/public-api";
 import { getRootDomain, resolveHostCategory } from "@/lib/site-url";
 import type { Category } from "@/lib/types";
 
@@ -11,8 +11,12 @@ import type { Category } from "@/lib/types";
 // allowlist of public paths, not a blocklist of dashboard ones: a new
 // dashboard page added later without updating this file gets redirected by
 // default instead of silently becoming reachable on the public domain.
+// Admin-created static pages (About, Contact, ...) are NOT listed here -
+// they're arbitrary, admin-chosen single-segment slugs (see
+// getCachedPageSlugs below), checked against real published-page data
+// instead of a fixed prefix, the same way category subdomains are checked
+// against real category data rather than a hardcoded list.
 const PUBLIC_PATH_PREFIXES = [
-  "/about",
   "/author",
   "/category",
   "/news",
@@ -26,17 +30,26 @@ const PUBLIC_PATH_PREFIXES = [
   "/apple-icon",
 ];
 
-function isPublicPath(pathname: string): boolean {
+// A static page's URL is exactly one path segment with no trailing slash
+// (e.g. "/kontak", not "/kontak/" or "/kontak/foo") - matches the flat
+// (non-nested) [slug]/page.tsx route.
+const SINGLE_SEGMENT_PATTERN = /^\/([a-z0-9-]+)$/;
+
+async function isPublicPath(pathname: string): Promise<boolean> {
   if (pathname === "/") return true;
-  return PUBLIC_PATH_PREFIXES.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
+  if (PUBLIC_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
+    return true;
+  }
+  const match = SINGLE_SEGMENT_PATTERN.exec(pathname);
+  if (!match) return false;
+  const pageSlugs = await getCachedPageSlugs();
+  return pageSlugs.has(match[1]);
 }
 
 // proxy.ts runs on every request, so a bare fetch per-request would double
-// the API's read load for no benefit - the category list changes rarely
-// (only when an admin edits one). This is a plain in-module cache rather
-// than relying on Next's fetch-cache behaving a particular way inside
+// the API's read load for no benefit - the category/page lists change
+// rarely (only when an admin edits one). Plain in-module caches rather than
+// relying on Next's fetch-cache behaving a particular way inside
 // middleware, which isn't something documented to depend on.
 let categoryCache: { data: Category[]; expiresAt: number } | null = null;
 const CATEGORY_CACHE_TTL_MS = 60_000;
@@ -52,6 +65,24 @@ async function getCachedCategories(): Promise<Category[]> {
     // Fail open on the last known-good list rather than treating every
     // category subdomain as unknown just because one fetch hiccuped.
     return categoryCache?.data ?? [];
+  }
+}
+
+let pageSlugCache: { data: Set<string>; expiresAt: number } | null = null;
+const PAGE_SLUG_CACHE_TTL_MS = 60_000;
+
+async function getCachedPageSlugs(): Promise<Set<string>> {
+  const now = Date.now();
+  if (pageSlugCache && pageSlugCache.expiresAt > now) return pageSlugCache.data;
+  try {
+    const pages = await getPages();
+    const slugs = new Set(pages.map((p) => p.slug));
+    pageSlugCache = { data: slugs, expiresAt: now + PAGE_SLUG_CACHE_TTL_MS };
+    return slugs;
+  } catch {
+    // Fail open on the last known-good set rather than 404ing/redirecting
+    // every static page away just because one fetch hiccuped.
+    return pageSlugCache?.data ?? new Set();
   }
 }
 
@@ -93,7 +124,7 @@ export async function proxy(request: NextRequest) {
   // false (the default until Phase 6's rollout flips it on), behavior is
   // byte-for-byte the original binary apex/app split.
   if (process.env.ENABLE_CATEGORY_SUBDOMAINS !== "true") {
-    if (hostname !== appUrl.hostname && !isPublicPath(pathname)) {
+    if (hostname !== appUrl.hostname && !(await isPublicPath(pathname))) {
       return redirectToApp(request, appUrl);
     }
     return NextResponse.next();
@@ -107,7 +138,7 @@ export async function proxy(request: NextRequest) {
 
   // Apex: cross-category aggregator, same public-path allowlist as always.
   if (hostname === rootDomain) {
-    if (!isPublicPath(pathname)) return redirectToApp(request, appUrl);
+    if (!(await isPublicPath(pathname))) return redirectToApp(request, appUrl);
     return NextResponse.next();
   }
 
@@ -120,7 +151,7 @@ export async function proxy(request: NextRequest) {
     return new NextResponse("Not Found", { status: 404 });
   }
 
-  if (!isPublicPath(pathname)) return redirectToApp(request, appUrl);
+  if (!(await isPublicPath(pathname))) return redirectToApp(request, appUrl);
 
   // A category subdomain's own root renders that category's homepage
   // directly (internally the same page category/[slug]/page.tsx already

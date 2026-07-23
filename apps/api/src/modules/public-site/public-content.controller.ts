@@ -27,6 +27,20 @@ export class PublicContentController {
     return this.publicSiteService.listCategories();
   }
 
+  @Get('pages')
+  @Header('Cache-Control', PUBLIC_CACHE_CONTROL)
+  @ApiOperation({ summary: 'List published static pages (About, Contact, ...) for the public site nav/footer' })
+  listPages() {
+    return this.publicSiteService.listPages();
+  }
+
+  @Get('pages/:slug')
+  @Header('Cache-Control', PUBLIC_CACHE_CONTROL)
+  @ApiOperation({ summary: 'Get a published static page by slug' })
+  getPage(@Param('slug') slug: string) {
+    return this.publicSiteService.getPublishedPageBySlug(slug);
+  }
+
   @Get('authors/:id')
   @Header('Cache-Control', PUBLIC_CACHE_CONTROL)
   @ApiOperation({ summary: 'Get a public author profile' })

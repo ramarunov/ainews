@@ -37,6 +37,7 @@ describe('PublicSiteService', () => {
   let prisma: any;
   let articlesService: any;
   let categoriesService: any;
+  let pagesService: any;
   let searchService: any;
   let settingsService: any;
   let config: any;
@@ -51,6 +52,10 @@ describe('PublicSiteService', () => {
       findAll: jest.fn(),
       findBySlug: jest.fn(),
     };
+    pagesService = {
+      findAll: jest.fn(),
+      findBySlug: jest.fn(),
+    };
     searchService = { search: jest.fn() };
     settingsService = { list: jest.fn() };
     config = { get: jest.fn().mockReturnValue('org-1') };
@@ -58,6 +63,7 @@ describe('PublicSiteService', () => {
       prisma,
       articlesService,
       categoriesService,
+      pagesService,
       searchService,
       settingsService,
       config,
@@ -225,6 +231,38 @@ describe('PublicSiteService', () => {
       const result = await service.listCategories();
 
       expect(result).toEqual([{ id: 'cat-1', isActive: true }]);
+    });
+  });
+
+  describe('listPages', () => {
+    it('drops unpublished (draft) pages', async () => {
+      pagesService.findAll.mockResolvedValue({
+        data: [
+          { id: 'page-1', isPublished: true },
+          { id: 'page-2', isPublished: false },
+        ],
+      });
+
+      const result = await service.listPages();
+
+      expect(pagesService.findAll).toHaveBeenCalledWith({ limit: 100 }, 'org-1');
+      expect(result).toEqual([{ id: 'page-1', isPublished: true }]);
+    });
+  });
+
+  describe('getPublishedPageBySlug', () => {
+    it('throws NotFoundException for an unpublished page even though it exists', async () => {
+      pagesService.findBySlug.mockResolvedValue({ id: 'page-1', slug: 'draft', isPublished: false });
+
+      await expect(service.getPublishedPageBySlug('draft')).rejects.toThrow(NotFoundException);
+    });
+
+    it('returns a published page', async () => {
+      const page = { id: 'page-1', slug: 'about', isPublished: true };
+      pagesService.findBySlug.mockResolvedValue(page);
+
+      await expect(service.getPublishedPageBySlug('about')).resolves.toBe(page);
+      expect(pagesService.findBySlug).toHaveBeenCalledWith('about', 'org-1');
     });
   });
 

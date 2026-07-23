@@ -1,6 +1,7 @@
 import type {
   Category,
   CommentNode,
+  Page,
   PaginatedResponse,
   PublicArticle,
   PublicAuthor,
@@ -84,6 +85,33 @@ export async function getCategories(): Promise<Category[]> {
 export async function getCategoryBySlug(slug: string): Promise<Category | null> {
   const categories = await getCategories();
   return categories.find((c) => c.slug === slug) ?? null;
+}
+
+// Published static pages (About, Contact, Disclaimer, Privacy Policy, ...) -
+// list is small and mostly for footer/nav links, so full objects (not just
+// slug/title) are fine to fetch upfront the same way categories are.
+export async function getPages(): Promise<Page[]> {
+  try {
+    const res = await fetch(`${API_URL}/public/pages`, {
+      next: { revalidate: 300 },
+    });
+    if (!res.ok) return [];
+    return await res.json();
+  } catch {
+    return [];
+  }
+}
+
+export async function getPageBySlug(slug: string): Promise<Page | null> {
+  try {
+    const res = await fetch(`${API_URL}/public/pages/${slug}`, {
+      next: { revalidate: 300 },
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
 }
 
 export async function getAuthorProfile(id: string): Promise<PublicAuthor | null> {
