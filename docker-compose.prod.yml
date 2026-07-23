@@ -205,8 +205,15 @@ services:
       - .env.production
     depends_on:
       - api
+    # --header="Host: ..." matters here, not just cosmetic - proxy.ts routes
+    # strictly by hostname once ENABLE_CATEGORY_SUBDOMAINS is on (see its
+    # "unregistered subdomains" fix), and wget's default request otherwise
+    # sends Host: 127.0.0.1, which matches neither the app host nor any
+    # known category subdomain and 404s. Real traffic is unaffected (Caddy
+    # proxies to this container by service name, not gated on Docker health
+    # status) but the container was permanently misreported unhealthy.
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3100/login"]
+      test: ["CMD", "wget", "-qO-", "--header=Host: app.beritabot.com", "http://127.0.0.1:3100/login"]
       interval: 15s
       timeout: 5s
       retries: 5
