@@ -131,6 +131,71 @@ describe('SeoService', () => {
       expect(schema.author).toEqual({ '@type': 'Person', name: 'Jane Doe' });
     });
 
+    it('links the author to their profile page when an id is provided', async () => {
+      const schema: any = await service.generateArticleSchema(
+        {
+          title: 'Byline Story',
+          slug: 'byline-story',
+          author: { id: 'author-1', displayName: 'Jane Doe' },
+        },
+        'https://example.com',
+      );
+
+      expect(schema.author).toEqual({
+        '@type': 'Person',
+        name: 'Jane Doe',
+        url: 'https://example.com/author/author-1',
+      });
+    });
+
+    it('includes articleSection, keywords, wordCount, inLanguage, and isAccessibleForFree when provided', async () => {
+      const schema: any = await service.generateArticleSchema(
+        {
+          title: 'Rich Story',
+          slug: 'rich-story',
+          primaryCategory: { name: 'Kesehatan', slug: 'kesehatan' },
+          tags: ['Gizi', 'Nutrisi'],
+          wordCount: 512,
+          language: 'id',
+        },
+        'https://example.com',
+      );
+
+      expect(schema.isAccessibleForFree).toBe(true);
+      expect(schema.articleSection).toBe('Kesehatan');
+      expect(schema.keywords).toBe('Gizi, Nutrisi');
+      expect(schema.wordCount).toBe(512);
+      expect(schema.inLanguage).toBe('id');
+    });
+
+    it('includes image width/height when provided, and omits them when not', async () => {
+      const withDimensions: any = await service.generateArticleSchema(
+        {
+          title: 'Photo Story',
+          slug: 'photo-story',
+          featuredImageUrl: 'https://example.com/photo.jpg',
+          featuredImageWidth: 1200,
+          featuredImageHeight: 630,
+        },
+        'https://example.com',
+      );
+      expect(withDimensions.image).toEqual({
+        '@type': 'ImageObject',
+        url: 'https://example.com/photo.jpg',
+        width: 1200,
+        height: 630,
+      });
+
+      const withoutDimensions: any = await service.generateArticleSchema(
+        { title: 'Photo Story 2', slug: 'photo-story-2', featuredImageUrl: 'https://example.com/photo2.jpg' },
+        'https://example.com',
+      );
+      expect(withoutDimensions.image).toEqual({
+        '@type': 'ImageObject',
+        url: 'https://example.com/photo2.jpg',
+      });
+    });
+
     it('falls back to publishedAt for dateModified when updatedAt is not given', async () => {
       const schema: any = await service.generateArticleSchema(
         {
@@ -166,7 +231,7 @@ describe('SeoService', () => {
       );
 
       expect(schema.publisher).toEqual({
-        '@type': 'Organization',
+        '@type': 'NewsMediaOrganization',
         name: 'BeritaBot.com',
         url: 'https://example.com/about',
         logo: { '@type': 'ImageObject', url: 'https://example.com/logo.png' },
@@ -181,7 +246,7 @@ describe('SeoService', () => {
       );
 
       expect(schema.publisher).toEqual({
-        '@type': 'Organization',
+        '@type': 'NewsMediaOrganization',
         name: 'BeritaBot.com',
         url: 'https://example.com/about',
       });

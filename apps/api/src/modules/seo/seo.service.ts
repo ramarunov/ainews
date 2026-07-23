@@ -20,6 +20,32 @@ export interface SeoData {
   seoScore: number;
 }
 
+// Shared by generateSeoData/generateArticleSchema - every field but
+// title/slug is optional since the manual `/seo/schema/article` endpoint
+// only ever has title/slug/siteUrl/excerpt to work with, while the
+// article.published event handler below has the full article record.
+export interface ArticleSchemaInput {
+  title: string;
+  content?: string;
+  excerpt?: string;
+  slug: string;
+  primaryCategory?: {
+    name?: string;
+    slug: string;
+    subdomain?: string | null;
+    parent?: { subdomain?: string | null } | null;
+  } | null;
+  featuredImageUrl?: string;
+  featuredImageWidth?: number;
+  featuredImageHeight?: number;
+  author?: { id?: string; displayName: string };
+  publishedAt?: Date;
+  updatedAt?: Date;
+  tags?: string[];
+  wordCount?: number;
+  language?: string;
+}
+
 export interface SeoScoreBreakdown {
   total: number;
   details: {
@@ -55,21 +81,7 @@ export class SeoService {
 
   async generateSeoData(
     articleId: string,
-    article: {
-      title: string;
-      content: string;
-      excerpt?: string;
-      slug: string;
-      primaryCategory?: {
-        slug: string;
-        subdomain?: string | null;
-        parent?: { subdomain?: string | null } | null;
-      } | null;
-      featuredImageUrl?: string;
-      author?: { displayName: string };
-      publishedAt?: Date;
-      updatedAt?: Date;
-    },
+    article: ArticleSchemaInput & { content: string },
     siteUrl: string,
     focusKeyword?: string,
     organization?: { name: string; logoUrl?: string | null },
@@ -135,25 +147,12 @@ Return ONLY the title text, no quotes or explanation.`,
   // ─── Schema.org JSON-LD Generation ─────────────────────────────────────────
 
   async generateArticleSchema(
-    article: {
-      title: string;
-      content?: string;
-      excerpt?: string;
-      slug: string;
-      primaryCategory?: {
-        slug: string;
-        subdomain?: string | null;
-        parent?: { subdomain?: string | null } | null;
-      } | null;
-      featuredImageUrl?: string;
-      author?: { displayName: string };
-      publishedAt?: Date;
-      updatedAt?: Date;
-    },
+    article: ArticleSchemaInput,
     siteUrl: string,
     organization?: { name: string; logoUrl?: string | null },
   ): Promise<object> {
     const url = this.buildCanonicalUrl(siteUrl, article.slug, article.primaryCategory);
+    const rootUrl = siteUrl.replace(/\/$/, '');
 
     const schema: Record<string, any> = {
       '@context': 'https://schema.org',
@@ -168,26 +167,46 @@ Return ONLY the title text, no quotes or explanation.`,
       // never the moment this function happens to run, which would silently
       // drift from the article's real edit history.
       dateModified: (article.updatedAt ?? article.publishedAt)?.toISOString(),
+      // Every article on this site is freely readable (no paywall) -
+      // declaring this explicitly is Google News' own recommendation for
+      // avoiding a false "paywalled" classification.
+      isAccessibleForFree: true,
+      articleSection: article.primaryCategory?.name,
+      keywords: article.tags?.length ? article.tags.join(', ') : undefined,
+      wordCount: article.wordCount,
+      inLanguage: article.language,
       author: article.author
         ? {
             '@type': 'Person',
             name: article.author.displayName,
+            // Links the Person entity back to its profile page (Person
+            // schema there too - see AuthorPage) rather than a bare name,
+            // which is what Google's E-E-A-T guidance actually wants: an
+            // identifiable, dereferenceable author, not just a string.
+            url: article.author.id ? `${rootUrl}/author/${article.author.id}` : undefined,
           }
         : undefined,
       image: article.featuredImageUrl
         ? {
             '@type': 'ImageObject',
             url: article.featuredImageUrl,
+            width: article.featuredImageWidth,
+            height: article.featuredImageHeight,
           }
         : undefined,
       publisher: organization
         ? {
-            '@type': 'Organization',
+            // NewsMediaOrganization (a schema.org subtype of Organization)
+            // is Google's documented, more specific type for a news
+            // publisher's own entity - a plain Organization still validates
+            // but doesn't carry that extra "this is a news publisher"
+            // signal for News/Discover surfaces.
+            '@type': 'NewsMediaOrganization',
             name: organization.name,
             // Points at the About/Editorial-Policy/Corrections page - the
             // closest this codebase has to real NewsMediaOrganization-style
             // ownership/editorial transparency without a dedicated schema.
-            url: `${siteUrl.replace(/\/$/, '')}/about`,
+            url: `${rootUrl}/about`,
             logo: organization.logoUrl
               ? { '@type': 'ImageObject', url: organization.logoUrl }
               : undefined,
@@ -195,15 +214,13 @@ Return ONLY the title text, no quotes or explanation.`,
         : undefined,
     };
 
-    // Remove undefined values
-    Object.keys(schema).forEach(
-      (k) => schema[k] === undefined && delete schema[k],
-    );
-    if (schema.publisher) {
-      Object.keys(schema.publisher).forEach(
-        (k) => schema.publisher[k] === undefined && delete schema.publisher[k],
-      );
-    }
+    // Remove undefined values (top-level and one level into nested objects)
+    const prune = (obj: Record<string, any>) =>
+      Object.keys(obj).forEach((k) => obj[k] === undefined && delete obj[k]);
+    prune(schema);
+    if (schema.author) prune(schema.author);
+    if (schema.image) prune(schema.image);
+    if (schema.publisher) prune(schema.publisher);
 
     return schema;
   }
@@ -457,10 +474,17 @@ Return ONLY the title text, no quotes or explanation.`,
       const article = await this.prisma.article.findUnique({
         where: { id: event.articleId },
         include: {
-          primaryAuthor: { select: { displayName: true } },
+          primaryAuthor: { select: { id: true, displayName: true } },
           primaryCategory: {
-            select: { slug: true, subdomain: true, parent: { select: { subdomain: true } } },
+            select: {
+              name: true,
+              slug: true,
+              subdomain: true,
+              parent: { select: { subdomain: true } },
+            },
           },
+          featuredImage: { select: { width: true, height: true } },
+          articleTags: { include: { tag: { select: { name: true } } } },
           seoData: true,
         },
       });
@@ -489,9 +513,17 @@ Return ONLY the title text, no quotes or explanation.`,
           slug: article.slug,
           primaryCategory: article.primaryCategory,
           featuredImageUrl: article.featuredImageUrl ?? undefined,
-          author: { displayName: article.primaryAuthor.displayName ?? 'Staff' },
+          featuredImageWidth: article.featuredImage?.width ?? undefined,
+          featuredImageHeight: article.featuredImage?.height ?? undefined,
+          author: {
+            id: article.primaryAuthor.id,
+            displayName: article.primaryAuthor.displayName ?? 'Staff',
+          },
           publishedAt: article.publishedAt ?? undefined,
           updatedAt: article.updatedAt,
+          tags: article.articleTags.map((at) => at.tag.name),
+          wordCount: article.wordCount ?? undefined,
+          language: article.language ?? undefined,
         },
         siteUrl,
         undefined,

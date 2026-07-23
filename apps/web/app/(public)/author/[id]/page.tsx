@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ArticleCard } from "@/components/public/article-card";
 import { getAuthorProfile, getPublishedArticles } from "@/lib/public-api";
+import { getRootDomain } from "@/lib/site-url";
 import { SITE_NAME } from "@/lib/brand";
 
 interface Props {
@@ -26,8 +27,25 @@ export default async function AuthorPage({ params }: Props) {
 
   const { data: articles } = await getPublishedArticles({ authorId: id, limit: 20 });
 
+  // A dereferenceable Person entity (not just a bare name string on each
+  // article's NewsArticle.author) is what Google's E-E-A-T guidance
+  // actually wants - see SeoService.generateArticleSchema's author.url,
+  // which links back to this same page.
+  const personSchema = {
+    "@context": "https://schema.org",
+    "@type": "Person",
+    name: author.displayName,
+    description: author.bio || undefined,
+    image: author.avatarUrl || undefined,
+    url: `https://${getRootDomain()}/author/${id}`,
+  };
+
   return (
     <div className="flex flex-col gap-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(personSchema).replace(/</g, "\\u003c") }}
+      />
       <div className="bg-[var(--zone)] py-10">
         <div className="mx-auto flex w-full max-w-6xl items-center gap-5 px-4">
           {author.avatarUrl ? (
