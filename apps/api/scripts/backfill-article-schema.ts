@@ -1,9 +1,11 @@
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
+import { ConfigService } from '@nestjs/config';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/infrastructure/prisma/prisma.service';
 import { SeoService } from '../src/modules/seo/seo.service';
 import { runWithOrgContext } from '../src/infrastructure/prisma/org-context';
+import { getRootDomain } from '../src/common/url/site-url.util';
 
 // One-time backfill for the NewsArticle/Person schema enrichment
 // (articleSection, keywords, wordCount, inLanguage, isAccessibleForFree,
@@ -18,6 +20,7 @@ import { runWithOrgContext } from '../src/infrastructure/prisma/org-context';
   const app = await NestFactory.createApplicationContext(AppModule, { logger: ['log', 'warn', 'error'] });
   const prisma = app.get(PrismaService);
   const seoService = app.get(SeoService);
+  const config = app.get(ConfigService);
 
   const organizations = await prisma.organization.findMany({
     select: { id: true, name: true, logoUrl: true, settings: true },
@@ -44,7 +47,10 @@ import { runWithOrgContext } from '../src/infrastructure/prisma/org-context';
       if (articles.length === 0) return;
       console.log(`${org.name}: ${articles.length} published article(s)`);
 
-      const siteUrl = (org.settings as any)?.siteUrl ?? 'https://example.com';
+      // Mirrors SeoService.onArticlePublished's own fallback (see its
+      // comment - org.settings.siteUrl has never actually been configured
+      // in practice).
+      const siteUrl = (org.settings as any)?.siteUrl ?? `https://${getRootDomain(config)}`;
 
       for (const article of articles) {
         if (!article.seoData) {
