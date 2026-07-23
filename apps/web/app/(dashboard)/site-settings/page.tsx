@@ -44,7 +44,10 @@ import { ApiError } from "@/lib/api-client";
 import { SITE_NAME, SITE_TAGLINE } from "@/lib/brand";
 import type {
   CustomScriptsSetting,
+  FooterColumn,
   FooterLink,
+  FooterWidget,
+  FooterWidgetType,
   HomepageSeoSetting,
   HomepageWidget,
   HomepageWidgetType,
@@ -62,35 +65,225 @@ function CardSkeleton() {
   return <div className="h-24 animate-pulse rounded-md bg-muted" />;
 }
 
+const FOOTER_WIDGET_TYPE_OPTIONS: { value: FooterWidgetType; label: string }[] = [
+  { value: "text", label: "Text / HTML" },
+  { value: "links", label: "Custom links" },
+  { value: "categories", label: "Category list (auto)" },
+  { value: "pages", label: "Page list (auto)" },
+];
+
+const FOOTER_COLUMN_COUNT = 4;
+
+function newFooterWidget(type: FooterWidgetType): FooterWidget {
+  const base = { id: crypto.randomUUID(), type, title: "" };
+  if (type === "text") return { ...base, content: "" };
+  if (type === "links") return { ...base, links: [] };
+  return base;
+}
+
+// Matches PublicFooter's own DEFAULT_FOOTER_COLUMNS fallback, so what a
+// superadmin sees pre-filled here the first time they open this card is
+// exactly what visitors already see on the live site (kept in sync
+// manually - see that file's header comment for why there's no shared
+// module for it).
+function defaultFooterColumns(): FooterColumn[] {
+  return [
+    { widgets: [{ id: crypto.randomUUID(), type: "text", title: "", content: `${SITE_TAGLINE}.` }] },
+    { widgets: [{ id: crypto.randomUUID(), type: "categories", title: "Kategori" }] },
+    {
+      widgets: [
+        {
+          id: crypto.randomUUID(),
+          type: "links",
+          title: "Tautan",
+          links: [{ label: "Cari Berita", url: "/search" }],
+        },
+      ],
+    },
+    { widgets: [{ id: crypto.randomUUID(), type: "pages", title: "Halaman" }] },
+  ];
+}
+
 function FooterCard({ isSuperadmin }: { isSuperadmin: boolean }) {
   const { data, isLoading } = useSiteFooter(isSuperadmin);
 
   if (isLoading) return <CardSkeleton />;
 
-  return <FooterForm initial={data ?? { description: undefined, links: [] }} />;
+  return <FooterForm initial={data?.columns?.length ? data : { columns: defaultFooterColumns() }} />;
+}
+
+function FooterWidgetEditor({
+  widget,
+  onChange,
+  onRemove,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp,
+  canMoveDown,
+}: {
+  widget: FooterWidget;
+  onChange: (patch: Partial<FooterWidget>) => void;
+  onRemove: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+}) {
+  const links = widget.links ?? [];
+  const addLink = () => {
+    if (links.length >= 12) return;
+    onChange({ links: [...links, { label: "", url: "" }] });
+  };
+  const removeLink = (idx: number) => onChange({ links: links.filter((_, i) => i !== idx) });
+  const updateLink = (idx: number, patch: Partial<FooterLink>) =>
+    onChange({ links: links.map((l, i) => (i === idx ? { ...l, ...patch } : l)) });
+
+  return (
+    <div className="flex flex-col gap-2 rounded-md border p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          value={widget.type}
+          onValueChange={(v) => onChange(newFooterWidget(v as FooterWidgetType))}
+        >
+          <SelectTrigger className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {FOOTER_WIDGET_TYPE_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Input
+          className="min-w-32 flex-1"
+          placeholder="Heading (optional)"
+          value={widget.title}
+          onChange={(e) => onChange({ title: e.target.value })}
+        />
+        <div className="ml-auto flex items-center gap-1">
+          <Button variant="ghost" size="icon" disabled={!canMoveUp} onClick={onMoveUp}>
+            <ArrowUp className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" disabled={!canMoveDown} onClick={onMoveDown}>
+            <ArrowDown className="h-4 w-4" />
+          </Button>
+          <Button variant="ghost" size="icon" onClick={onRemove}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {widget.type === "text" && (
+        <Textarea
+          rows={3}
+          placeholder="Plain text or HTML…"
+          value={widget.content ?? ""}
+          onChange={(e) => onChange({ content: e.target.value })}
+        />
+      )}
+
+      {widget.type === "links" && (
+        <div className="flex flex-col gap-2">
+          {links.map((link, idx) => (
+            <div key={idx} className="flex gap-2">
+              <Input
+                placeholder="Label"
+                value={link.label}
+                onChange={(e) => updateLink(idx, { label: e.target.value })}
+              />
+              <Input
+                placeholder="/search or https://…"
+                value={link.url}
+                onChange={(e) => updateLink(idx, { url: e.target.value })}
+              />
+              <Button variant="ghost" size="icon" onClick={() => removeLink(idx)}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+          <Button
+            variant="outline"
+            size="sm"
+            className="self-start"
+            disabled={links.length >= 12}
+            onClick={addLink}
+          >
+            <Plus className="h-4 w-4" /> Add link
+          </Button>
+        </div>
+      )}
+
+      {(widget.type === "categories" || widget.type === "pages") && (
+        <p className="text-xs text-muted-foreground">
+          {widget.type === "categories"
+            ? "Populated automatically from your category list - nothing to configure here."
+            : "Populated automatically from your published Pages - nothing to configure here."}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function FooterColumnEditor({
+  column,
+  onChange,
+}: {
+  column: FooterColumn;
+  onChange: (column: FooterColumn) => void;
+}) {
+  const updateWidget = (idx: number, patch: Partial<FooterWidget>) =>
+    onChange({ widgets: column.widgets.map((w, i) => (i === idx ? { ...w, ...patch } : w)) });
+  const removeWidget = (idx: number) =>
+    onChange({ widgets: column.widgets.filter((_, i) => i !== idx) });
+  const addWidget = () => onChange({ widgets: [...column.widgets, newFooterWidget("text")] });
+  const moveWidget = (idx: number, dir: -1 | 1) => {
+    const target = idx + dir;
+    if (target < 0 || target >= column.widgets.length) return;
+    const next = [...column.widgets];
+    [next[idx], next[target]] = [next[target], next[idx]];
+    onChange({ widgets: next });
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      {column.widgets.map((widget, idx) => (
+        <FooterWidgetEditor
+          key={widget.id}
+          widget={widget}
+          onChange={(patch) => updateWidget(idx, patch)}
+          onRemove={() => removeWidget(idx)}
+          onMoveUp={() => moveWidget(idx, -1)}
+          onMoveDown={() => moveWidget(idx, 1)}
+          canMoveUp={idx > 0}
+          canMoveDown={idx < column.widgets.length - 1}
+        />
+      ))}
+      <Button variant="outline" size="sm" className="self-start" onClick={addWidget}>
+        <Plus className="h-4 w-4" /> Add widget
+      </Button>
+    </div>
+  );
 }
 
 function FooterForm({ initial }: { initial: SiteFooterSetting }) {
   const update = useUpdateSiteFooter();
-  const [description, setDescription] = useState(initial.description ?? "");
-  const [links, setLinks] = useState<FooterLink[]>(initial.links);
+  const [columns, setColumns] = useState<FooterColumn[]>(() =>
+    Array.from(
+      { length: FOOTER_COLUMN_COUNT },
+      (_, i) => initial.columns[i] ?? { widgets: [] },
+    ),
+  );
   const [saving, setSaving] = useState(false);
 
-  const addLink = () => {
-    if (links.length >= 8) return;
-    setLinks((l) => [...l, { label: "", url: "" }]);
-  };
-  const removeLink = (idx: number) => setLinks((l) => l.filter((_, i) => i !== idx));
-  const updateLink = (idx: number, patch: Partial<FooterLink>) =>
-    setLinks((l) => l.map((link, i) => (i === idx ? { ...link, ...patch } : link)));
+  const updateColumn = (idx: number, column: FooterColumn) =>
+    setColumns((cols) => cols.map((c, i) => (i === idx ? column : c)));
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      await update.mutateAsync({
-        description: description.trim() || undefined,
-        links: links.filter((l) => l.label.trim() && l.url.trim()),
-      });
+      await update.mutateAsync({ columns });
       toast.success("Footer saved");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed to save");
@@ -101,48 +294,14 @@ function FooterForm({ initial }: { initial: SiteFooterSetting }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2">
-        <Label htmlFor="footer-description">Description</Label>
-        <Textarea
-          id="footer-description"
-          rows={2}
-          placeholder={`${SITE_TAGLINE}.`}
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-        />
-        <p className="text-xs text-muted-foreground">Leave blank to keep the default tagline.</p>
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <Label>Custom links</Label>
-        {links.map((link, idx) => (
-          <div key={idx} className="flex gap-2">
-            <Input
-              placeholder="Label"
-              value={link.label}
-              onChange={(e) => updateLink(idx, { label: e.target.value })}
-            />
-            <Input
-              placeholder="https://…"
-              value={link.url}
-              onChange={(e) => updateLink(idx, { url: e.target.value })}
-            />
-            <Button variant="ghost" size="icon" onClick={() => removeLink(idx)}>
-              <Trash2 className="h-4 w-4" />
-            </Button>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {columns.map((column, idx) => (
+          <div key={idx} className="flex flex-col gap-2">
+            <Label className="text-xs text-muted-foreground uppercase">Column {idx + 1}</Label>
+            <FooterColumnEditor column={column} onChange={(c) => updateColumn(idx, c)} />
           </div>
         ))}
-        <Button
-          variant="outline"
-          size="sm"
-          className="self-start"
-          disabled={links.length >= 8}
-          onClick={addLink}
-        >
-          <Plus className="h-4 w-4" /> Add link
-        </Button>
       </div>
-
       <Button size="sm" className="self-end" disabled={saving} onClick={handleSave}>
         {saving ? "Saving…" : "Save"}
       </Button>
@@ -534,8 +693,9 @@ export default function SiteSettingsPage() {
         <CardHeader>
           <CardTitle className="text-base">Footer</CardTitle>
           <CardDescription>
-            Custom description and links shown in the public site&apos;s footer. The category list
-            stays automatic.
+            WordPress-style widgets, 4 columns. Add a Text/HTML block, a
+            custom link list, or an auto-updating category/page list to each
+            column, and reorder them freely.
           </CardDescription>
         </CardHeader>
         <CardContent>

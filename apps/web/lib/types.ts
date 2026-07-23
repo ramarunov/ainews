@@ -63,9 +63,32 @@ export interface FooterLink {
   url: string;
 }
 
+// WordPress-style footer widgets - the public footer's 4 columns are each
+// an ordered list of these, admin-managed from Site Settings. "categories"
+// and "pages" widgets carry no content of their own - they're auto-
+// populated from live data at render time (see PublicFooter), so a column
+// pointing at one never goes stale as categories/pages are added/removed.
+export type FooterWidgetType = "text" | "links" | "categories" | "pages";
+
+export interface FooterWidget {
+  id: string;
+  type: FooterWidgetType;
+  title: string;
+  // type === "text"
+  content?: string;
+  // type === "links"
+  links?: FooterLink[];
+}
+
+export interface FooterColumn {
+  widgets: FooterWidget[];
+}
+
 export interface SiteFooterSetting {
-  description?: string;
-  links: FooterLink[];
+  // Always exactly 4 in practice (apps/web/components/public/public-footer.tsx's
+  // grid is a fixed 4-column layout) - treated defensively (padded/truncated)
+  // wherever this is read, rather than assumed.
+  columns: FooterColumn[];
 }
 
 export type HomepageWidgetType = "trending" | "categories" | "custom_html";
