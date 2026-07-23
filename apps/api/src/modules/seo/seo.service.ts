@@ -502,7 +502,15 @@ Return ONLY the title text, no quotes or explanation.`,
         select: { name: true, logoUrl: true, settings: true },
       });
 
-      const siteUrl = (org?.settings as any)?.siteUrl ?? 'https://example.com';
+      // org.settings.siteUrl is an explicit admin override that's never
+      // actually been set in practice - ROOT_DOMAIN (already the source of
+      // truth for canonical/category-subdomain URLs elsewhere in this
+      // file) is a far better fallback than the literal "https://
+      // example.com" placeholder this used to drop straight to, which was
+      // ending up in real, live author/publisher schema URLs.
+      const siteUrl =
+        (org?.settings as any)?.siteUrl ??
+        (this.config ? `https://${getRootDomain(this.config)}` : 'https://example.com');
 
       const seoData = await this.generateSeoData(
         event.articleId,
