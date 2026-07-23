@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -116,15 +116,33 @@ function CategoryFormDialog({
   });
 
   const [parentId, setParentId] = useState<string | undefined>(category?.parentId ?? undefined);
+  const [isSubcategory, setIsSubcategory] = useState(!!category?.parentId);
+  // The dialog is one reused instance whose `category` prop changes between
+  // "New Category" and editing different rows (see CategoriesPage below) -
+  // without this, isSubcategory/parentId would only ever reflect whichever
+  // category was open the FIRST time this component mounted, same class of
+  // bug `values` (vs `defaultValues`) already avoids for the rest of the form.
+  useEffect(() => {
+    if (!open) return;
+    setParentId(category?.parentId ?? undefined);
+    setIsSubcategory(!!category?.parentId);
+  }, [open, category]);
   const subdomainValue = watch("subdomain");
+  // A subcategory inherits its parent's subdomain and lives at a path
+  // underneath it rather than getting one of its own (see getCategoryUrl) -
+  // the field is hidden rather than merely disabled so it can't end up
+  // holding a stale value that silently gets submitted.
+  const effectiveParentId = isSubcategory ? parentId : undefined;
 
   const onSubmit = async (values: CategoryFormValues) => {
     // Same normalization as the API's CreateCategoryDto.subdomain
     // @Transform - applied here too so the live preview and the value sent
     // to the server always agree with each other.
-    const subdomain = values.subdomain
-      ? values.subdomain.trim().toLowerCase().replace(/[\s_]+/g, "-")
-      : undefined;
+    const subdomain = effectiveParentId
+      ? undefined
+      : values.subdomain
+        ? values.subdomain.trim().toLowerCase().replace(/[\s_]+/g, "-")
+        : undefined;
     const payload = {
       name: values.name,
       slug: values.slug || undefined,
@@ -134,7 +152,7 @@ function CategoryFormDialog({
       metaDescription: values.metaDescription || undefined,
       subdomain,
       isActive: values.isActive,
-      parentId,
+      parentId: effectiveParentId,
     };
     try {
       if (isEditing) {
@@ -175,22 +193,73 @@ function CategoryFormDialog({
             <Label htmlFor="cat-description">Description</Label>
             <Textarea id="cat-description" rows={2} {...register("description")} />
           </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="cat-subdomain">Subdomain</Label>
-            <Input
-              id="cat-subdomain"
-              placeholder="e.g. kesehatan"
-              {...register("subdomain")}
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="cat-is-subcategory"
+              checked={isSubcategory}
+              onCheckedChange={(v) => {
+                setIsSubcategory(!!v);
+                if (!v) setParentId(undefined);
+              }}
             />
-            {errors.subdomain && (
-              <p className="text-sm text-destructive">{errors.subdomain.message}</p>
-            )}
-            <p className="text-xs text-muted-foreground">
-              {subdomainValue
-                ? `Preview: https://${subdomainValue.trim().toLowerCase().replace(/[\s_]+/g, "-")}.${rootDomain}`
-                : `Leave blank to keep this category on ${rootDomain}/category/…`}
-            </p>
+            <Label htmlFor="cat-is-subcategory" className="font-normal">
+              This is a subcategory
+            </Label>
           </div>
+          {isSubcategory && (
+            <div className="flex flex-col gap-2">
+              <Label>Parent category</Label>
+              {(() => {
+                // Base UI's <Select.Value> only reliably shows the matched
+                // item's label (instead of falling back to the raw value -
+                // here a UUID) when the root is given an explicit
+                // value->label `items` map. Excludes other subcategories -
+                // only one level of nesting is supported.
+                const parentOptions = categories.filter(
+                  (c) => c.id !== category?.id && !c.parentId,
+                );
+                const items = Object.fromEntries(parentOptions.map((c) => [c.id, c.name]));
+                return (
+                  <Select items={items} value={parentId} onValueChange={(v) => setParentId(v ?? undefined)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a parent category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {parentOptions.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                );
+              })()}
+            </div>
+          )}
+          {!effectiveParentId && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="cat-subdomain">Subdomain</Label>
+              <Input
+                id="cat-subdomain"
+                placeholder="e.g. kesehatan"
+                {...register("subdomain")}
+              />
+              {errors.subdomain && (
+                <p className="text-sm text-destructive">{errors.subdomain.message}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                {subdomainValue
+                  ? `Preview: https://${subdomainValue.trim().toLowerCase().replace(/[\s_]+/g, "-")}.${rootDomain}`
+                  : `Leave blank to keep this category on ${rootDomain}/category/…`}
+              </p>
+            </div>
+          )}
+          {effectiveParentId && (
+            <p className="text-xs text-muted-foreground">
+              Subcategories don&apos;t get a subdomain of their own - this will live at a path
+              under its parent&apos;s subdomain instead (e.g. kesehatan.beritabot.com/gizi).
+            </p>
+          )}
           <div className="flex flex-col gap-2">
             <Label htmlFor="cat-image">Logo / image URL</Label>
             <Input id="cat-image" placeholder="https://…" {...register("imageUrl")} />
@@ -222,31 +291,6 @@ function CategoryFormDialog({
             <Label htmlFor="cat-active" className="font-normal">
               Active (publicly reachable)
             </Label>
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label>Parent category</Label>
-            {(() => {
-              // Base UI's <Select.Value> only reliably shows the matched
-              // item's label (instead of falling back to the raw value -
-              // here a UUID) when the root is given an explicit
-              // value->label `items` map.
-              const parentOptions = categories.filter((c) => c.id !== category?.id);
-              const items = Object.fromEntries(parentOptions.map((c) => [c.id, c.name]));
-              return (
-                <Select items={items} value={parentId} onValueChange={(v) => setParentId(v ?? undefined)}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="None (top-level)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {parentOptions.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              );
-            })()}
           </div>
           <DialogFooter>
             <Button type="submit" disabled={saving}>
