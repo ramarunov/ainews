@@ -70,12 +70,17 @@ function FooterWidgetView({
   }
 
   if (widget.type === "categories") {
-    if (categories.length === 0) return null;
+    // Top-level only - `categories` here is the site-wide flat list, which
+    // now includes subcategories too (see getCategories() in
+    // public-api.ts). The footer's category widget is meant to mirror the
+    // main section list, not enumerate every subcategory alongside it.
+    const topLevel = categories.filter((c) => !c.parentId);
+    if (topLevel.length === 0) return null;
     return (
       <div className="flex flex-col gap-3">
         {heading}
         <nav className="grid grid-cols-2 gap-x-4 gap-y-2">
-          {categories.map((category) => {
+          {topLevel.map((category) => {
             const colors = getCategoryColors(category.slug ?? category.name);
             return (
               <Link

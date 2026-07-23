@@ -286,6 +286,21 @@ export default function CategoriesPage() {
   };
 
   const categories = data?.data ?? [];
+  // Flat list from the API, reordered into parent-then-its-children groups
+  // (only one level deep - subcategories don't themselves have children)
+  // so the hierarchy set up via each row's "Parent category" field is
+  // actually visible here instead of an alphabetical-ish flat table.
+  const topLevel = categories.filter((c) => !c.parentId);
+  const orphaned = categories.filter((c) => c.parentId && !categories.some((p) => p.id === c.parentId));
+  const orderedCategories: Array<{ category: Category; depth: number }> = [
+    ...topLevel.flatMap((parent) => [
+      { category: parent, depth: 0 },
+      ...categories
+        .filter((c) => c.parentId === parent.id)
+        .map((child) => ({ category: child, depth: 1 })),
+    ]),
+    ...orphaned.map((c) => ({ category: c, depth: 0 })),
+  ];
 
   return (
     <div className="flex flex-col gap-6">
@@ -328,9 +343,14 @@ export default function CategoriesPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {categories.map((cat) => (
+                {orderedCategories.map(({ category: cat, depth }) => (
                   <TableRow key={cat.id}>
-                    <TableCell className="font-medium">{cat.name}</TableCell>
+                    <TableCell className="font-medium">
+                      <span style={depth > 0 ? { paddingLeft: `${depth * 1.5}rem` } : undefined}>
+                        {depth > 0 && <span className="mr-1.5 text-muted-foreground">&#8627;</span>}
+                        {cat.name}
+                      </span>
+                    </TableCell>
                     <TableCell className="text-muted-foreground">{cat.slug}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {cat.subdomain ? `${cat.subdomain}.${rootDomain}` : "—"}

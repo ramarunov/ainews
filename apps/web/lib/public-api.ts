@@ -76,7 +76,16 @@ export async function getCategories(): Promise<Category[]> {
       next: { revalidate: 300 },
     });
     if (!res.ok) return [];
-    return await res.json();
+    const categories: Category[] = await res.json();
+    // The API returns a flat list (both top-level categories and their
+    // subcategories, all with parentId set where applicable) - `parent` is
+    // resolved here, once, so every consumer (header, footer, mega panel,
+    // getCategoryUrl) can just read category.parent?.subdomain without its
+    // own lookup. See lib/types.ts's Category.parent doc comment.
+    const byId = new Map(categories.map((c) => [c.id, c]));
+    return categories.map((c) =>
+      c.parentId ? { ...c, parent: byId.get(c.parentId) ?? null } : c,
+    );
   } catch {
     return [];
   }
@@ -84,7 +93,12 @@ export async function getCategories(): Promise<Category[]> {
 
 export async function getCategoryBySlug(slug: string): Promise<Category | null> {
   const categories = await getCategories();
-  return categories.find((c) => c.slug === slug) ?? null;
+  const category = categories.find((c) => c.slug === slug);
+  if (!category) return null;
+  return {
+    ...category,
+    children: categories.filter((c) => c.parentId === category.id && c.isActive !== false),
+  };
 }
 
 // Published static pages (About, Contact, Disclaimer, Privacy Policy, ...) -

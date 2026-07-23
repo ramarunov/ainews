@@ -229,6 +229,15 @@ export interface Category {
   // routing — see apps/web/lib/site-url.ts.
   subdomain?: string | null;
   isActive?: boolean;
+  // A subcategory has no subdomain of its own — it inherits its parent's
+  // and lives at a path underneath it (see getCategoryUrl). Populated
+  // client-side from the flat /public/categories list (getCategories() in
+  // public-api.ts), not returned by the API response itself.
+  parent?: Pick<Category, "id" | "name" | "slug" | "subdomain"> | null;
+  // Only populated by getCategoryBySlug() for the one category being
+  // rendered (e.g. the category page's sub-nav) — not present on every
+  // category returned by getCategories().
+  children?: Category[];
 }
 
 export interface Page {

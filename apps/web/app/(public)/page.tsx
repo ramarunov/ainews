@@ -61,8 +61,12 @@ export default async function HomePage() {
     .filter((a) => a.id !== heroArticle?.id)
     .slice(4, 9);
 
-  const featuredCategories = categories.slice(0, FEATURED_CATEGORY_COUNT);
-  const otherCategories = categories.slice(FEATURED_CATEGORY_COUNT);
+  // getCategories() now returns subcategories flatly alongside top-level
+  // ones (see public-api.ts) - the homepage's category sections are for
+  // the site's main sections only, same as the footer's category widget.
+  const topLevelCategories = categories.filter((c) => !c.parentId);
+  const featuredCategories = topLevelCategories.slice(0, FEATURED_CATEGORY_COUNT);
+  const otherCategories = topLevelCategories.slice(FEATURED_CATEGORY_COUNT);
 
   const [categorySections, mosaicSections] = await Promise.all([
     Promise.all(

@@ -166,8 +166,6 @@ export async function proxy(request: NextRequest) {
     return new NextResponse("Not Found", { status: 404 });
   }
 
-  if (!(await isPublicPath(pathname))) return redirectToApp(request, appUrl);
-
   // A category subdomain's own root renders that category's homepage
   // directly (internally the same page category/[slug]/page.tsx already
   // renders for /category/:slug) rather than forcing a further redirect -
@@ -177,6 +175,28 @@ export async function proxy(request: NextRequest) {
     rewriteUrl.pathname = `/category/${category.slug}`;
     return NextResponse.rewrite(rewriteUrl);
   }
+
+  // A subcategory has no subdomain of its own - it lives at a single-segment
+  // path directly under its parent's subdomain (kesehatan.beritabot.com/gizi,
+  // see getCategoryUrl in lib/site-url.ts), rewritten to the same
+  // category/[slug] page a top-level category renders. Checked before the
+  // generic isPublicPath/static-page check below so it isn't shadowed by an
+  // admin-created static page happening to share the same single-segment
+  // slug - a subcategory of the current host takes priority over a page on
+  // a category subdomain (pages are apex content anyway, see [slug]/page.tsx).
+  const childMatch = SINGLE_SEGMENT_PATTERN.exec(pathname);
+  if (childMatch) {
+    const child = categories.find(
+      (c) => c.parentId === category.id && c.slug === childMatch[1] && c.isActive !== false,
+    );
+    if (child) {
+      const rewriteUrl = new URL(request.nextUrl);
+      rewriteUrl.pathname = `/category/${child.slug}`;
+      return NextResponse.rewrite(rewriteUrl);
+    }
+  }
+
+  if (!(await isPublicPath(pathname))) return redirectToApp(request, appUrl);
 
   return NextResponse.next();
 }

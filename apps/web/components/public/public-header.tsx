@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Menu, Search, X } from "lucide-react";
 import type { Category, PublicArticle } from "@/lib/types";
 import { getCategoryColors } from "@/lib/category-colors";
-import { getCategoryUrl } from "@/lib/site-url";
+import { getCategoryUrl, getRootDomain } from "@/lib/site-url";
 import { getPublishedArticles } from "@/lib/public-api";
 import { SITE_NAME } from "@/lib/brand";
 import { cn } from "@/lib/utils";
@@ -26,10 +26,18 @@ const HOVER_CLOSE_DELAY_MS = 200;
 
 export function PublicHeader({
   categories,
+  activeCategory,
   today,
   logoUrl,
 }: {
+  // The nav strip's items - either the site's top-level categories (apex),
+  // or the current category's subcategories when browsing its subdomain
+  // and it has any (see (public)/layout.tsx).
   categories: Category[];
+  // Set only when `categories` above is a subcategory list - lets the
+  // header show which section you're in, since its own name no longer
+  // appears in the nav strip itself once replaced by its children.
+  activeCategory?: Category;
   today: string;
   logoUrl?: string;
 }) {
@@ -115,10 +123,30 @@ export function PublicHeader({
   return (
     <header className="sticky top-0 z-40 bg-background shadow-sm">
       {/* Utility bar — mirrors the slim date/links strip real Indonesian
-          news portals run above their main masthead. */}
+          news portals run above their main masthead. On a category
+          subdomain whose nav strip below has swapped to its subcategories,
+          this is the only remaining indicator of which section you're in
+          (its own name no longer appears in the nav strip itself) - plus a
+          way back to the cross-category apex, which the logo link no
+          longer points to on this host (see (public)/layout.tsx). */}
       <div className="hidden border-b bg-foreground text-background/80 sm:block">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-1.5 text-xs">
-          <span>{today}</span>
+          <div className="flex items-center gap-3">
+            <span>{today}</span>
+            {activeCategory && (
+              <>
+                <span className="opacity-40">•</span>
+                <span
+                  className={`font-bold tracking-wide uppercase ${getCategoryColors(activeCategory.slug ?? activeCategory.name).text}`}
+                >
+                  {activeCategory.name}
+                </span>
+                <a href={`https://${getRootDomain()}`} className="opacity-70 hover:text-background hover:opacity-100">
+                  Semua Kanal &rarr;
+                </a>
+              </>
+            )}
+          </div>
           <div className="flex items-center gap-4">
             <Link href="/search" className="hover:text-background">
               Bantuan

@@ -85,6 +85,34 @@ describe("getCategoryUrl / getArticleUrl", () => {
       "https://beritabot.com/news/artikel-a",
     );
   });
+
+  it("resolves a subcategory to a path under its parent's subdomain, not a subdomain of its own", () => {
+    vi.stubEnv("NEXT_PUBLIC_ENABLE_CATEGORY_SUBDOMAINS", "true");
+    const gizi = { slug: "gizi", subdomain: null, parent: { subdomain: "kesehatan" } };
+    expect(getCategoryUrl(gizi, "beritabot.com")).toBe("https://kesehatan.beritabot.com/gizi");
+    expect(getArticleUrl({ slug: "artikel-a", primaryCategory: gizi }, "beritabot.com")).toBe(
+      "https://kesehatan.beritabot.com/news/artikel-a",
+    );
+  });
+
+  it("a subcategory's own subdomain (if ever assigned) still wins over its parent's", () => {
+    vi.stubEnv("NEXT_PUBLIC_ENABLE_CATEGORY_SUBDOMAINS", "true");
+    const gizi = { slug: "gizi", subdomain: "gizi", parent: { subdomain: "kesehatan" } };
+    expect(getCategoryUrl(gizi, "beritabot.com")).toBe("https://gizi.beritabot.com");
+  });
+
+  it("falls back to the apex /category/:slug path for a subcategory whose parent has no subdomain either", () => {
+    vi.stubEnv("NEXT_PUBLIC_ENABLE_CATEGORY_SUBDOMAINS", "true");
+    const gizi = { slug: "gizi", subdomain: null, parent: { subdomain: null } };
+    expect(getCategoryUrl(gizi, "beritabot.com")).toBe("https://beritabot.com/category/gizi");
+  });
+
+  it("ignores parent-subdomain inheritance when the feature flag is off", () => {
+    vi.stubEnv("NEXT_PUBLIC_ENABLE_CATEGORY_SUBDOMAINS", "");
+    vi.stubEnv("ENABLE_CATEGORY_SUBDOMAINS", "");
+    const gizi = { slug: "gizi", subdomain: null, parent: { subdomain: "kesehatan" } };
+    expect(getCategoryUrl(gizi, "beritabot.com")).toBe("https://beritabot.com/category/gizi");
+  });
 });
 
 describe("getAbsoluteUrl", () => {

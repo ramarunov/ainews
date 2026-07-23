@@ -23,27 +23,46 @@ export function getRootDomain(config: ConfigService): string {
   return config.get<string>('ROOT_DOMAIN', 'beritabot.com');
 }
 
+// A category's own subdomain always wins; a subcategory (no subdomain of
+// its own) inherits its parent's subdomain and lives at a path underneath
+// it instead - e.g. gizi (child of kesehatan) resolves to
+// kesehatan.beritabot.com/gizi, not a subdomain of its own. This keeps a
+// topic's link equity concentrated on one host instead of fragmenting
+// across a subdomain per subcategory. Returns null (apex) when neither the
+// category nor its parent has a subdomain assigned.
+function getCategoryHost(
+  category: { subdomain?: string | null; parent?: { subdomain?: string | null } | null },
+  rootDomain: string,
+): string | null {
+  if (category.subdomain) return `${category.subdomain}.${rootDomain}`;
+  if (category.parent?.subdomain) return `${category.parent.subdomain}.${rootDomain}`;
+  return null;
+}
+
 export function getCategoryUrl(
-  category: { slug: string; subdomain?: string | null },
+  category: { slug: string; subdomain?: string | null; parent?: { subdomain?: string | null } | null },
   rootDomain: string,
 ): string {
-  if (category.subdomain) {
-    return `https://${category.subdomain}.${rootDomain}`;
-  }
-  return `https://${rootDomain}/category/${category.slug}`;
+  const host = getCategoryHost(category, rootDomain);
+  if (!host) return `https://${rootDomain}/category/${category.slug}`;
+  // A top-level category subdomain's own root IS its homepage; a
+  // subcategory is a path underneath its parent's subdomain.
+  return category.subdomain ? `https://${host}` : `https://${host}/${category.slug}`;
 }
 
 export function getArticleUrl(
   article: {
     slug: string;
-    primaryCategory?: { slug: string; subdomain?: string | null } | null;
+    primaryCategory?: {
+      slug: string;
+      subdomain?: string | null;
+      parent?: { subdomain?: string | null } | null;
+    } | null;
   },
   rootDomain: string,
 ): string {
-  const subdomain = article.primaryCategory?.subdomain;
-  if (subdomain) {
-    return `https://${subdomain}.${rootDomain}/news/${article.slug}`;
-  }
+  const host = article.primaryCategory ? getCategoryHost(article.primaryCategory, rootDomain) : null;
+  if (host) return `https://${host}/news/${article.slug}`;
   return `https://${rootDomain}/news/${article.slug}`;
 }
 

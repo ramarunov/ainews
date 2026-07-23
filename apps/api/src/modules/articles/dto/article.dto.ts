@@ -147,6 +147,15 @@ export class ArticleQueryDto {
   @IsUUID()
   categoryId?: string;
 
+  // Matches ANY of these primary category ids (vs. categoryId's exact
+  // match) - used by the public category page to roll a parent category's
+  // subcategory articles up onto its own hub page. Only PublicSiteService
+  // sets this; never both this and categoryId on the same query.
+  @IsOptional()
+  @IsArray()
+  @IsUUID('4', { each: true })
+  primaryCategoryIds?: string[];
+
   @IsOptional()
   @IsUUID()
   tagId?: string;

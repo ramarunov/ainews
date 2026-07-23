@@ -156,6 +156,9 @@ export default async function NewsArticlePage({ params }: Props) {
   const rootDomain = getRootDomain();
   const breadcrumbItems = [
     { label: "Beranda", href: `https://${rootDomain}` },
+    ...(article.primaryCategory?.parent
+      ? [{ label: article.primaryCategory.parent.name, href: getCategoryUrl(article.primaryCategory.parent, rootDomain) }]
+      : []),
     ...(article.primaryCategory
       ? [{ label: article.primaryCategory.name, href: getCategoryUrl(article.primaryCategory, rootDomain) }]
       : []),

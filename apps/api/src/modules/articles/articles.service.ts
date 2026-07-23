@@ -102,6 +102,7 @@ export class ArticlesService {
     const {
       status,
       categoryId,
+      primaryCategoryIds,
       tagId,
       authorId,
       search,
@@ -125,7 +126,11 @@ export class ArticlesService {
       ...(isBreaking !== undefined && { isBreaking }),
       ...(isFeatured !== undefined && { isFeatured }),
       ...(authorId && { primaryAuthorId: authorId }),
+      // Never both set on the same query (see ArticleQueryDto) - exact
+      // single-category match, or "any of these" for a category-with-
+      // subcategories roll-up, not both.
       ...(categoryId && { primaryCategoryId: categoryId }),
+      ...(primaryCategoryIds?.length && { primaryCategoryId: { in: primaryCategoryIds } }),
       ...(tagId && { articleTags: { some: { tagId } } }),
       ...(search && {
         OR: [
@@ -570,7 +575,15 @@ export class ArticlesService {
         },
       },
       primaryCategory: {
-        select: { id: true, name: true, slug: true, subdomain: true, isActive: true },
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          subdomain: true,
+          isActive: true,
+          parentId: true,
+          parent: { select: { id: true, name: true, slug: true, subdomain: true } },
+        },
       },
       articleTags: {
         include: {

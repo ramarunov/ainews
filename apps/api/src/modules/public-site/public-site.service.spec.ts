@@ -102,6 +102,41 @@ describe('PublicSiteService', () => {
       );
     });
 
+    it('rolls a parent category with active subcategories up into primaryCategoryIds instead of an exact categoryId match', async () => {
+      categoriesService.findBySlug.mockResolvedValue({
+        id: 'cat-kesehatan',
+        slug: 'kesehatan',
+        children: [
+          { id: 'cat-gizi', isActive: true },
+          { id: 'cat-kebugaran', isActive: true },
+          { id: 'cat-inactive-child', isActive: false },
+        ],
+      });
+      articlesService.findAll.mockResolvedValue({ data: [], meta: {} });
+
+      await service.listPublished({ categorySlug: 'kesehatan' } as any);
+
+      expect(articlesService.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({
+          categoryId: undefined,
+          primaryCategoryIds: ['cat-kesehatan', 'cat-gizi', 'cat-kebugaran'],
+        }),
+        'org-1',
+      );
+    });
+
+    it('does not roll up a category with no active children - exact categoryId match as before', async () => {
+      categoriesService.findBySlug.mockResolvedValue({ id: 'cat-gizi', slug: 'gizi', children: [] });
+      articlesService.findAll.mockResolvedValue({ data: [], meta: {} });
+
+      await service.listPublished({ categorySlug: 'gizi' } as any);
+
+      expect(articlesService.findAll).toHaveBeenCalledWith(
+        expect.objectContaining({ categoryId: 'cat-gizi', primaryCategoryIds: undefined }),
+        'org-1',
+      );
+    });
+
     it('defaults to sorting by publishedAt when no sortBy is given', async () => {
       articlesService.findAll.mockResolvedValue({ data: [], meta: {} });
 

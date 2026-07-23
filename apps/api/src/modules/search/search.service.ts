@@ -327,15 +327,32 @@ export class SearchService {
   // query per search response, rather than denormalizing slug/subdomain
   // into the index itself, which would go stale the moment an admin edits
   // a category without every indexed article being reindexed.
-  private async fetchCategoryMap(
-    categoryIds: Array<string | undefined>,
-  ): Promise<Map<string, { id: string; name: string; slug: string; subdomain: string | null; isActive: boolean }>> {
+  private async fetchCategoryMap(categoryIds: Array<string | undefined>): Promise<
+    Map<
+      string,
+      {
+        id: string;
+        name: string;
+        slug: string;
+        subdomain: string | null;
+        isActive: boolean;
+        parent: { subdomain: string | null } | null;
+      }
+    >
+  > {
     const ids = [...new Set(categoryIds.filter((id): id is string => Boolean(id)))];
     if (ids.length === 0) return new Map();
 
     const categories = await this.prisma.category.findMany({
       where: { id: { in: ids } },
-      select: { id: true, name: true, slug: true, subdomain: true, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        subdomain: true,
+        isActive: true,
+        parent: { select: { subdomain: true } },
+      },
     });
     return new Map(categories.map((category) => [category.id, category]));
   }
@@ -377,7 +394,16 @@ export class SearchService {
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
-          primaryCategory: { select: { id: true, name: true, slug: true, subdomain: true, isActive: true } },
+          primaryCategory: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              subdomain: true,
+              isActive: true,
+              parent: { select: { subdomain: true } },
+            },
+          },
         },
       }),
       this.prisma.article.count({ where }),

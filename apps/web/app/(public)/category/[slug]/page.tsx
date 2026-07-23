@@ -64,6 +64,15 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   const [lead, ...rest] = articles;
   const rootDomain = getRootDomain();
   const categoryUrl = getCategoryUrl(category, rootDomain);
+  const children = category.children ?? [];
+
+  const breadcrumbItems = [
+    { label: "Beranda", href: `https://${rootDomain}` },
+    ...(category.parent
+      ? [{ label: category.parent.name, href: getCategoryUrl(category.parent, rootDomain) }]
+      : []),
+    { label: category.name },
+  ];
 
   const categorySchema = [
     {
@@ -76,10 +85,12 @@ export default async function CategoryPage({ params, searchParams }: Props) {
     {
       "@context": "https://schema.org",
       "@type": "BreadcrumbList",
-      itemListElement: [
-        { "@type": "ListItem", position: 1, name: SITE_NAME, item: `https://${rootDomain}` },
-        { "@type": "ListItem", position: 2, name: category.name, item: categoryUrl },
-      ],
+      itemListElement: breadcrumbItems.map((item, i) => ({
+        "@type": "ListItem",
+        position: i + 1,
+        name: item.label,
+        item: item.href ?? categoryUrl,
+      })),
     },
   ];
 
@@ -91,15 +102,25 @@ export default async function CategoryPage({ params, searchParams }: Props) {
       />
       <div className={`${colors.badge} py-10`}>
         <div className="mx-auto w-full max-w-6xl px-4">
-          <Breadcrumb
-            className="mb-3 text-white"
-            items={[{ label: "Beranda", href: `https://${rootDomain}` }, { label: category.name }]}
-          />
+          <Breadcrumb className="mb-3 text-white" items={breadcrumbItems} />
           <h1 className="text-4xl font-black tracking-tight text-white uppercase md:text-5xl">
             {category.name}
           </h1>
           {category.description && (
             <p className="mt-2 max-w-2xl text-white/80">{category.description}</p>
+          )}
+          {children.length > 0 && (
+            <nav className="mt-4 flex flex-wrap gap-2">
+              {children.map((child) => (
+                <Link
+                  key={child.id}
+                  href={getCategoryUrl(child, rootDomain)}
+                  className="rounded-full border border-white/40 px-3 py-1 text-xs font-bold tracking-wide text-white uppercase hover:bg-white/10"
+                >
+                  {child.name}
+                </Link>
+              ))}
+            </nav>
           )}
         </div>
       </div>

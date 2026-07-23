@@ -38,9 +38,19 @@ export class PublicSiteService {
     const organizationId = this.getPublicOrgId();
 
     let categoryId: string | undefined;
+    let primaryCategoryIds: string[] | undefined;
     if (query.categorySlug) {
       const category = await this.categoriesService.findBySlug(query.categorySlug, organizationId);
-      categoryId = category.id;
+      // A category with active subcategories is a topic hub - its own page
+      // rolls up articles assigned directly to it AND to any of its
+      // subcategories, rather than only exact-matching primaryCategoryId.
+      // Only one level deep (subcategories don't themselves have children).
+      const activeChildren = category.children?.filter((c) => c.isActive !== false) ?? [];
+      if (activeChildren.length > 0) {
+        primaryCategoryIds = [category.id, ...activeChildren.map((c) => c.id)];
+      } else {
+        categoryId = category.id;
+      }
     }
 
     const requestedLimit = query.limit ?? 20;
@@ -53,6 +63,7 @@ export class PublicSiteService {
       {
         status: ArticleStatus.PUBLISHED,
         categoryId,
+        primaryCategoryIds,
         authorId: query.authorId,
         isBreaking: query.isBreaking,
         isFeatured: query.isFeatured,

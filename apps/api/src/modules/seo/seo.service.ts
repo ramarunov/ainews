@@ -60,7 +60,11 @@ export class SeoService {
       content: string;
       excerpt?: string;
       slug: string;
-      primaryCategory?: { slug: string; subdomain?: string | null } | null;
+      primaryCategory?: {
+        slug: string;
+        subdomain?: string | null;
+        parent?: { subdomain?: string | null } | null;
+      } | null;
       featuredImageUrl?: string;
       author?: { displayName: string };
       publishedAt?: Date;
@@ -136,7 +140,11 @@ Return ONLY the title text, no quotes or explanation.`,
       content?: string;
       excerpt?: string;
       slug: string;
-      primaryCategory?: { slug: string; subdomain?: string | null } | null;
+      primaryCategory?: {
+        slug: string;
+        subdomain?: string | null;
+        parent?: { subdomain?: string | null } | null;
+      } | null;
       featuredImageUrl?: string;
       author?: { displayName: string };
       publishedAt?: Date;
@@ -405,7 +413,9 @@ Return ONLY the title text, no quotes or explanation.`,
       select: {
         slug: true,
         updatedAt: true,
-        primaryCategory: { select: { slug: true, subdomain: true } },
+        primaryCategory: {
+          select: { slug: true, subdomain: true, parent: { select: { subdomain: true } } },
+        },
       },
       orderBy: { publishedAt: 'desc' },
     });
@@ -431,9 +441,9 @@ Return ONLY the title text, no quotes or explanation.`,
   private buildCanonicalUrl(
     siteUrl: string,
     slug: string,
-    category?: { slug: string; subdomain?: string | null } | null,
+    category?: { slug: string; subdomain?: string | null; parent?: { subdomain?: string | null } | null } | null,
   ): string {
-    if (category?.subdomain && this.config) {
+    if ((category?.subdomain || category?.parent?.subdomain) && this.config) {
       return getArticleUrl({ slug, primaryCategory: category }, getRootDomain(this.config));
     }
     return `${siteUrl.replace(/\/$/, '')}/news/${slug}`;
@@ -448,7 +458,9 @@ Return ONLY the title text, no quotes or explanation.`,
         where: { id: event.articleId },
         include: {
           primaryAuthor: { select: { displayName: true } },
-          primaryCategory: { select: { slug: true, subdomain: true } },
+          primaryCategory: {
+            select: { slug: true, subdomain: true, parent: { select: { subdomain: true } } },
+          },
           seoData: true,
         },
       });
