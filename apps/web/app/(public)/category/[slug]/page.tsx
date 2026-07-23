@@ -16,10 +16,19 @@ interface Props {
   searchParams: Promise<{ page?: string }>;
 }
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const { slug } = await params;
+  const { page: pageParam } = await searchParams;
+  const page = Math.max(1, Number(pageParam) || 1);
   const category = await getCategoryBySlug(slug);
   if (!category) return {};
+  const categoryUrl = getCategoryUrl(category);
+  // Self-referencing canonical per page, not collapsed to page 1 - each
+  // page lists genuinely different articles, so telling Google "this
+  // content actually lives at page 1's URL" would suppress page 2+ from
+  // ever being indexed under its own URL (Google deprecated rel=next/prev
+  // in 2019; a distinct canonical per page is its current guidance).
+  const canonical = page > 1 ? `${categoryUrl}?page=${page}` : categoryUrl;
   return {
     title: category.metaTitle || `${category.name} — ${SITE_NAME}`,
     description:
@@ -27,8 +36,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       category.description ||
       `${category.name} Terbaru Hari Ini | ${SITE_NAME}`,
     alternates: {
-      canonical: getCategoryUrl(category),
-      types: { "application/rss+xml": `${getCategoryUrl(category).replace(/\/$/, "")}/feed` },
+      canonical,
+      types: { "application/rss+xml": `${categoryUrl.replace(/\/$/, "")}/feed` },
     },
   };
 }

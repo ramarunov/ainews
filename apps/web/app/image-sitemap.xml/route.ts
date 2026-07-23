@@ -1,5 +1,5 @@
 import { headers } from "next/headers";
-import { getCategories, getPublishedArticles } from "@/lib/public-api";
+import { getAllPublishedArticles, getCategories } from "@/lib/public-api";
 import { getArticleUrl, getRootDomain, resolveHostCategory } from "@/lib/site-url";
 
 function escapeXml(value: string): string {
@@ -20,10 +20,7 @@ export async function GET() {
   const categories = await getCategories();
   const activeCategory = resolveHostCategory(hostname, rootDomain, categories);
 
-  const { data: articles } = await getPublishedArticles({
-    limit: 100,
-    categorySlug: activeCategory?.slug,
-  });
+  const articles = await getAllPublishedArticles({ categorySlug: activeCategory?.slug });
   const articlesWithImages = articles.filter((article) => article.featuredImageUrl);
 
   const urls = articlesWithImages

@@ -56,6 +56,32 @@ export async function getPublishedArticles(
   }
 }
 
+// The public API caps a single page at 100 (see PublicArticlesQueryDto's
+// @Max(100)) - fine for every UI listing, which only ever shows a handful
+// of items, but sitemap.ts/image-sitemap.xml need EVERY published article,
+// not just the newest page. Pages through the public endpoint until it
+// runs out or `cap` is hit, so a sitemap can never silently truncate to
+// one page's worth again (see git history for the bug this replaced: both
+// sitemaps used a bare getPublishedArticles() call, capped at 20/100
+// articles forever, well past what young the site has today but a ceiling
+// real growth would eventually hit). `cap` is a safety valve, not the
+// expected steady state - Google's own single-sitemap-file limit is 50,000
+// URLs; if this ever gets close, split into a sitemap index instead of
+// raising it further.
+export async function getAllPublishedArticles(
+  filters: Omit<ArticleFilters, "page" | "limit"> = {},
+  cap = 5000,
+): Promise<PublicArticle[]> {
+  const pageSize = 100;
+  const all: PublicArticle[] = [];
+  for (let page = 1; all.length < cap; page++) {
+    const { data } = await getPublishedArticles({ ...filters, page, limit: pageSize });
+    all.push(...data);
+    if (data.length < pageSize) break;
+  }
+  return all.slice(0, cap);
+}
+
 export async function getPublishedArticleBySlug(
   slug: string,
 ): Promise<PublicArticle | null> {

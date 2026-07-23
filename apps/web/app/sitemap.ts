@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { headers } from "next/headers";
-import { getCategories, getPages, getPublishedArticles } from "@/lib/public-api";
+import { getAllPublishedArticles, getCategories, getPages } from "@/lib/public-api";
 import { getArticleUrl, getCategoryUrl, getRootDomain, resolveHostCategory } from "@/lib/site-url";
 
 // Per-host: the apex sitemap lists apex-only pages plus a cross-category
@@ -22,10 +22,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const children = categories.filter(
       (c) => c.parentId === activeCategory.id && c.isActive !== false,
     );
-    const { data: articles } = await getPublishedArticles({
-      categorySlug: activeCategory.slug,
-      limit: 20,
-    });
+    const articles = await getAllPublishedArticles({ categorySlug: activeCategory.slug });
     return [
       {
         url: getCategoryUrl(activeCategory, rootDomain),
@@ -48,11 +45,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ];
   }
 
-  // Apex: aggregator homepage + a pointer to every category's own site
-  // (first page only, up to 20 articles across the whole aggregator — fine
-  // for now given how few published articles exist; paginate this once
-  // that stops being true).
-  const [{ data: articles }, pages] = await Promise.all([getPublishedArticles(), getPages()]);
+  // Apex: aggregator homepage + a pointer to every category's own site,
+  // plus every published article site-wide (see getAllPublishedArticles -
+  // this used to silently cap at the newest 20 forever).
+  const [articles, pages] = await Promise.all([getAllPublishedArticles(), getPages()]);
   const apexUrl = `https://${rootDomain}`;
 
   return [
