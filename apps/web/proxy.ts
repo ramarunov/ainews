@@ -122,12 +122,27 @@ export async function proxy(request: NextRequest) {
 
   // Kill switch for the whole category-subdomain feature - while this is
   // false (the default until Phase 6's rollout flips it on), behavior is
-  // byte-for-byte the original binary apex/app split.
+  // the original binary apex/app split, EXCEPT for one addition: once
+  // wildcard DNS/TLS for *.{rootDomain} exists (see docs/DEPLOY.md §7.1),
+  // literally any subdomain becomes reachable at this server regardless of
+  // this flag - isPublicPath("/") being unconditionally true was only safe
+  // back when app.{rootDomain}/​{rootDomain} were the only hostnames that
+  // could physically reach this deployment. Confirmed live: a wildcard
+  // cert being issued for *.{rootDomain} alone was enough for a
+  // never-configured name like sembarang.{rootDomain} to start serving the
+  // apex homepage. So an unrecognized hostname still 404s here, same as
+  // the enabled branch below - the flag only controls whether a *known*
+  // category ever resolves to its own subdomain, not whether guessable
+  // subdomains produce a fake site.
   if (process.env.ENABLE_CATEGORY_SUBDOMAINS !== "true") {
-    if (hostname !== appUrl.hostname && !(await isPublicPath(pathname))) {
-      return redirectToApp(request, appUrl);
+    if (hostname === appUrl.hostname) {
+      return NextResponse.next();
     }
-    return NextResponse.next();
+    if (hostname === rootDomain) {
+      if (!(await isPublicPath(pathname))) return redirectToApp(request, appUrl);
+      return NextResponse.next();
+    }
+    return new NextResponse("Not Found", { status: 404 });
   }
 
   // The dashboard host's existing behavior is untouched - every path stays
