@@ -5,8 +5,21 @@
 #
 # See docs/DEPLOY.md for the full setup this plugs into, and
 # docs/DEPLOY.md §7.1 specifically for the wildcard block below (category
-# subdomains) - it needs a DNS-01 challenge, which the plain `caddy:2-alpine`
-# image in docker-compose.prod.yml does NOT support out of the box.
+# subdomains) - it needs a DNS-01 challenge, which is why this project now
+# builds a custom Caddy image (infrastructure/caddy/Dockerfile) with the
+# Cloudflare DNS module instead of using the stock caddy:2-alpine image.
+
+# Global options - acme_dns lets Caddy prove domain ownership by creating a
+# TXT record via the Cloudflare API (CF_API_TOKEN, passed through from
+# docker-compose.prod.yml's caddy service) instead of serving an HTTP
+# challenge file, which is the only way to get a certificate that covers a
+# wildcard hostname like *.beritabot.com. Every hostname below - wildcard or
+# not - ends up using this DNS-01 method once it's configured, which is
+# fine; it just means cert issuance depends on the Cloudflare API being
+# reachable, same as it already depended on port 80 being reachable before.
+{
+	acme_dns cloudflare {env.CF_API_TOKEN}
+}
 
 # Apex + dashboard host + www (redirected to the apex by apps/web/proxy.ts
 # itself, not here) all point at the same web app - proxy.ts is what
@@ -24,14 +37,16 @@ beritabot.com, app.beritabot.com, www.beritabot.com {
 # over this wildcard for a request that matches both, so this only ever
 # catches subdomains other than app/www/api.
 #
-# INACTIVE BY DEFAULT: a wildcard hostname cannot get a certificate via the
-# default HTTP-01 challenge, only DNS-01 (see docs/DEPLOY.md §7.1). Until
-# that's set up, leave this block commented out and keep
-# ENABLE_CATEGORY_SUBDOMAINS=false in .env.production - apps/web/proxy.ts's
-# kill switch means no code path needs this block to exist yet.
-# *.beritabot.com {
-# 	reverse_proxy web:3100
-# }
+# Requires the acme_dns global option above (DNS-01) - a wildcard hostname
+# cannot get a certificate via the default HTTP-01 challenge. Uncommented
+# once Cloudflare DNS-01 is configured; ENABLE_CATEGORY_SUBDOMAINS in
+# .env.production stays the actual feature kill switch regardless (see
+# apps/web/proxy.ts) - this block existing just means a subdomain *can*
+# resolve/get a cert, not that the app treats any subdomain as a real
+# category yet.
+*.beritabot.com {
+	reverse_proxy web:3100
+}
 
 api.beritabot.com {
 	# Publicly-readable media objects (MinIO) served under the API host at

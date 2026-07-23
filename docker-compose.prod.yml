@@ -215,9 +215,17 @@ services:
       - ainews_network
 
   # ─── Caddy (reverse proxy + automatic HTTPS) ───────────────────────────────
+  # Custom-built (see infrastructure/caddy/Dockerfile), not the stock
+  # caddy:2-alpine image, so the Cloudflare DNS module is available for the
+  # wildcard (*.beritabot.com) certificate's DNS-01 challenge - see
+  # docs/DEPLOY.md §7.1. CF_API_TOKEN is only read by Caddy itself (via the
+  # Caddyfile's `acme_dns cloudflare {env.CF_API_TOKEN}`), not by the app,
+  # but needs to reach this container's environment regardless.
   caddy:
-    image: caddy:2-alpine
+    build: ./infrastructure/caddy
     restart: unless-stopped
+    environment:
+      CF_API_TOKEN: ${CF_API_TOKEN}
     ports:
       - "80:80"
       - "443:443"
