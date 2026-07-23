@@ -171,6 +171,16 @@ Return ONLY the title text, no quotes or explanation.`,
       // declaring this explicitly is Google News' own recommendation for
       // avoiding a false "paywalled" classification.
       isAccessibleForFree: true,
+      // Marks which parts of the rendered page are the best candidates for
+      // a voice assistant/AI to read aloud or excerpt - the headline
+      // (`article h1`, always present - see news/[slug]/page.tsx) and, when
+      // the article has a dek, its subtitle (`data-speakable="summary"`).
+      // A selector matching zero elements on a given article (no subtitle)
+      // is harmless, not an error.
+      speakable: {
+        '@type': 'SpeakableSpecification',
+        cssSelector: ['article h1', '[data-speakable="summary"]'],
+      },
       articleSection: article.primaryCategory?.name,
       keywords: article.tags?.length ? article.tags.join(', ') : undefined,
       wordCount: article.wordCount,

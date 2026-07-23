@@ -112,6 +112,10 @@ describe('SeoService', () => {
         '@type': 'WebPage',
         '@id': 'https://example.com/news/breaking-news',
       });
+      expect(schema.speakable).toEqual({
+        '@type': 'SpeakableSpecification',
+        cssSelector: ['article h1', '[data-speakable="summary"]'],
+      });
       expect(schema.headline).toBe('Breaking News');
       expect(schema).not.toHaveProperty('author');
       expect(schema).not.toHaveProperty('image');

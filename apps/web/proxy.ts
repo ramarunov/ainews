@@ -26,6 +26,7 @@ const PUBLIC_PATH_PREFIXES = [
   "/sitemap.xml",
   "/image-sitemap.xml",
   "/news-sitemap.xml",
+  "/llms.txt",
   "/icon",
   "/apple-icon",
 ];

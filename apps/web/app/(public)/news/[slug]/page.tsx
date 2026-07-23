@@ -219,7 +219,9 @@ export default async function NewsArticlePage({ params }: Props) {
             {article.title}
           </h1>
           {article.subtitle && (
-            <p className="text-xl leading-snug text-muted-foreground">{article.subtitle}</p>
+            <p data-speakable="summary" className="text-xl leading-snug text-muted-foreground">
+              {article.subtitle}
+            </p>
           )}
 
           <div className="flex flex-wrap items-center justify-between gap-4 border-y py-4">
