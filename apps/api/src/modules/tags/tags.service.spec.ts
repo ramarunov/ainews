@@ -14,6 +14,7 @@ describe('TagsService', () => {
         findMany: jest.fn(),
         count: jest.fn(),
         update: jest.fn(),
+        delete: jest.fn().mockResolvedValue({}),
       },
       articleTag: {
         deleteMany: jest.fn(),
@@ -94,13 +95,14 @@ describe('TagsService', () => {
   });
 
   describe('remove', () => {
-    it('detaches the tag from articles and soft-deletes it in one transaction', async () => {
+    it('detaches the tag from articles and hard-deletes it in one transaction', async () => {
       jest.spyOn(service, 'findOne').mockResolvedValue({ id: 'tag-1' } as any);
 
       const result = await service.remove('tag-1', 'org-1');
 
       expect(prisma.$transaction).toHaveBeenCalledTimes(1);
       expect(prisma.articleTag.deleteMany).toHaveBeenCalledWith({ where: { tagId: 'tag-1' } });
+      expect(prisma.tag.delete).toHaveBeenCalledWith({ where: { id: 'tag-1' } });
       expect(eventEmitter.emit).toHaveBeenCalledWith(
         'tag.deleted',
         expect.objectContaining({ tagId: 'tag-1' }),

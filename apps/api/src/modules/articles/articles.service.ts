@@ -441,24 +441,114 @@ export class ArticlesService {
       data: { deletedAt: new Date(), status: ArticleStatus.ARCHIVED },
     });
 
-    this.eventEmitter.emit('article.deleted', {
+    this.eventEmitter.emit('article.trashed', {
       articleId: id,
       organizationId,
       userId,
     });
 
-    return { success: true, message: 'Article deleted' };
+    return { success: true, message: 'Article moved to trash' };
   }
 
   // ─── Restore ───────────────────────────────────────────────────────────────
 
   async restore(id: string, organizationId: string) {
+    const trashed = await this.prisma.article.findFirst({
+      where: { id, organizationId, deletedAt: { not: null } },
+    });
+
+    if (!trashed) {
+      throw new NotFoundException('Article not found in trash');
+    }
+
     await this.prisma.article.update({
-      where: { id, organizationId },
+      where: { id },
       data: { deletedAt: null, status: ArticleStatus.DRAFT },
     });
 
+    this.eventEmitter.emit('article.restored', {
+      articleId: id,
+      organizationId,
+    });
+
     return { success: true, message: 'Article restored' };
+  }
+
+  // ─── Trash Listing ─────────────────────────────────────────────────────────
+
+  async findTrash(query: ArticleQueryDto, organizationId: string) {
+    const { search, page = 1, limit = 20 } = query;
+
+    const skip = (Math.max(1, page) - 1) * Math.min(100, limit);
+    const take = Math.min(100, limit);
+
+    const where: Prisma.ArticleWhereInput = {
+      organizationId,
+      deletedAt: { not: null },
+      ...(search && {
+        OR: [
+          { title: { contains: search, mode: 'insensitive' } },
+          { excerpt: { contains: search, mode: 'insensitive' } },
+        ],
+      }),
+    };
+
+    const [articles, total] = await Promise.all([
+      this.prisma.article.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { deletedAt: 'desc' },
+        include: this.defaultIncludes(),
+      }),
+      this.prisma.article.count({ where }),
+    ]);
+
+    const data = articles.map(({ content: _content, contentJson: _contentJson, ...rest }) => rest);
+
+    return {
+      data,
+      meta: { total, page: Math.max(1, page), limit: take, totalPages: Math.ceil(total / take) },
+    };
+  }
+
+  // ─── Permanent Delete ──────────────────────────────────────────────────────
+
+  /**
+   * The second, explicit step of the WordPress-style trash flow - only
+   * callable on an article already sitting in trash (deletedAt set), never
+   * as a shortcut straight from the active state. `Article.translationOf`
+   * and `ArticleView.articleId` are the only two relations pointing at
+   * Article without an onDelete: Cascade in schema.prisma, so they're the
+   * only rows that need manual cleanup before the delete - everything else
+   * (revisions, tags, categories, authors, seo/geo, ai analyses,
+   * assignments, comments) cascades on its own.
+   */
+  async permanentlyRemove(id: string, userId: string, organizationId: string) {
+    const trashed = await this.prisma.article.findFirst({
+      where: { id, organizationId, deletedAt: { not: null } },
+    });
+
+    if (!trashed) {
+      throw new NotFoundException('Article not found in trash');
+    }
+
+    await withOrgTransaction(this.prisma, async (tx) => {
+      await tx.article.updateMany({
+        where: { translationOf: id },
+        data: { translationOf: null },
+      });
+      await tx.articleView.deleteMany({ where: { articleId: id } });
+      await tx.article.delete({ where: { id } });
+    });
+
+    this.eventEmitter.emit('article.permanentlyDeleted', {
+      articleId: id,
+      organizationId,
+      userId,
+    });
+
+    return { success: true, message: 'Article permanently deleted' };
   }
 
   // ─── Track View ────────────────────────────────────────────────────────────

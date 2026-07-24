@@ -342,6 +342,7 @@ export interface Article {
   createdAt: string;
   updatedAt: string;
   publishedAt?: string | null;
+  deletedAt?: string | null;
 }
 
 export interface ArticleAiAnalysis {

@@ -14,12 +14,39 @@ describe('SearchService', () => {
         count: jest.fn(),
         groupBy: jest.fn(),
       },
-      article: { findMany: jest.fn(), count: jest.fn() },
+      article: { findMany: jest.fn(), count: jest.fn(), findFirst: jest.fn() },
       category: { findMany: jest.fn() },
       $queryRaw: jest.fn(),
     };
     aiGateway = { embed: jest.fn() };
     service = new SearchService(opensearch, prisma, aiGateway);
+  });
+
+  describe('article lifecycle event listeners', () => {
+    it('handleArticleTrashed removes the article from the index (reversible, but must not surface in search while trashed)', async () => {
+      await service.handleArticleTrashed({ articleId: 'article-1' });
+
+      expect(opensearch.delete).toHaveBeenCalledWith({ index: 'articles', id: 'article-1' });
+    });
+
+    it('handleArticleRestored re-fetches and re-indexes the article', async () => {
+      prisma.article.findFirst.mockResolvedValue({ id: 'article-1', articleTags: [] });
+
+      await service.handleArticleRestored({ articleId: 'article-1', organizationId: 'org-1' });
+
+      expect(prisma.article.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'article-1', organizationId: 'org-1' } }),
+      );
+      expect(opensearch.index).toHaveBeenCalledWith(
+        expect.objectContaining({ index: 'articles', id: 'article-1' }),
+      );
+    });
+
+    it('handleArticlePermanentlyDeleted removes the article from the index', async () => {
+      await service.handleArticlePermanentlyDeleted({ articleId: 'article-1' });
+
+      expect(opensearch.delete).toHaveBeenCalledWith({ index: 'articles', id: 'article-1' });
+    });
   });
 
   describe('search (analytics logging)', () => {

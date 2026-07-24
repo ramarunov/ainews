@@ -17,7 +17,7 @@ interface ArticlePublishedEvent {
   isFirstPublish?: boolean;
 }
 
-interface ArticleDeletedEvent {
+interface ArticlePermanentlyDeletedEvent {
   articleId: string;
   organizationId: string;
   userId: string;
@@ -63,8 +63,8 @@ export class GoogleIndexingService {
     await this.notify(event.articleId, 'URL_UPDATED');
   }
 
-  @OnEvent('article.deleted')
-  async handleArticleDeleted(event: ArticleDeletedEvent) {
+  @OnEvent('article.permanentlyDeleted')
+  async handleArticlePermanentlyDeleted(event: ArticlePermanentlyDeletedEvent) {
     if (!(await this.isEligible(event.organizationId))) return;
     await this.notify(event.articleId, 'URL_DELETED');
   }

@@ -58,7 +58,7 @@ describe('GoogleIndexingService', () => {
     ...overrides,
   });
 
-  const deletedEvent = (overrides: Partial<any> = {}) => ({
+  const permanentlyDeletedEvent = (overrides: Partial<any> = {}) => ({
     articleId: 'article-1',
     organizationId: 'org-public',
     userId: 'user-1',
@@ -81,8 +81,8 @@ describe('GoogleIndexingService', () => {
     expect(mockedAxios.post).toHaveBeenCalledTimes(1);
   });
 
-  it('submits URL_DELETED when an article is deleted', async () => {
-    await service.handleArticleDeleted(deletedEvent());
+  it('submits URL_DELETED when an article is permanently deleted', async () => {
+    await service.handleArticlePermanentlyDeleted(permanentlyDeletedEvent());
 
     expect(mockedAxios.post).toHaveBeenCalledWith(
       'https://indexing.googleapis.com/v3/urlNotifications:publish',

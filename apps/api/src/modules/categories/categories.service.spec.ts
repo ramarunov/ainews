@@ -14,11 +14,19 @@ describe('CategoriesService', () => {
         findMany: jest.fn(),
         count: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({}),
+        delete: jest.fn().mockResolvedValue({}),
       },
       article: {
         count: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({}),
       },
     };
+    // withOrgTransaction(this.prisma, cb) calls prisma.$transaction(cb) when
+    // there's no active RLS org context (as in every unit test here, which
+    // runs outside the request-scoped interceptor) — invoke the callback
+    // with the same mock as `tx` so its own calls are observable below.
+    prisma.$transaction = jest.fn((cb: any) => cb(prisma));
     eventEmitter = { emit: jest.fn() };
     service = new CategoriesService(prisma, eventEmitter);
   });
@@ -140,37 +148,64 @@ describe('CategoriesService', () => {
       jest.spyOn(service, 'findOne').mockResolvedValue({ id: 'cat-1' } as any);
     });
 
-    it('refuses to delete a category that still has active subcategories', async () => {
+    it('refuses to delete a category that still has an active subcategory', async () => {
       prisma.category.count.mockResolvedValue(2);
 
       await expect(service.remove('cat-1', 'org-1')).rejects.toThrow(BadRequestException);
-      expect(prisma.category.update).not.toHaveBeenCalled();
+      expect(prisma.category.delete).not.toHaveBeenCalled();
     });
 
-    it('refuses to delete a category still used as a primary category on articles', async () => {
+    it('refuses to delete a category still used as the primary category of an active article', async () => {
       prisma.category.count.mockResolvedValue(0);
       prisma.article.count.mockResolvedValue(3);
 
       await expect(service.remove('cat-1', 'org-1')).rejects.toThrow(BadRequestException);
-      expect(prisma.category.update).not.toHaveBeenCalled();
+      expect(prisma.category.delete).not.toHaveBeenCalled();
     });
 
-    it('soft-deletes when there are no children and no articles using it', async () => {
+    it('hard-deletes when there are no active children and no active articles using it', async () => {
       prisma.category.count.mockResolvedValue(0);
       prisma.article.count.mockResolvedValue(0);
-      prisma.category.update.mockResolvedValue({});
 
       const result = await service.remove('cat-1', 'org-1');
 
-      expect(prisma.category.update).toHaveBeenCalledWith({
-        where: { id: 'cat-1' },
-        data: { deletedAt: expect.any(Date) },
-      });
+      expect(prisma.category.delete).toHaveBeenCalledWith({ where: { id: 'cat-1' } });
       expect(eventEmitter.emit).toHaveBeenCalledWith(
         'category.deleted',
         expect.objectContaining({ categoryId: 'cat-1' }),
       );
       expect(result).toEqual({ success: true, message: 'Category deleted' });
+    });
+
+    it('proceeds and clears the parentId of a stale soft-deleted child left over from before hard-delete existed', async () => {
+      // Only ACTIVE children block deletion (the count() guard above) - a
+      // child that's already soft-deleted (e.g. "Golf" from an earlier bug)
+      // would otherwise still hold a parentId FK pointing at this category
+      // with no onDelete, so hard-deleting the parent must first null that
+      // out or it 500s on a Postgres FK violation.
+      prisma.category.count.mockResolvedValue(0); // no ACTIVE children
+      prisma.article.count.mockResolvedValue(0);
+
+      await service.remove('cat-1', 'org-1');
+
+      expect(prisma.category.updateMany).toHaveBeenCalledWith({
+        where: { parentId: 'cat-1', deletedAt: { not: null } },
+        data: { parentId: null },
+      });
+      expect(prisma.category.delete).toHaveBeenCalledWith({ where: { id: 'cat-1' } });
+    });
+
+    it('clears primaryCategoryId on trashed articles still referencing this category before deleting it', async () => {
+      prisma.category.count.mockResolvedValue(0);
+      prisma.article.count.mockResolvedValue(0); // no ACTIVE article uses it as primary
+
+      await service.remove('cat-1', 'org-1');
+
+      expect(prisma.article.updateMany).toHaveBeenCalledWith({
+        where: { primaryCategoryId: 'cat-1', deletedAt: { not: null } },
+        data: { primaryCategoryId: null },
+      });
+      expect(prisma.category.delete).toHaveBeenCalledWith({ where: { id: 'cat-1' } });
     });
 
     it('throws NotFoundException instead of deleting when the category does not exist', async () => {

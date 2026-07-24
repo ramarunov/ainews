@@ -260,8 +260,19 @@ export class SearchService {
     if (article) await this.indexArticle(article);
   }
 
-  @OnEvent('article.deleted')
-  async handleArticleDeleted(payload: { articleId: string }) {
+  @OnEvent('article.trashed')
+  async handleArticleTrashed(payload: { articleId: string }) {
+    await this.removeFromIndex(payload.articleId);
+  }
+
+  @OnEvent('article.restored')
+  async handleArticleRestored(payload: { articleId: string; organizationId: string }) {
+    const article = await this.fetchArticleForIndex(payload.articleId, payload.organizationId);
+    if (article) await this.indexArticle(article);
+  }
+
+  @OnEvent('article.permanentlyDeleted')
+  async handleArticlePermanentlyDeleted(payload: { articleId: string }) {
     await this.removeFromIndex(payload.articleId);
   }
 

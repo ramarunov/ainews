@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import slugify from 'slugify';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
+import { withOrgTransaction } from '../../infrastructure/prisma/rls-extension';
 import {
   CreateCategoryDto,
   UpdateCategoryDto,
@@ -242,7 +243,7 @@ export class CategoriesService {
     return updated;
   }
 
-  // ─── Delete (Soft) ─────────────────────────────────────────────────────────
+  // ─── Delete (Permanent) ────────────────────────────────────────────────────
 
   async remove(id: string, organizationId: string) {
     await this.findOne(id, organizationId);
@@ -265,9 +266,26 @@ export class CategoriesService {
       );
     }
 
-    await this.prisma.category.update({
-      where: { id },
-      data: { deletedAt: new Date() },
+    await withOrgTransaction(this.prisma, async (tx) => {
+      // Category.parent and Article.primaryCategory both point at Category
+      // with no onDelete (Postgres default RESTRICT), so a stray reference
+      // from a row that's itself already invisible - a soft-deleted
+      // subcategory, or a trashed article - would otherwise block this
+      // hard-delete with no way for an admin to even see, let alone fix,
+      // the culprit. Both guards above already refuse to delete while an
+      // ACTIVE child/article still depends on this category; these two
+      // cleanups only touch rows nobody can act on anymore anyway.
+      await tx.category.updateMany({
+        where: { parentId: id, deletedAt: { not: null } },
+        data: { parentId: null },
+      });
+      await tx.article.updateMany({
+        where: { primaryCategoryId: id, deletedAt: { not: null } },
+        data: { primaryCategoryId: null },
+      });
+      // ArticleCategory rows for this category cascade automatically
+      // (onDelete: Cascade in schema.prisma).
+      await tx.category.delete({ where: { id } });
     });
 
     this.eventEmitter.emit('category.deleted', {

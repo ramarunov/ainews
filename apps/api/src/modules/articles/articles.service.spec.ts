@@ -46,6 +46,8 @@ describe('ArticlesService', () => {
         findMany: jest.fn(),
         count: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
+        delete: jest.fn(),
       },
       articleRevision: {
         create: jest.fn().mockResolvedValue({}),
@@ -58,7 +60,7 @@ describe('ArticlesService', () => {
         deleteMany: jest.fn().mockResolvedValue({}),
         createMany: jest.fn().mockResolvedValue({}),
       },
-      articleView: { create: jest.fn() },
+      articleView: { create: jest.fn(), deleteMany: jest.fn() },
       mediaFile: { findUnique: jest.fn() },
       $transaction: jest.fn().mockResolvedValue([]),
     };
@@ -526,7 +528,7 @@ describe('ArticlesService', () => {
       expect(prisma.article.update).not.toHaveBeenCalled();
     });
 
-    it('soft-deletes by setting deletedAt and archiving, then emits article.deleted', async () => {
+    it('soft-deletes by setting deletedAt and archiving, then emits article.trashed', async () => {
       jest.spyOn(service, 'findOne').mockResolvedValue({ id: 'article-1' } as any);
       prisma.article.update.mockResolvedValue({});
 
@@ -537,22 +539,82 @@ describe('ArticlesService', () => {
         data: { deletedAt: expect.any(Date), status: ArticleStatus.ARCHIVED },
       });
       expect(eventEmitter.emit).toHaveBeenCalledWith(
-        'article.deleted',
+        'article.trashed',
         expect.objectContaining({ articleId: 'article-1' }),
       );
     });
   });
 
   describe('restore', () => {
-    it('clears deletedAt and resets status to DRAFT', async () => {
+    it('throws NotFoundException when the article is not in trash (or does not exist)', async () => {
+      prisma.article.findFirst.mockResolvedValue(null);
+
+      await expect(service.restore('article-1', 'org-1')).rejects.toThrow(NotFoundException);
+      expect(prisma.article.update).not.toHaveBeenCalled();
+    });
+
+    it('clears deletedAt, resets status to DRAFT, and emits article.restored', async () => {
+      prisma.article.findFirst.mockResolvedValue({ id: 'article-1', deletedAt: new Date() });
       prisma.article.update.mockResolvedValue({});
 
       await service.restore('article-1', 'org-1');
 
       expect(prisma.article.update).toHaveBeenCalledWith({
-        where: { id: 'article-1', organizationId: 'org-1' },
+        where: { id: 'article-1' },
         data: { deletedAt: null, status: ArticleStatus.DRAFT },
       });
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'article.restored',
+        expect.objectContaining({ articleId: 'article-1', organizationId: 'org-1' }),
+      );
+    });
+  });
+
+  describe('permanentlyRemove', () => {
+    it('throws NotFoundException when the article is not currently trashed', async () => {
+      prisma.article.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.permanentlyRemove('article-1', 'author-1', 'org-1'),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.article.delete).not.toHaveBeenCalled();
+    });
+
+    it('nulls translationOf references, deletes view rows, hard-deletes the article, and emits article.permanentlyDeleted', async () => {
+      prisma.article.findFirst.mockResolvedValue({ id: 'article-1', deletedAt: new Date() });
+      prisma.$transaction = jest.fn((cb: any) => cb(prisma));
+      prisma.article.updateMany.mockResolvedValue({});
+      prisma.articleView.deleteMany.mockResolvedValue({});
+      prisma.article.delete.mockResolvedValue({});
+
+      await service.permanentlyRemove('article-1', 'author-1', 'org-1');
+
+      expect(prisma.article.updateMany).toHaveBeenCalledWith({
+        where: { translationOf: 'article-1' },
+        data: { translationOf: null },
+      });
+      expect(prisma.articleView.deleteMany).toHaveBeenCalledWith({
+        where: { articleId: 'article-1' },
+      });
+      expect(prisma.article.delete).toHaveBeenCalledWith({ where: { id: 'article-1' } });
+      expect(eventEmitter.emit).toHaveBeenCalledWith(
+        'article.permanentlyDeleted',
+        expect.objectContaining({ articleId: 'article-1', organizationId: 'org-1' }),
+      );
+    });
+  });
+
+  describe('findTrash', () => {
+    it('queries only soft-deleted articles for the org', async () => {
+      prisma.article.findMany.mockResolvedValue([]);
+      prisma.article.count.mockResolvedValue(0);
+
+      await service.findTrash({ page: 1, limit: 20 } as any, 'org-1');
+
+      const call = prisma.article.findMany.mock.calls[0][0];
+      expect(call.where).toEqual(
+        expect.objectContaining({ organizationId: 'org-1', deletedAt: { not: null } }),
+      );
     });
   });
 

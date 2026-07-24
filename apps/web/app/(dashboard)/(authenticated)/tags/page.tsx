@@ -28,6 +28,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -148,6 +149,7 @@ export default function TagsPage() {
   const deleteTag = useDeleteTag();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTag, setEditingTag] = useState<Tag | undefined>(undefined);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const openCreate = () => {
     setEditingTag(undefined);
@@ -159,12 +161,15 @@ export default function TagsPage() {
     setDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async () => {
+    if (!confirmDeleteId) return;
     try {
-      await deleteTag.mutateAsync(id);
+      await deleteTag.mutateAsync(confirmDeleteId);
       toast.success("Tag deleted");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Delete failed");
+    } finally {
+      setConfirmDeleteId(null);
     }
   };
 
@@ -236,7 +241,7 @@ export default function TagsPage() {
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             variant="destructive"
-                            onClick={() => handleDelete(tag.id)}
+                            onClick={() => setConfirmDeleteId(tag.id)}
                           >
                             Delete
                           </DropdownMenuItem>
@@ -252,6 +257,17 @@ export default function TagsPage() {
       </Card>
 
       <TagFormDialog open={dialogOpen} onOpenChange={setDialogOpen} tag={editingTag} />
+
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        onOpenChange={(open) => !open && setConfirmDeleteId(null)}
+        title="Delete this tag?"
+        description="This permanently deletes the tag and removes it from every article. This cannot be undone."
+        confirmLabel="Delete"
+        destructive
+        isPending={deleteTag.isPending}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

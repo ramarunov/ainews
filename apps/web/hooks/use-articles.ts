@@ -115,3 +115,44 @@ export function useDeleteArticle() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["articles"] }),
   });
 }
+
+export interface TrashFilters {
+  page?: number;
+  limit?: number;
+  search?: string;
+}
+
+function buildTrashQuery(filters: TrashFilters) {
+  const params = new URLSearchParams();
+  if (filters.page) params.set("page", String(filters.page));
+  if (filters.limit) params.set("limit", String(filters.limit));
+  if (filters.search) params.set("search", filters.search);
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
+export function useTrashedArticles(filters: TrashFilters) {
+  return useQuery({
+    queryKey: ["articles", "trash", filters],
+    queryFn: () =>
+      apiClient.get<PaginatedResponse<Article>>(`/articles/trash${buildTrashQuery(filters)}`),
+  });
+}
+
+export function useRestoreArticle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.patch<Article>(`/articles/${id}/restore`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["articles"] });
+    },
+  });
+}
+
+export function usePermanentlyDeleteArticle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiClient.delete<Article>(`/articles/${id}/permanent`),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["articles", "trash"] }),
+  });
+}

@@ -36,6 +36,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -308,6 +309,7 @@ export default function CategoriesPage() {
   const deleteCategory = useDeleteCategory();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | undefined>(undefined);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const rootDomain = getRootDomain();
 
   const openCreate = () => {
@@ -320,12 +322,15 @@ export default function CategoriesPage() {
     setDialogOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async () => {
+    if (!confirmDeleteId) return;
     try {
-      await deleteCategory.mutateAsync(id);
+      await deleteCategory.mutateAsync(confirmDeleteId);
       toast.success("Category deleted");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Delete failed");
+    } finally {
+      setConfirmDeleteId(null);
     }
   };
 
@@ -420,7 +425,7 @@ export default function CategoriesPage() {
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             variant="destructive"
-                            onClick={() => handleDelete(cat.id)}
+                            onClick={() => setConfirmDeleteId(cat.id)}
                           >
                             Delete
                           </DropdownMenuItem>
@@ -440,6 +445,17 @@ export default function CategoriesPage() {
         onOpenChange={setDialogOpen}
         category={editingCategory}
         categories={categories}
+      />
+
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        onOpenChange={(open) => !open && setConfirmDeleteId(null)}
+        title="Delete this category?"
+        description="This permanently deletes the category. This cannot be undone."
+        confirmLabel="Delete"
+        destructive
+        isPending={deleteCategory.isPending}
+        onConfirm={handleDelete}
       />
     </div>
   );

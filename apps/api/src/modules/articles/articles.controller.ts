@@ -61,6 +61,13 @@ export class ArticlesController {
     return this.articlesService.getCalendar(user.organizationId, query.year, query.month);
   }
 
+  @Get('trash')
+  @RequirePermissions('articles:delete')
+  @ApiOperation({ summary: 'List trashed (soft-deleted) articles' })
+  findTrash(@Query() query: ArticleQueryDto, @CurrentUser() user: any) {
+    return this.articlesService.findTrash(query, user.organizationId);
+  }
+
   @Get(':id')
   @RequirePermissions('articles:read')
   @ApiOperation({ summary: 'Get article by ID' })
@@ -131,7 +138,7 @@ export class ArticlesController {
   @Delete(':id')
   @RequirePermissions('articles:delete')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Soft-delete article' })
+  @ApiOperation({ summary: 'Move article to trash (soft-delete, reversible via restore)' })
   remove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
     return this.articlesService.remove(id, user.id, user.organizationId);
   }
@@ -142,5 +149,13 @@ export class ArticlesController {
   @ApiOperation({ summary: 'Restore soft-deleted article' })
   restore(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
     return this.articlesService.restore(id, user.organizationId);
+  }
+
+  @Delete(':id/permanent')
+  @RequirePermissions('articles:delete')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Permanently delete a trashed article (irreversible)' })
+  permanentlyRemove(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: any) {
+    return this.articlesService.permanentlyRemove(id, user.id, user.organizationId);
   }
 }

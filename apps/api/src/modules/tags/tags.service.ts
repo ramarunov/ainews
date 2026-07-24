@@ -161,14 +161,14 @@ export class TagsService {
     return updated;
   }
 
-  // ─── Delete (Soft) ─────────────────────────────────────────────────────────
+  // ─── Delete (Permanent) ────────────────────────────────────────────────────
 
   async remove(id: string, organizationId: string) {
     await this.findOne(id, organizationId);
 
     await withOrgTransaction(this.prisma, async (tx) => {
       await tx.articleTag.deleteMany({ where: { tagId: id } });
-      await tx.tag.update({ where: { id }, data: { deletedAt: new Date() } });
+      await tx.tag.delete({ where: { id } });
     });
 
     this.eventEmitter.emit('tag.deleted', {
