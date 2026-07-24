@@ -213,6 +213,18 @@ export function ArticleForm({ article }: { article?: Article }) {
   const handleCreateTag = async () => {
     const name = newTagName.trim();
     if (!name) return;
+
+    const existing = tags?.data.find(
+      (tag) => tag.name.toLowerCase() === name.toLowerCase(),
+    );
+    if (existing) {
+      setSelectedTagIds((prev) =>
+        prev.includes(existing.id) ? prev : [...prev, existing.id],
+      );
+      setNewTagName("");
+      return;
+    }
+
     try {
       const created = await createTag.mutateAsync({ name });
       setSelectedTagIds((prev) => [...prev, created.id]);
