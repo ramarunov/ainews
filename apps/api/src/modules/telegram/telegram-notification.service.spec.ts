@@ -16,6 +16,7 @@ describe('TelegramNotificationService', () => {
     excerpt: 'Something important happened.',
     slug: 'big-story-breaks',
     featuredImageUrl: 'https://cdn.example.com/photo.jpg',
+    primaryCategory: { slug: 'kesehatan', subdomain: 'kesehatan', parent: null },
   };
 
   beforeEach(() => {
@@ -27,7 +28,7 @@ describe('TelegramNotificationService', () => {
     config = {
       get: jest.fn((key: string, def?: any) => {
         if (key === 'PUBLIC_SITE_ORG_ID') return 'org-public';
-        if (key === 'APP_URL') return 'https://beritabot.example';
+        if (key === 'ROOT_DOMAIN') return 'beritabot.example';
         return def;
       }),
     };
@@ -61,7 +62,27 @@ describe('TelegramNotificationService', () => {
       expect.any(Object),
     );
     const caption = mockedAxios.post.mock.calls[0][1] as any;
-    expect(caption.caption).toContain('https://beritabot.example/news/big-story-breaks');
+    expect(caption.caption).toContain('https://kesehatan.beritabot.example/news/big-story-breaks');
+  });
+
+  it('links to the article\'s own category subdomain, not the app/dashboard host', async () => {
+    await service.handleArticlePublished(publishedEvent());
+
+    const payload = mockedAxios.post.mock.calls[0][1] as any;
+    expect(payload.caption).toContain('https://kesehatan.beritabot.example/news/big-story-breaks');
+    expect(payload.caption).not.toContain('app.beritabot');
+  });
+
+  it('falls back to the apex host when the article has no category subdomain', async () => {
+    prisma.article.findUnique.mockResolvedValue({
+      ...article,
+      primaryCategory: { slug: 'general', subdomain: null, parent: null },
+    });
+
+    await service.handleArticlePublished(publishedEvent());
+
+    const payload = mockedAxios.post.mock.calls[0][1] as any;
+    expect(payload.caption).toContain('https://beritabot.example/news/big-story-breaks');
   });
 
   it('falls back to a plain text message when sendPhoto fails (e.g. a photo URL Telegram cannot reach)', async () => {

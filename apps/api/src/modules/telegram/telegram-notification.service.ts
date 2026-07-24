@@ -7,6 +7,7 @@ import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { SystemSettingsService } from '../system-settings/system-settings.service';
 import { TELEGRAM_SETTING_KEYS } from '../system-settings/system-settings.constants';
 import { getPublicSiteOrgId } from '../../common/config/public-site-org.util';
+import { getArticleUrl, getRootDomain } from '../../common/url/site-url.util';
 
 interface ArticlePublishedEvent {
   articleId: string;
@@ -76,12 +77,24 @@ export class TelegramNotificationService {
 
     const article = await this.prisma.article.findUnique({
       where: { id: articleId },
-      select: { title: true, excerpt: true, slug: true, featuredImageUrl: true },
+      select: {
+        title: true,
+        excerpt: true,
+        slug: true,
+        featuredImageUrl: true,
+        primaryCategory: {
+          select: { slug: true, subdomain: true, parent: { select: { subdomain: true } } },
+        },
+      },
     });
     if (!article) return;
 
-    const siteUrl = this.config.get<string>('APP_URL', 'http://localhost:3100').replace(/\/$/, '');
-    const link = `${siteUrl}/news/${article.slug}`;
+    // Was hand-templated from APP_URL (the dashboard host, app.beritabot.com)
+    // - every channel post pointed there instead of the article's real
+    // canonical URL (its category's own subdomain, e.g.
+    // kesehatan.beritabot.com/news/:slug). getArticleUrl is the same helper
+    // every public-facing link already goes through.
+    const link = getArticleUrl(article, getRootDomain(this.config));
     const caption = [
       `<b>${escapeHtml(article.title)}</b>`,
       article.excerpt ? escapeHtml(article.excerpt) : null,
