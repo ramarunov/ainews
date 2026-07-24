@@ -41,6 +41,7 @@ export function useCreateNewsSource() {
       type: NewsSourceType;
       url: string;
       categoryHint?: string;
+      language?: string;
     }) => apiClient.post<NewsSource>("/news-intelligence/sources", input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["news-sources"] }),
   });

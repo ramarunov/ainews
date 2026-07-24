@@ -95,8 +95,128 @@ const GOOGLE_NEWS_TOPICS = [
   { value: "HEALTH", label: "Health" },
 ] as const;
 
-function buildGoogleNewsUrl(topic: string, keyword: string): string {
-  const params = "hl=en-US&gl=US&ceid=US:en";
+// Every country Google News RSS serves an edition for (gl), independent of
+// language - Google accepts any hl+gl combination you ask for via ceid, it
+// doesn't require them to match (e.g. an English-language edition targeted
+// at the Indonesia edition is a valid `ceid=ID:en`). List per Google News'
+// own "Language & region" picker.
+const GOOGLE_NEWS_COUNTRIES = [
+  { value: "AE", label: "United Arab Emirates" },
+  { value: "AR", label: "Argentina" },
+  { value: "AT", label: "Austria" },
+  { value: "AU", label: "Australia" },
+  { value: "BD", label: "Bangladesh" },
+  { value: "BE", label: "Belgium" },
+  { value: "BG", label: "Bulgaria" },
+  { value: "BR", label: "Brazil" },
+  { value: "BW", label: "Botswana" },
+  { value: "CA", label: "Canada" },
+  { value: "CH", label: "Switzerland" },
+  { value: "CL", label: "Chile" },
+  { value: "CN", label: "China" },
+  { value: "CO", label: "Colombia" },
+  { value: "CU", label: "Cuba" },
+  { value: "CZ", label: "Czech Republic" },
+  { value: "DE", label: "Germany" },
+  { value: "EG", label: "Egypt" },
+  { value: "ES", label: "Spain" },
+  { value: "ET", label: "Ethiopia" },
+  { value: "FR", label: "France" },
+  { value: "GB", label: "United Kingdom" },
+  { value: "GH", label: "Ghana" },
+  { value: "GR", label: "Greece" },
+  { value: "HK", label: "Hong Kong" },
+  { value: "HU", label: "Hungary" },
+  { value: "ID", label: "Indonesia" },
+  { value: "IE", label: "Ireland" },
+  { value: "IL", label: "Israel" },
+  { value: "IN", label: "India" },
+  { value: "IT", label: "Italy" },
+  { value: "JP", label: "Japan" },
+  { value: "KE", label: "Kenya" },
+  { value: "KR", label: "Republic of Korea" },
+  { value: "LB", label: "Lebanon" },
+  { value: "LT", label: "Lithuania" },
+  { value: "LV", label: "Latvia" },
+  { value: "MA", label: "Morocco" },
+  { value: "MX", label: "Mexico" },
+  { value: "MY", label: "Malaysia" },
+  { value: "NA", label: "Namibia" },
+  { value: "NG", label: "Nigeria" },
+  { value: "NL", label: "Netherlands" },
+  { value: "NO", label: "Norway" },
+  { value: "NZ", label: "New Zealand" },
+  { value: "PE", label: "Peru" },
+  { value: "PH", label: "Philippines" },
+  { value: "PK", label: "Pakistan" },
+  { value: "PL", label: "Poland" },
+  { value: "PT", label: "Portugal" },
+  { value: "RO", label: "Romania" },
+  { value: "RS", label: "Serbia" },
+  { value: "RU", label: "Russia" },
+  { value: "SA", label: "Saudi Arabia" },
+  { value: "SE", label: "Sweden" },
+  { value: "SG", label: "Singapore" },
+  { value: "SI", label: "Slovenia" },
+  { value: "SK", label: "Slovakia" },
+  { value: "SN", label: "Senegal" },
+  { value: "TH", label: "Thailand" },
+  { value: "TR", label: "Turkey" },
+  { value: "TW", label: "Taiwan" },
+  { value: "TZ", label: "Tanzania" },
+  { value: "UA", label: "Ukraine" },
+  { value: "UG", label: "Uganda" },
+  { value: "US", label: "United States" },
+  { value: "VE", label: "Venezuela" },
+  { value: "VN", label: "Vietnam" },
+  { value: "ZA", label: "South Africa" },
+  { value: "ZW", label: "Zimbabwe" },
+] as const;
+
+const GOOGLE_NEWS_LANGUAGES = [
+  { value: "ar", label: "Arabic" },
+  { value: "bn", label: "Bengali" },
+  { value: "bg", label: "Bulgarian" },
+  { value: "zh-Hans", label: "Chinese (Simplified)" },
+  { value: "zh-Hant", label: "Chinese (Traditional)" },
+  { value: "cs", label: "Czech" },
+  { value: "nl", label: "Dutch" },
+  { value: "en", label: "English" },
+  { value: "fr", label: "French" },
+  { value: "de", label: "German" },
+  { value: "el", label: "Greek" },
+  { value: "he", label: "Hebrew" },
+  { value: "hi", label: "Hindi" },
+  { value: "hu", label: "Hungarian" },
+  { value: "id", label: "Indonesian" },
+  { value: "it", label: "Italian" },
+  { value: "ja", label: "Japanese" },
+  { value: "ko", label: "Korean" },
+  { value: "lv", label: "Latvian" },
+  { value: "lt", label: "Lithuanian" },
+  { value: "ml", label: "Malayalam" },
+  { value: "mr", label: "Marathi" },
+  { value: "no", label: "Norwegian" },
+  { value: "pl", label: "Polish" },
+  { value: "pt-419", label: "Portuguese (Brazil)" },
+  { value: "pt-150", label: "Portuguese (Portugal)" },
+  { value: "ro", label: "Romanian" },
+  { value: "ru", label: "Russian" },
+  { value: "sr", label: "Serbian" },
+  { value: "sk", label: "Slovak" },
+  { value: "sl", label: "Slovenian" },
+  { value: "es-419", label: "Spanish" },
+  { value: "sv", label: "Swedish" },
+  { value: "ta", label: "Tamil" },
+  { value: "te", label: "Telugu" },
+  { value: "th", label: "Thai" },
+  { value: "tr", label: "Turkish" },
+  { value: "uk", label: "Ukrainian" },
+  { value: "vi", label: "Vietnamese" },
+] as const;
+
+function buildGoogleNewsUrl(topic: string, keyword: string, country: string, language: string): string {
+  const params = `hl=${language}&gl=${country}&ceid=${country}:${language}`;
   if (keyword.trim()) {
     return `https://news.google.com/rss/search?q=${encodeURIComponent(keyword.trim())}&${params}`;
   }
@@ -156,6 +276,8 @@ function AddSourceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
   const [mode, setMode] = useState<"custom" | "google-news">("custom");
   const [gnTopic, setGnTopic] = useState("TOP");
   const [gnKeyword, setGnKeyword] = useState("");
+  const [gnCountry, setGnCountry] = useState("ID");
+  const [gnLanguage, setGnLanguage] = useState("id");
   const [categorySlug, setCategorySlug] = useState(NO_CATEGORY);
   const {
     register,
@@ -173,6 +295,8 @@ function AddSourceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
     setMode("custom");
     setGnTopic("TOP");
     setGnKeyword("");
+    setGnCountry("ID");
+    setGnLanguage("id");
     setCategorySlug(NO_CATEGORY);
   };
 
@@ -193,14 +317,17 @@ function AddSourceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
 
   const handleAddGoogleNews = async () => {
     const topicLabel = GOOGLE_NEWS_TOPICS.find((t) => t.value === gnTopic)?.label ?? "Top Stories";
-    const name = gnKeyword.trim()
+    const countryLabel = GOOGLE_NEWS_COUNTRIES.find((c) => c.value === gnCountry)?.label ?? gnCountry;
+    const baseName = gnKeyword.trim()
       ? `Google News: "${gnKeyword.trim()}"`
       : `Google News: ${topicLabel}`;
+    const name = `${baseName} (${countryLabel})`;
     try {
       await createSource.mutateAsync({
         name,
-        url: buildGoogleNewsUrl(gnTopic, gnKeyword),
+        url: buildGoogleNewsUrl(gnTopic, gnKeyword, gnCountry, gnLanguage),
         type: "RSS",
+        language: gnLanguage,
         categoryHint: categorySlug === NO_CATEGORY ? undefined : categorySlug,
       });
       toast.success("Google News source added");
@@ -312,10 +439,42 @@ function AddSourceDialog({ open, onOpenChange }: { open: boolean; onOpenChange: 
                 onChange={(e) => setGnKeyword(e.target.value)}
               />
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-2">
+                <Label>Country / region</Label>
+                <Select value={gnCountry} onValueChange={(v) => setGnCountry(v ?? "US")}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GOOGLE_NEWS_COUNTRIES.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label>Language</Label>
+                <Select value={gnLanguage} onValueChange={(v) => setGnLanguage(v ?? "en")}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GOOGLE_NEWS_LANGUAGES.map((l) => (
+                      <SelectItem key={l.value} value={l.value}>
+                        {l.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
             <p className="break-all text-xs text-muted-foreground">
               Pulls Google News&apos; public RSS feed directly — no API key needed.
               <br />
-              {buildGoogleNewsUrl(gnTopic, gnKeyword)}
+              {buildGoogleNewsUrl(gnTopic, gnKeyword, gnCountry, gnLanguage)}
             </p>
             <CategoryPicker categories={categories} value={categorySlug} onChange={setCategorySlug} />
             <DialogFooter>
