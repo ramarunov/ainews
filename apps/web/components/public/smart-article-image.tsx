@@ -48,12 +48,22 @@ export function SmartArticleImage({
   categoryName,
   categorySlug,
   className,
+  // Card grids (the common case) render this at a fraction of the viewport,
+  // never more than ~400px even on desktop - only the article detail page's
+  // hero image needs a wider value and priority/eager loading, since that's
+  // the actual LCP candidate there. Without an accurate `sizes`, next/image
+  // falls back to assuming 100vw and ships a much larger derivative than
+  // any card actually displays.
+  sizes = "(min-width: 1024px) 33vw, (min-width: 640px) 50vw, 100vw",
+  priority = false,
 }: {
   src: string;
   alt: string;
   categoryName?: string | null;
   categorySlug?: string | null;
   className?: string;
+  sizes?: string;
+  priority?: boolean;
 }) {
   const [isUnusable, setIsUnusable] = useState(false);
 
@@ -67,6 +77,8 @@ export function SmartArticleImage({
         src={src}
         alt={alt}
         fill
+        sizes={sizes}
+        priority={priority}
         className="object-cover transition-transform duration-300 group-hover:scale-105"
         onLoad={(e) => {
           const img = e.currentTarget;

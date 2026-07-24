@@ -268,6 +268,8 @@ export default async function NewsArticlePage({ params }: Props) {
                 categoryName={article.primaryCategory?.name}
                 categorySlug={article.primaryCategory?.slug}
                 className="aspect-video w-full rounded-xl shadow-sm"
+                sizes="(min-width: 1024px) 760px, 100vw"
+                priority
               />
             ) : (
               <CategoryPlaceholder
