@@ -58,6 +58,11 @@ export interface TelegramStatus {
   chatId: string | null;
 }
 
+export interface GoogleIndexingStatus {
+  configured: boolean;
+  clientEmail: string | null;
+}
+
 export interface FooterLink {
   label: string;
   url: string;

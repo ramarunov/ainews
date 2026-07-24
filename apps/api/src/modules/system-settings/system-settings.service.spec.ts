@@ -1,8 +1,10 @@
+import { BadRequestException } from '@nestjs/common';
 import { SystemSettingsService } from './system-settings.service';
 import { EncryptionService } from '../../common/crypto/encryption.service';
 import {
   AI_PROVIDER_SETTING_KEYS,
   AI_SERVICES_ENABLED_KEY,
+  GOOGLE_INDEXING_SETTING_KEYS,
   MEDIA_PROVIDER_SETTING_KEYS,
   TELEGRAM_SETTING_KEYS,
 } from './system-settings.constants';
@@ -172,6 +174,55 @@ describe('SystemSettingsService', () => {
       expect(prisma.systemSetting.upsert).toHaveBeenCalledWith(
         expect.objectContaining({ where: { key: TELEGRAM_SETTING_KEYS.chatId } }),
       );
+    });
+  });
+
+  describe('getGoogleIndexingStatus', () => {
+    it('is unconfigured when no row exists', async () => {
+      prisma.systemSetting.findUnique.mockResolvedValue(null);
+
+      expect(await service.getGoogleIndexingStatus()).toEqual({ configured: false, clientEmail: null });
+    });
+
+    it('reports configured and the (non-secret) client email once a service account is stored', async () => {
+      const encrypted = encryption.encrypt(
+        JSON.stringify({ client_email: 'indexer@example.iam.gserviceaccount.com', private_key: 'fake' }),
+      );
+      prisma.systemSetting.findUnique.mockResolvedValue({ value: encrypted });
+
+      expect(await service.getGoogleIndexingStatus()).toEqual({
+        configured: true,
+        clientEmail: 'indexer@example.iam.gserviceaccount.com',
+      });
+    });
+  });
+
+  describe('updateGoogleIndexingSettings', () => {
+    it('rejects a value that is not valid JSON', async () => {
+      await expect(
+        service.updateGoogleIndexingSettings({ serviceAccountJson: 'not json' }, 'user-1'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.systemSetting.upsert).not.toHaveBeenCalled();
+    });
+
+    it('rejects JSON missing client_email or private_key', async () => {
+      await expect(
+        service.updateGoogleIndexingSettings({ serviceAccountJson: JSON.stringify({ type: 'service_account' }) }, 'user-1'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(prisma.systemSetting.upsert).not.toHaveBeenCalled();
+    });
+
+    it('encrypts the full JSON before storing, never the plaintext', async () => {
+      prisma.systemSetting.upsert.mockResolvedValue({});
+      const validJson = JSON.stringify({ client_email: 'indexer@example.iam.gserviceaccount.com', private_key: 'fake' });
+      prisma.systemSetting.findUnique.mockResolvedValue(null);
+
+      await service.updateGoogleIndexingSettings({ serviceAccountJson: validJson }, 'user-1');
+
+      const upsertCall = prisma.systemSetting.upsert.mock.calls[0][0];
+      expect(upsertCall.where).toEqual({ key: GOOGLE_INDEXING_SETTING_KEYS.serviceAccountJson });
+      expect(upsertCall.create.value).not.toBe(validJson);
+      expect(encryption.decrypt(upsertCall.create.value)).toBe(validJson);
     });
   });
 

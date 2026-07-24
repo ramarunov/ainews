@@ -26,6 +26,14 @@ export const TELEGRAM_SETTING_KEYS = {
   chatId: 'telegram.chat_id',
 } as const;
 
+// The full Google Cloud service account JSON (client_email + private_key,
+// among other fields) stored as one encrypted blob - see
+// GoogleIndexingService, which JSON.parses it back out to mint an OAuth2
+// token for the Indexing API.
+export const GOOGLE_INDEXING_SETTING_KEYS = {
+  serviceAccountJson: 'google_indexing.service_account_json',
+} as const;
+
 // Platform-wide emergency kill switch — every AI call path (autonomous
 // pipeline, manual AI Tools, clustering entity extraction, alt-text
 // generation, GEO scoring) ultimately goes through AIGatewayService.complete(),

@@ -1,9 +1,10 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { EncryptionService } from '../../common/crypto/encryption.service';
 import {
   UpdateAiProviderKeysDto,
+  UpdateGoogleIndexingSettingsDto,
   UpdateMediaProviderKeysDto,
   UpdateTelegramSettingsDto,
 } from './dto/system-settings.dto';
@@ -11,6 +12,7 @@ import {
   AI_PROVIDER_SETTING_KEYS,
   AI_SERVICES_ENABLED_KEY,
   AiProviderKeyField,
+  GOOGLE_INDEXING_SETTING_KEYS,
   MEDIA_PROVIDER_SETTING_KEYS,
   MediaProviderKeyField,
   TELEGRAM_SETTING_KEYS,
@@ -131,6 +133,48 @@ export class SystemSettingsService {
     }
 
     return this.getTelegramStatus();
+  }
+
+  /** Whether Google Indexing is configured, and the (non-secret) service account email — never the private key. */
+  async getGoogleIndexingStatus() {
+    const row = await this.prisma.systemSetting.findUnique({
+      where: { key: GOOGLE_INDEXING_SETTING_KEYS.serviceAccountJson },
+    });
+    if (!row) return { configured: false, clientEmail: null };
+
+    try {
+      const parsed = JSON.parse(this.encryption.decrypt(row.value));
+      return { configured: true, clientEmail: parsed.client_email ?? null };
+    } catch {
+      // Row exists but somehow isn't valid JSON anymore - treat as
+      // unconfigured rather than throwing on what's just a status read.
+      return { configured: false, clientEmail: null };
+    }
+  }
+
+  async updateGoogleIndexingSettings(dto: UpdateGoogleIndexingSettingsDto, updatedBy: string) {
+    if (dto.serviceAccountJson !== undefined) {
+      let parsed: any;
+      try {
+        parsed = JSON.parse(dto.serviceAccountJson);
+      } catch {
+        throw new BadRequestException('Service account JSON is not valid JSON');
+      }
+      if (!parsed.client_email || !parsed.private_key) {
+        throw new BadRequestException(
+          'Service account JSON is missing client_email or private_key - paste the full key file Google Cloud generated, not a partial copy',
+        );
+      }
+
+      const encrypted = this.encryption.encrypt(dto.serviceAccountJson);
+      await this.prisma.systemSetting.upsert({
+        where: { key: GOOGLE_INDEXING_SETTING_KEYS.serviceAccountJson },
+        create: { key: GOOGLE_INDEXING_SETTING_KEYS.serviceAccountJson, value: encrypted, updatedBy },
+        update: { value: encrypted, updatedBy },
+      });
+    }
+
+    return this.getGoogleIndexingStatus();
   }
 
   /** Master kill switch for every AI call path. Defaults to enabled if never toggled. */

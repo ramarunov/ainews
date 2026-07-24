@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
-import type { AiProviderStatus, MediaProviderStatus, TelegramStatus } from "@/lib/types";
+import type { AiProviderStatus, GoogleIndexingStatus, MediaProviderStatus, TelegramStatus } from "@/lib/types";
 
 export interface UpdateAiProviderKeysInput {
   openaiApiKey?: string;
@@ -15,6 +15,10 @@ export interface UpdateMediaProviderKeysInput {
 export interface UpdateTelegramSettingsInput {
   botToken?: string;
   chatId?: string;
+}
+
+export interface UpdateGoogleIndexingSettingsInput {
+  serviceAccountJson?: string;
 }
 
 export function useMediaProviderStatus(enabled = true) {
@@ -89,6 +93,25 @@ export function useUpdateTelegramSettings() {
       apiClient.put<TelegramStatus>("/system-settings/telegram", input),
     onSuccess: (data) => {
       queryClient.setQueryData(["system-settings", "telegram"], data);
+    },
+  });
+}
+
+export function useGoogleIndexingStatus(enabled = true) {
+  return useQuery({
+    queryKey: ["system-settings", "google-indexing"],
+    queryFn: () => apiClient.get<GoogleIndexingStatus>("/system-settings/google-indexing"),
+    enabled,
+  });
+}
+
+export function useUpdateGoogleIndexingSettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: UpdateGoogleIndexingSettingsInput) =>
+      apiClient.put<GoogleIndexingStatus>("/system-settings/google-indexing", input),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["system-settings", "google-indexing"], data);
     },
   });
 }

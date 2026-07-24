@@ -48,3 +48,17 @@ export class UpdateTelegramSettingsDto {
   @MinLength(1)
   chatId?: string;
 }
+
+export class UpdateGoogleIndexingSettingsDto {
+  @ApiProperty({
+    required: false,
+    description:
+      'The full JSON key file downloaded for a Google Cloud service account with the Indexing API enabled ' +
+      'and added as an Owner of the Search Console property. Leave unset to keep the current value. ' +
+      'Structural validity (parses as JSON, has client_email/private_key) is checked on save.',
+  })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  serviceAccountJson?: string;
+}

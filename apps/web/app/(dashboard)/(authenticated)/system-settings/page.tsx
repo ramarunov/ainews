@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -15,7 +16,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { useTelegramStatus, useUpdateTelegramSettings } from "@/hooks/use-system-settings";
+import {
+  useGoogleIndexingStatus,
+  useTelegramStatus,
+  useUpdateGoogleIndexingSettings,
+  useUpdateTelegramSettings,
+} from "@/hooks/use-system-settings";
 import { useAuthStore } from "@/lib/auth-store";
 import { ApiError } from "@/lib/api-client";
 
@@ -93,6 +99,82 @@ function TelegramSettingsCard() {
   );
 }
 
+function GoogleIndexingSettingsCard() {
+  const { data: status, isLoading } = useGoogleIndexingStatus();
+  const updateSettings = useUpdateGoogleIndexingSettings();
+  const [serviceAccountJson, setServiceAccountJson] = useState("");
+
+  const handleSave = async () => {
+    if (!serviceAccountJson.trim()) return;
+
+    try {
+      await updateSettings.mutateAsync({ serviceAccountJson: serviceAccountJson.trim() });
+      setServiceAccountJson("");
+      toast.success("Google Indexing settings saved");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to save");
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Google Auto-Indexing</CardTitle>
+        <CardDescription>
+          Submits an article&apos;s canonical URL to Google&apos;s Indexing API every time
+          it&apos;s published or removed, instead of waiting for Google&apos;s own crawl
+          schedule. Note: Google only officially documents this API for JobPosting/
+          BroadcastEvent pages — using it for regular articles is common practice but
+          unofficial, and not a guarantee of faster indexing. Default quota is 200
+          URL submissions/day.
+          <br />
+          <br />
+          Setup: in Google Cloud Console, create a project, enable the &quot;Web Search
+          Indexing API&quot;, create a service account, and download its JSON key. Then
+          add that service account&apos;s email as an <strong>Owner</strong> of your
+          domain&apos;s property in Search Console. Paste the full JSON key file below.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <div className="flex items-center gap-2">
+          <Label>Status</Label>
+          {!isLoading && (
+            <Badge variant={status?.configured ? "default" : "outline"}>
+              {status?.configured ? "Configured" : "Not configured"}
+            </Badge>
+          )}
+          {status?.clientEmail && (
+            <span className="text-sm text-muted-foreground">{status.clientEmail}</span>
+          )}
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="google-indexing-json">Service account JSON key</Label>
+          <Textarea
+            id="google-indexing-json"
+            rows={6}
+            className="font-mono text-xs"
+            placeholder={
+              status?.configured
+                ? "•••••••••••••••• (unchanged)"
+                : '{\n  "type": "service_account",\n  "client_email": "...",\n  "private_key": "...",\n  ...\n}'
+            }
+            value={serviceAccountJson}
+            onChange={(e) => setServiceAccountJson(e.target.value)}
+          />
+        </div>
+        <Button
+          variant="outline"
+          className="self-end"
+          disabled={!serviceAccountJson.trim() || updateSettings.isPending}
+          onClick={handleSave}
+        >
+          Save
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function SystemSettingsPage() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
@@ -117,6 +199,7 @@ export default function SystemSettingsPage() {
       </div>
 
       <TelegramSettingsCard />
+      <GoogleIndexingSettingsCard />
     </div>
   );
 }

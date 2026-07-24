@@ -5,6 +5,7 @@ import { SystemSettingsService } from './system-settings.service';
 import {
   UpdateAiProviderKeysDto,
   SetAiServicesEnabledDto,
+  UpdateGoogleIndexingSettingsDto,
   UpdateMediaProviderKeysDto,
   UpdateTelegramSettingsDto,
 } from './dto/system-settings.dto';
@@ -68,5 +69,17 @@ export class SystemSettingsController {
   @ApiOperation({ summary: 'Set the Telegram bot token and destination channel (superadmin only)' })
   updateTelegramSettings(@Body() dto: UpdateTelegramSettingsDto, @CurrentUser() user: any) {
     return this.systemSettingsService.updateTelegramSettings(dto, user.id);
+  }
+
+  @Get('google-indexing')
+  @ApiOperation({ summary: 'Whether Google Indexing API auto-submission is configured (superadmin only)' })
+  getGoogleIndexingStatus() {
+    return this.systemSettingsService.getGoogleIndexingStatus();
+  }
+
+  @Put('google-indexing')
+  @ApiOperation({ summary: 'Set the Google Cloud service account JSON used to auto-submit URLs for indexing (superadmin only)' })
+  updateGoogleIndexingSettings(@Body() dto: UpdateGoogleIndexingSettingsDto, @CurrentUser() user: any) {
+    return this.systemSettingsService.updateGoogleIndexingSettings(dto, user.id);
   }
 }
