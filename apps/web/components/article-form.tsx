@@ -1,13 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Controller, useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Loader2, Upload, ImagePlus, Images, Star, Plus, ExternalLink } from "lucide-react";
+import {
+  Loader2,
+  Upload,
+  ImagePlus,
+  Images,
+  Star,
+  Plus,
+  ExternalLink,
+  ChevronDown,
+  X,
+} from "lucide-react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +32,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -172,6 +188,32 @@ export function ArticleForm({ article }: { article?: Article }) {
       toast.error(err instanceof ApiError ? err.message : "Failed to update series order");
     }
   };
+
+  // Flat list from the API, reordered into parent-then-its-children groups
+  // (only one level deep - subcategories don't themselves have children),
+  // same approach as the Categories admin page, so the hierarchy is visible
+  // here instead of an alphabetical-ish flat list.
+  const orderedCategories = useMemo(() => {
+    const list = categories?.data ?? [];
+    const topLevel = list.filter((c) => !c.parentId);
+    const orphaned = list.filter(
+      (c) => c.parentId && !list.some((p) => p.id === c.parentId),
+    );
+    return [
+      ...topLevel.flatMap((parent) => [
+        { category: parent, depth: 0 },
+        ...list
+          .filter((c) => c.parentId === parent.id)
+          .map((child) => ({ category: child, depth: 1 })),
+      ]),
+      ...orphaned.map((c) => ({ category: c, depth: 0 })),
+    ];
+  }, [categories?.data]);
+
+  const selectedTags = useMemo(
+    () => (tags?.data ?? []).filter((tag) => selectedTagIds.includes(tag.id)),
+    [tags?.data, selectedTagIds],
+  );
 
   const toggleTag = (id: string) => {
     setSelectedTagIds((prev) =>
@@ -372,17 +414,29 @@ export function ArticleForm({ article }: { article?: Article }) {
                       Check every category this article belongs to. Click the star to
                       set which one is the primary category.
                     </p>
-                    <div className="flex max-h-40 flex-col gap-1 overflow-y-auto rounded-md border p-2">
-                      {categories?.data.map((cat) => {
+                    <div className="flex max-h-56 flex-col gap-0.5 overflow-y-auto rounded-md border p-2">
+                      {orderedCategories.map(({ category: cat, depth }) => {
                         const checked = selectedCategoryIds.has(cat.id);
                         return (
-                          <div key={cat.id} className="flex items-center gap-2">
+                          <div
+                            key={cat.id}
+                            className={cn(
+                              "flex items-center gap-2 rounded px-1.5 py-1",
+                              depth > 0 && "ml-4 border-l pl-3",
+                            )}
+                          >
                             <Checkbox
                               id={`cat-${cat.id}`}
                               checked={checked}
                               onCheckedChange={(v) => toggleCategory(cat.id, !!v)}
                             />
-                            <Label htmlFor={`cat-${cat.id}`} className="flex-1 font-normal">
+                            <Label
+                              htmlFor={`cat-${cat.id}`}
+                              className={cn(
+                                "flex-1 font-normal",
+                                depth > 0 && "text-muted-foreground",
+                              )}
+                            >
                               {cat.name}
                             </Label>
                             {checked && (
@@ -404,7 +458,7 @@ export function ArticleForm({ article }: { article?: Article }) {
                           </div>
                         );
                       })}
-                      {categories?.data.length === 0 && (
+                      {orderedCategories.length === 0 && (
                         <p className="text-sm text-muted-foreground">No categories yet</p>
                       )}
                     </div>
@@ -434,23 +488,54 @@ export function ArticleForm({ article }: { article?: Article }) {
 
                   <div className="flex flex-col gap-2">
                     <Label>Tags</Label>
-                    <div className="flex flex-wrap gap-2">
-                      {tags?.data.map((tag) => (
-                        <Badge
-                          key={tag.id}
-                          variant={
-                            selectedTagIds.includes(tag.id) ? "default" : "outline"
-                          }
-                          className="cursor-pointer select-none"
-                          onClick={() => toggleTag(tag.id)}
-                        >
-                          {tag.name}
-                        </Badge>
-                      ))}
-                      {tags?.data.length === 0 && (
-                        <p className="text-sm text-muted-foreground">No tags yet</p>
-                      )}
-                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        className={cn(
+                          buttonVariants({ variant: "outline" }),
+                          "w-full justify-between font-normal",
+                        )}
+                      >
+                        <span className="text-muted-foreground">
+                          {selectedTags.length > 0
+                            ? `${selectedTags.length} tag${selectedTags.length > 1 ? "s" : ""} selected`
+                            : "Select tags…"}
+                        </span>
+                        <ChevronDown className="h-4 w-4 opacity-50" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="max-h-64 w-(--anchor-width)">
+                        {(tags?.data ?? []).map((tag) => (
+                          <DropdownMenuCheckboxItem
+                            key={tag.id}
+                            checked={selectedTagIds.includes(tag.id)}
+                            onCheckedChange={() => toggleTag(tag.id)}
+                          >
+                            {tag.name}
+                          </DropdownMenuCheckboxItem>
+                        ))}
+                        {(tags?.data.length ?? 0) === 0 && (
+                          <p className="px-2 py-1.5 text-sm text-muted-foreground">
+                            No tags yet
+                          </p>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    {selectedTags.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {selectedTags.map((tag) => (
+                          <Badge key={tag.id} variant="default" className="gap-1 pr-1.5">
+                            {tag.name}
+                            <button
+                              type="button"
+                              aria-label={`Remove tag ${tag.name}`}
+                              onClick={() => toggleTag(tag.id)}
+                              className="rounded-full hover:bg-primary-foreground/20"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
                     <div className="flex gap-2">
                       <Input
                         placeholder="New tag name…"
