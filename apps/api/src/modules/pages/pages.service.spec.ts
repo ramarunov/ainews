@@ -75,6 +75,24 @@ describe('PagesService', () => {
       );
     });
 
+    it('picks a suffixed slug when the base is taken by a soft-deleted page', async () => {
+      // The DB unique constraint on (organizationId, slug) applies
+      // regardless of deletedAt, so a slug "freed up" by a deleted page is
+      // still taken as far as Postgres is concerned - the collision check
+      // must see soft-deleted rows too, or create() blows up with an
+      // unhandled P2002 instead of just picking `-1`.
+      prisma.page.findFirst
+        .mockResolvedValueOnce({ id: 'old-page', slug: 'about', deletedAt: new Date() })
+        .mockResolvedValueOnce(null);
+      prisma.page.create.mockResolvedValue({ id: 'page-2', slug: 'about-1' });
+
+      await service.create({ title: 'About' } as any, 'org-1');
+
+      expect(prisma.page.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ slug: 'about-1' }) }),
+      );
+    });
+
     it('sanitizes content HTML before storing it', async () => {
       prisma.page.findFirst.mockResolvedValue(null);
       prisma.page.create.mockResolvedValue({ id: 'page-1' });

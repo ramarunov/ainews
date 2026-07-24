@@ -106,6 +106,24 @@ describe('ArticlesService', () => {
       expect(result).toBe(created);
     });
 
+    it('picks a suffixed slug when the base is taken by a soft-deleted article', async () => {
+      // The DB unique constraint on (organizationId, slug) applies
+      // regardless of deletedAt, so a slug "freed up" by a deleted article
+      // is still taken as far as Postgres is concerned - the collision
+      // check must see soft-deleted rows too, or create() blows up with an
+      // unhandled P2002 instead of just picking `-1`.
+      prisma.article.findFirst
+        .mockResolvedValueOnce({ id: 'old-article', slug: 'breaking-news', deletedAt: new Date() })
+        .mockResolvedValueOnce(null);
+      prisma.article.create.mockResolvedValue({ id: 'article-2', title: 'Breaking News', content: '' });
+
+      await service.create({ title: 'Breaking News' } as any, 'author-1', 'org-1');
+
+      expect(prisma.article.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ slug: 'breaking-news-1' }) }),
+      );
+    });
+
     it('denormalizes featuredImageUrl from the MediaFile when featuredImageId is given', async () => {
       prisma.article.findFirst.mockResolvedValue(null);
       prisma.mediaFile.findUnique.mockResolvedValue({

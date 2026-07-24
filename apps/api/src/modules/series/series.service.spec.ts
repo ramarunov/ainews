@@ -50,6 +50,24 @@ describe('SeriesService', () => {
         expect.objectContaining({ data: expect.objectContaining({ slug: 'the-ai-files-1' }) }),
       );
     });
+
+    it('picks a suffixed slug when the base is taken by a soft-deleted series', async () => {
+      // The DB unique constraint on (organizationId, slug) applies
+      // regardless of deletedAt, so a slug "freed up" by a deleted series
+      // is still taken as far as Postgres is concerned - the collision
+      // check must see soft-deleted rows too, or create() blows up with an
+      // unhandled P2002 instead of just picking `-1`.
+      prisma.articleSeries.findFirst
+        .mockResolvedValueOnce({ id: 'old-series', slug: 'the-ai-files', deletedAt: new Date() })
+        .mockResolvedValueOnce(null);
+      prisma.articleSeries.create.mockResolvedValue({ id: 'series-2', slug: 'the-ai-files-1' });
+
+      await service.create({ name: 'The AI Files' } as any, 'org-1');
+
+      expect(prisma.articleSeries.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ slug: 'the-ai-files-1' }) }),
+      );
+    });
   });
 
   describe('findOne', () => {
