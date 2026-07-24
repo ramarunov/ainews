@@ -47,6 +47,26 @@ describe('TagsService', () => {
       );
       expect(result).toBe(created);
     });
+
+    it('picks a suffixed slug when the base is taken by a soft-deleted tag', async () => {
+      // The DB unique constraint on (organizationId, slug) applies
+      // regardless of deletedAt, so a slug "freed up" by a deleted tag is
+      // still taken as far as Postgres is concerned - the collision check
+      // must see soft-deleted rows too, or create() blows up with an
+      // unhandled P2002 instead of just picking `-1`.
+      prisma.tag.findFirst
+        .mockResolvedValueOnce({ id: 'old-tag', slug: 'ai', deletedAt: new Date() })
+        .mockResolvedValueOnce(null);
+      const created = { id: 'tag-2', name: 'AI', slug: 'ai-1' };
+      prisma.tag.create.mockResolvedValue(created);
+
+      const result = await service.create({ name: 'AI' } as any, 'org-1');
+
+      expect(prisma.tag.create).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ slug: 'ai-1' }) }),
+      );
+      expect(result).toBe(created);
+    });
   });
 
   describe('update', () => {

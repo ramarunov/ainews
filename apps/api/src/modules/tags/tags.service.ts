@@ -197,11 +197,15 @@ export class TagsService {
 
     // eslint-disable-next-line no-constant-condition
     while (true) {
+      // Deliberately NOT filtering deletedAt: null here - the DB unique
+      // constraint (organizationId, slug) applies to soft-deleted rows too,
+      // so a slug "freed up" by a deleted tag is still taken as far as
+      // Postgres is concerned. Checking only active tags let this pick a
+      // slug that then failed with an unhandled P2002 at the create() below.
       const existing = await this.prisma.tag.findFirst({
         where: {
           organizationId,
           slug,
-          deletedAt: null,
           ...(excludeId && { id: { not: excludeId } }),
         },
       });
