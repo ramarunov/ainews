@@ -5,7 +5,9 @@ import { searchPublishedArticles } from "@/lib/public-api";
 import { SITE_NAME } from "@/lib/brand";
 
 export const metadata: Metadata = {
-  title: `Cari — ${SITE_NAME}`,
+  // No manual "— SITE_NAME" suffix - the root layout's title template
+  // already appends it to every page title.
+  title: "Cari",
   // On-site search results are query-driven, low-value duplicate-content
   // pages from a crawler's perspective (Google explicitly recommends against
   // indexing internal search results) - unlike /news, which is a genuine

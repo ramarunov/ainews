@@ -30,7 +30,10 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   // in 2019; a distinct canonical per page is its current guidance).
   const canonical = page > 1 ? `${categoryUrl}?page=${page}` : categoryUrl;
   return {
-    title: category.metaTitle || `${category.name} — ${SITE_NAME}`,
+    // No manual "— SITE_NAME" suffix here - the root layout's title
+    // template (app/(public)/layout.tsx) already appends it to every page
+    // title, so adding it here too doubled it in the rendered <title>.
+    title: category.metaTitle || category.name,
     description:
       category.metaDescription ||
       category.description ||

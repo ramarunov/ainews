@@ -95,6 +95,28 @@ describe('SeoService', () => {
   });
 
   describe('generateArticleSchema', () => {
+    it('falls back to a stripped content snippet for description when the article has no excerpt', async () => {
+      const schema: any = await service.generateArticleSchema(
+        {
+          title: 'No Excerpt Story',
+          content: '<p>Full body text that should be used since there is no excerpt.</p>',
+          slug: 'no-excerpt-story',
+        },
+        'https://example.com',
+      );
+
+      expect(schema.description).toBe('Full body text that should be used since there is no excerpt.');
+    });
+
+    it('leaves description empty when neither excerpt nor content is available', async () => {
+      const schema: any = await service.generateArticleSchema(
+        { title: 'Bare Schema Call', slug: 'bare-schema-call' },
+        'https://example.com',
+      );
+
+      expect(schema.description).toBe('');
+    });
+
     it('builds NewsArticle JSON-LD and strips undefined fields', async () => {
       const schema: any = await service.generateArticleSchema(
         {
@@ -276,7 +298,7 @@ describe('SeoService', () => {
 
       expect((result.schemaJsonld as any)['@type']).toBe('NewsArticle');
       expect((result.schemaJsonld as any).headline).toBe(longTitle);
-      expect(result.metaTitle).toBe(longTitle.substring(0, 60));
+      expect(result.metaTitle).toBe(longTitle.substring(0, 44));
       expect(result.metaDescription).toBe('A short excerpt.');
     });
   });

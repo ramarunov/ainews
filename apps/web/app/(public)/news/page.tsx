@@ -5,7 +5,9 @@ import { getPublishedArticles } from "@/lib/public-api";
 import { SITE_NAME } from "@/lib/brand";
 
 export const metadata: Metadata = {
-  title: `All News — ${SITE_NAME}`,
+  // No manual "— SITE_NAME" suffix - the root layout's title template
+  // already appends it to every page title.
+  title: "All News",
   description: `Every published story from ${SITE_NAME}, most recent first.`,
 };
 

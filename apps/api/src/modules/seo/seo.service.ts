@@ -94,7 +94,9 @@ export class SeoService {
     // fresh install with AI services off would never get structured data
     // on any article, ever - not just a degraded meta title.
     const [metaTitle, metaDescription, schema] = await Promise.all([
-      this.generateMetaTitle(article.title, focusKeyword).catch(() => article.title.substring(0, 60)),
+      this.generateMetaTitle(article.title, focusKeyword).catch(() =>
+        article.title.substring(0, SeoService.META_TITLE_MAX),
+      ),
       this.aiWriter
         .generateMetaDescription(article.content, focusKeyword)
         .catch(() => (article.excerpt ?? article.content.replace(/<[^>]+>/g, ' ')).trim().substring(0, 160)),
@@ -127,21 +129,31 @@ export class SeoService {
 
   // ─── Meta Title Generation ─────────────────────────────────────────────────
 
+  // The public site's <title> tag always gets " — BeritaBot.com" (16 chars)
+  // appended by the frontend's sitewide title template (apps/web's
+  // app/(public)/layout.tsx) - a metaTitle generated all the way up to
+  // Google's ~60-char display budget left no room for that suffix, so it
+  // routinely got truncated in search results, losing the branding it was
+  // meant to add. Reserving that width here keeps the *rendered* title
+  // (this value + the suffix) inside the real budget.
+  private static readonly SITE_SUFFIX_RESERVE = 16;
+  private static readonly META_TITLE_MAX =
+    60 - SeoService.SITE_SUFFIX_RESERVE;
+
   async generateMetaTitle(title: string, focusKeyword?: string): Promise<string> {
-    // Try to fit within 60 chars with keyword
-    if (title.length <= 60) {
+    if (title.length <= SeoService.META_TITLE_MAX) {
       return title;
     }
 
     const result = await this.aiGateway.prompt(
       `You are an SEO specialist. Create an SEO-optimized meta title.
-Rules: 50-60 characters max. Include focus keyword if provided.
+Rules: ${SeoService.META_TITLE_MAX} characters max. Include focus keyword if provided.
 Return ONLY the title text, no quotes or explanation.`,
       `Original title: ${title}${focusKeyword ? `\nFocus keyword: ${focusKeyword}` : ''}`,
       { temperature: 0.3, maxTokens: 100 },
     );
 
-    return result.trim().replace(/^["']|["']$/g, '').substring(0, 60);
+    return result.trim().replace(/^["']|["']$/g, '').substring(0, SeoService.META_TITLE_MAX);
   }
 
   // ─── Schema.org JSON-LD Generation ─────────────────────────────────────────
@@ -160,7 +172,15 @@ Return ONLY the title text, no quotes or explanation.`,
       headline: article.title,
       url,
       mainEntityOfPage: { '@type': 'WebPage', '@id': url },
-      description: article.excerpt ?? '',
+      // A blank description here isn't just a cosmetic gap - Google's
+      // structured-data guidelines call out description as expected on
+      // NewsArticle, and article.excerpt is genuinely absent on plenty of
+      // articles (nothing requires editors to fill it in). Same
+      // strip-tags-and-truncate fallback already used for metaDescription
+      // above when the AI call fails, applied here unconditionally rather
+      // than only on failure, since this function never calls the AI at all.
+      description:
+        article.excerpt ?? article.content?.replace(/<[^>]+>/g, ' ').trim().substring(0, 160) ?? '',
       datePublished: article.publishedAt?.toISOString(),
       // Falls back to publishedAt when updatedAt isn't available (e.g. the
       // manual schema/article endpoint, which has no article record) -

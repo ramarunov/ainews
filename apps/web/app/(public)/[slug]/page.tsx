@@ -14,7 +14,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const page = await getPageBySlug(slug);
   if (!page) return {};
 
-  const title = page.metaTitle || `${page.title} — ${SITE_NAME}`;
+  // No manual "— SITE_NAME" suffix - the root layout's title template
+  // already appends it to every page title.
+  const title = page.metaTitle || page.title;
   const description = page.metaDescription || undefined;
 
   return {
