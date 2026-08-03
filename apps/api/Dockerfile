@@ -42,6 +42,12 @@ RUN addgroup --system --gid 1001 nodejs \
 
 COPY --from=installer --chown=nestjs:nodejs /app .
 
+# BackupSchedulerService shells out to pg_dump directly (see pg-dump.util.ts);
+# without a local client it silently fell back to `docker exec` against a
+# sibling container, which this container has no docker CLI/socket to run -
+# scheduled backups were failing with ENOENT every cycle in production.
+RUN apk add --no-cache postgresql16-client
+
 USER nestjs
 EXPOSE 4000
 ENV NODE_ENV=production

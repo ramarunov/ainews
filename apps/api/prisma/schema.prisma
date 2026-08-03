@@ -713,6 +713,11 @@ model NewsItem {
   @@index([organizationId])
   @@index([organizationId, status])
   @@index([publishedAt(sort: Desc)])
+  // Both used by AutonomousPublishingSchedulerService's per-cluster eligibility
+  // check (`newsItems: { none: { articleId: { not: null } } } }`), which
+  // otherwise forces a full news_items scan per candidate cluster - the query
+  // that was blowing Prisma's interactive-transaction timeout in production.
+  @@index([clusterId, articleId])
   @@map("news_items")
 }
 
@@ -730,6 +735,12 @@ model NewsCluster {
 
   newsItems      NewsItem[]
 
+  // No indexes existed here at all beyond the PK - every autonomous-publishing
+  // cycle's eligibility query (filters on organizationId/lastUpdatedAt/
+  // firstSeenAt, orders by trendScore) was a full sequential scan.
+  @@index([organizationId, lastUpdatedAt])
+  @@index([firstSeenAt])
+  @@index([trendScore])
   @@map("news_clusters")
 }
 

@@ -26,6 +26,15 @@ function lowerFirst(value: string): string {
 // AnalyticsService's dashboard query in production-shaped testing.
 const UNSAFE_RAW_OPERATIONS = new Set(['$queryRawUnsafe', '$executeRawUnsafe']);
 
+// Prisma's own default (5000ms) is tight enough that a single slow query —
+// under real contention, not just in isolation — reliably blows it: seen in
+// production as AutonomousPublishingSchedulerService's NewsCluster read
+// failing on every single run for days (P2028 "Transaction already closed")
+// while the same query ran in ~50ms standalone via psql. Since every one of
+// these transactions is already scoped to a single operation (see the
+// class doc below), there's no risk in giving it much more headroom.
+const RLS_TRANSACTION_OPTIONS = { timeout: 15_000, maxWait: 10_000 };
+
 /**
  * Wraps every Prisma model operation so that, when an org context is active
  * (see org-context.ts), the call runs inside a short-lived transaction with
@@ -81,7 +90,7 @@ export function createRlsExtendedClient(basePrisma: PrismaClient) {
             }
             return (tx as any)[operation](args);
           });
-        });
+        }, RLS_TRANSACTION_OPTIONS);
       },
     },
   });
@@ -100,12 +109,17 @@ export async function withOrgTransaction<T>(
   // Accepts either the raw PrismaClient or the RLS-extended wrapper —
   // `$extends()`'s return type isn't structurally a PrismaClient, so this
   // is intentionally loose rather than fighting Prisma's extension typing.
-  prisma: { $transaction: (fn: (tx: any) => Promise<T>) => Promise<T> },
+  prisma: {
+    $transaction: (
+      fn: (tx: any) => Promise<T>,
+      options?: { timeout?: number; maxWait?: number },
+    ) => Promise<T>;
+  },
   callback: (tx: any) => Promise<T>,
 ): Promise<T> {
   const ctx = orgContextStorage.getStore();
 
-  if (!ctx) return prisma.$transaction(callback);
+  if (!ctx) return prisma.$transaction(callback, RLS_TRANSACTION_OPTIONS);
 
   assertValidOrgId(ctx.organizationId);
 
@@ -122,5 +136,5 @@ export async function withOrgTransaction<T>(
       await tx.$executeRawUnsafe(`SET LOCAL app.current_org_id = '${ctx.organizationId}'`);
       return callback(tx);
     });
-  });
+  }, RLS_TRANSACTION_OPTIONS);
 }
