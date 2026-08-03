@@ -23,6 +23,7 @@ const PUBLIC_PATH_PREFIXES = [
   "/search",
   "/feed",
   "/robots.txt",
+  "/ads.txt",
   "/sitemap.xml",
   "/image-sitemap.xml",
   "/news-sitemap.xml",
