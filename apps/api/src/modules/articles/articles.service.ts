@@ -30,6 +30,35 @@ const RESERVED_FLAT_SLUGS = new Set([
   'llms.txt',
   'icon',
   'apple-icon',
+  // Mirrors apps/web/lib/dashboard-routes.ts's DASHBOARD_PATHS - Next's
+  // router always matches the dashboard's own static route (e.g.
+  // (dashboard)/login/page.tsx) over the public site's [slug]/page.tsx
+  // catch-all for the same path, so an article slug that collided with one
+  // of these would be unreachable regardless of what proxy.ts allows
+  // through - confirmed live against rusdimedia.com's real WordPress
+  // export, which is exactly how this was found.
+  'login',
+  'register',
+  'forgot-password',
+  'reset-password',
+  'oauth-callback',
+  'articles',
+  'categories',
+  'pages',
+  'tags',
+  'series',
+  'media',
+  'article-search',
+  'workflow',
+  'calendar',
+  'news-intelligence',
+  'analytics',
+  'redirects',
+  'users',
+  'api-keys',
+  'activity',
+  'system-settings',
+  'account',
 ]);
 
 @Injectable()

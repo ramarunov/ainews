@@ -1,19 +1,7 @@
 import type { MetadataRoute } from "next";
 import { headers } from "next/headers";
 import { getAbsoluteUrl } from "@/lib/site-url";
-
-// The admin dashboard and the public reader site share this one Next.js
-// app/domain (route groups like `(dashboard)`/`(public)` don't add a URL
-// segment) - none of the internal editorial tool pages are content worth
-// indexing, and auth guards already keep them inaccessible without a
-// session regardless, so this is belt-and-suspenders, not a security
-// boundary in itself.
-const DASHBOARD_PATHS = [
-  "/login", "/register", "/forgot-password", "/reset-password", "/oauth-callback",
-  "/articles", "/categories", "/pages", "/tags", "/series", "/media", "/article-search",
-  "/workflow", "/calendar", "/news-intelligence", "/analytics", "/redirects",
-  "/users", "/api-keys", "/activity", "/system-settings", "/account",
-];
+import { DASHBOARD_PATHS } from "@/lib/dashboard-routes";
 
 // Each host (apex or a category subdomain) gets its own robots.txt pointing
 // at its own sitemap/feed - see sitemap.ts and app/feed/route.ts, both of

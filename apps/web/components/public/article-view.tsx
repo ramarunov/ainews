@@ -124,8 +124,19 @@ export async function ArticleView({ slug }: { slug: string }) {
     const requestedPath = `/${slug}`;
     const referrer = (await headers()).get("referer") ?? undefined;
     const match = await resolveRedirect(requestedPath, referrer);
-    if (match && match.statusCode !== 410) {
-      redirect(match.toUrl);
+    if (match) {
+      // Google (and browsers) only treat 301/308 as "permanently moved,
+      // transfer ranking signals" - next/navigation's plain redirect()
+      // always sends a 307 regardless of what's asked for, which silently
+      // downgraded every migrated-site 301 in the Redirect table to a
+      // temporary one. permanentRedirect() sends 308, which Google's own
+      // documentation says it treats the same as 301 for this purpose.
+      if (match.statusCode === 301) permanentRedirect(match.toUrl);
+      if (match.statusCode === 302) redirect(match.toUrl);
+      // statusCode === 410 (Gone) falls through to notFound() below -
+      // Next has no native way to send a real 410, so this is a 404
+      // instead, which search engines still eventually treat as "remove
+      // from the index."
     }
     notFound();
   }

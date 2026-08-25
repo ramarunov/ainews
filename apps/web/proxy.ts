@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getCategories } from "@/lib/public-api";
 import { getRootDomain, resolveHostCategory } from "@/lib/site-url";
+import { DASHBOARD_PATHS } from "@/lib/dashboard-routes";
 import type { Category } from "@/lib/types";
 
 // Route groups like (public)/(dashboard) don't appear in the URL, so this
@@ -36,11 +37,27 @@ const PUBLIC_PATH_PREFIXES = [
 
 // A static page's URL is exactly one path segment with no trailing slash
 // (e.g. "/kontak", not "/kontak/" or "/kontak/foo") - matches the flat
-// (non-nested) [slug]/page.tsx route.
-const SINGLE_SEGMENT_PATTERN = /^\/([a-z0-9-]+)$/;
+// (non-nested) [slug]/page.tsx route. Deliberately broad (any character but
+// `/`, not just lowercase-alnum-hyphen): a migrated site's old URLs being
+// redirected (see scripts/generate-redirect-suggestions.ts) aren't
+// necessarily shaped like a normal slug - confirmed live that a Redirect
+// row for e.g. `/sitemap_index.xml` (Yoast's old sitemap path) never even
+// got a chance to fire while this excluded `.`/`_` from matching, since
+// isPublicPath rejected the request before it ever reached [slug]/page.tsx
+// (and therefore before ArticleView's resolveRedirect() lookup) at all.
+const SINGLE_SEGMENT_PATTERN = /^\/([^/]+)$/;
 
 function isPublicPath(pathname: string): boolean {
   if (pathname === "/") return true;
+  // Checked before the generic single-segment pass below: Next's router
+  // always matches a static route (e.g. `(dashboard)/login/page.tsx`) over
+  // the public site's `[slug]/page.tsx` dynamic catch-all for the exact
+  // same path, regardless of what proxy.ts decides here - so without this
+  // exclusion, a request for one of these exact paths on the apex would
+  // silently render the dashboard page instead of ever reaching
+  // [slug]/page.tsx's Page/Article/redirect resolution. See
+  // lib/dashboard-routes.ts's header comment for the full explanation.
+  if ((DASHBOARD_PATHS as string[]).includes(pathname)) return false;
   if (PUBLIC_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
     return true;
   }
