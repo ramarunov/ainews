@@ -9,7 +9,11 @@
  * news-sitemap.xml/route.ts, image-sitemap.xml/route.ts,
  * news/[slug]/page.tsx, components/article-form.tsx) — all of them should
  * go through these functions now, since "the URL for an article" depends on
- * its category's subdomain, not a single site-wide constant.
+ * its category's subdomain, not a single site-wide constant. Articles live
+ * at a bare `/{slug}` (rusdimedia.com's permalink shape, carried over from
+ * its previous WordPress site) - `/news/{slug}` still exists as a
+ * permanent redirect (news/[slug]/page.tsx) for any link still using it,
+ * but nothing here ever produces that form anymore.
  *
  * ROOT_DOMAIN is a plain (non-NEXT_PUBLIC_) runtime env var deliberately —
  * NEXT_PUBLIC_SITE_URL etc. are baked into the Docker image at build time
@@ -30,7 +34,7 @@ export function getRootDomain(): string {
   // is guarded instead of risking a "process is not defined" crash.
   const serverOnlyRootDomain =
     typeof process !== "undefined" ? process.env.ROOT_DOMAIN : undefined;
-  return process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? serverOnlyRootDomain ?? "beritabot.com";
+  return process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? serverOnlyRootDomain ?? "rusdimedia.com";
 }
 
 // Master kill-switch (see proxy.ts) - checked here too so that assigning a
@@ -46,25 +50,10 @@ export function isCategorySubdomainsEnabled(): boolean {
   return false;
 }
 
-// Per-deployment switch for a migrated site (e.g. a WordPress site with
-// `/%postname%/` permalinks) that needs articles at a bare `/{slug}` instead
-// of this app's default `/news/{slug}` - see apps/web/app/(public)/[slug]/
-// page.tsx and proxy.ts's isPublicPath. Off by default so beritabot.com
-// (and any other deployment still using `/news/{slug}`) is unaffected.
-// Same NEXT_PUBLIC_-then-plain fallback as isCategorySubdomainsEnabled,
-// for the same client/server reason.
-export function isFlatArticleUrlsEnabled(): boolean {
-  if (process.env.NEXT_PUBLIC_FLAT_ARTICLE_URLS === "true") return true;
-  if (typeof process !== "undefined" && process.env.FLAT_ARTICLE_URLS === "true") {
-    return true;
-  }
-  return false;
-}
-
 // A category's own subdomain always wins; a subcategory (no subdomain of
 // its own) inherits its parent's subdomain and lives at a path underneath
 // it instead - e.g. gizi (child of kesehatan) resolves to
-// kesehatan.beritabot.com/gizi, not a subdomain of its own. This keeps a
+// kesehatan.rusdimedia.com/gizi, not a subdomain of its own. This keeps a
 // topic's link equity concentrated on one host instead of fragmenting
 // across a subdomain per subcategory. Returns null (apex) when neither the
 // category nor its parent has a subdomain assigned.
@@ -101,7 +90,7 @@ export function getArticleUrl(
   rootDomain: string = getRootDomain(),
 ): string {
   const host = article.primaryCategory ? getCategoryHost(article.primaryCategory, rootDomain) : null;
-  const path = isFlatArticleUrlsEnabled() ? `/${article.slug}` : `/news/${article.slug}`;
+  const path = `/${article.slug}`;
   if (host) return `https://${host}${path}`;
   return `https://${rootDomain}${path}`;
 }

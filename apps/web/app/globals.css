@@ -130,7 +130,7 @@
   }
 }
 
-/* ─── BeritaBot.com: public reader site brand theme ────────────────────────
+/* ─── RusdiMedia.com: public reader site brand theme ────────────────────────
  * Scoped to a wrapper class (applied once, in app/(public)/layout.tsx) so it
  * never touches the admin dashboard's neutral tokens above — shadcn
  * components (Button, Badge, Card, ...) read these same CSS variable names

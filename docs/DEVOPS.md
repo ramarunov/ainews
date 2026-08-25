@@ -85,16 +85,16 @@ directly with curl against your already-running `pnpm dev`:
 
 ```bash
 # .env.local (apps/web)
-ROOT_DOMAIN=beritabot.local
-NEXT_PUBLIC_ROOT_DOMAIN=beritabot.local
+ROOT_DOMAIN=rusdimedia.local
+NEXT_PUBLIC_ROOT_DOMAIN=rusdimedia.local
 ENABLE_CATEGORY_SUBDOMAINS=true
 ```
 
 ```bash
-curl -H "Host: beritabot.local" http://localhost:3000/                # apex aggregator
-curl -H "Host: kesehatan.beritabot.local" http://localhost:3000/      # that category's homepage (rewritten)
-curl -I -H "Host: www.beritabot.local" http://localhost:3000/         # 308 -> beritabot.local
-curl -I -H "Host: sembarang.beritabot.local" http://localhost:3000/   # 404, not a fake category
+curl -H "Host: rusdimedia.local" http://localhost:3000/                # apex aggregator
+curl -H "Host: kesehatan.rusdimedia.local" http://localhost:3000/      # that category's homepage (rewritten)
+curl -I -H "Host: www.rusdimedia.local" http://localhost:3000/         # 308 -> rusdimedia.local
+curl -I -H "Host: sembarang.rusdimedia.local" http://localhost:3000/   # 404, not a fake category
 ```
 
 This verifies `proxy.ts`'s hostname routing, the www redirect, and the
@@ -107,16 +107,16 @@ unknown-subdomain 404 without touching DNS or the hosts file at all.
 
 ```
 # C:\Windows\System32\drivers\etc\hosts (edit as Administrator)
-127.0.0.1   beritabot.local
-127.0.0.1   kesehatan.beritabot.local
-127.0.0.1   teknologi.beritabot.local
+127.0.0.1   rusdimedia.local
+127.0.0.1   kesehatan.rusdimedia.local
+127.0.0.1   teknologi.rusdimedia.local
 ```
 
-then visit `http://kesehatan.beritabot.local:3000`. Note that
+then visit `http://kesehatan.rusdimedia.local:3000`. Note that
 `getCategoryUrl`/`getArticleUrl` (`apps/web/lib/site-url.ts`) always build
 `https://` URLs with no port — correct for production, but it means
 in-app nav links generated while testing this way point at
-`https://kesehatan.beritabot.local` (wrong scheme/port for a local dev
+`https://kesehatan.rusdimedia.local` (wrong scheme/port for a local dev
 server), not back to `:3000`. Retype the address bar's port after
 following a link, or prefer the curl option above for anything beyond a
 quick visual check.

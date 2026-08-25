@@ -64,25 +64,25 @@ Provision an instance, note its public IP, and make sure you can
 ## 2. Point your domain at the server
 
 You need at least one domain, ideally two subdomains: one for the reader
-site (`app.example.com`), one for the API (`api.example.com`). Create two
+site (`app.rusdimedia.com`), one for the API (`api.rusdimedia.com`). Create two
 `A` records at your DNS provider, both pointing at the server's IP. This
 can take a few minutes to a few hours to propagate — do it now so it's
 ready by the time you need HTTPS certificates (§7).
 
 ```
-app.example.com   A   <your-server-ip>
-api.example.com   A   <your-server-ip>
+app.rusdimedia.com   A   <your-server-ip>
+api.rusdimedia.com   A   <your-server-ip>
 ```
 
 ### 2.1 Optional: wildcard DNS for category subdomains
 
-If you want per-category subdomains (`kesehatan.example.com`,
-`teknologi.example.com`, ...) rather than every category living at
-`example.com/category/kesehatan`, also add:
+If you want per-category subdomains (`kesehatan.rusdimedia.com`,
+`teknologi.rusdimedia.com`, ...) rather than every category living at
+`rusdimedia.com/category/kesehatan`, also add:
 
 ```
-example.com        A   <your-server-ip>
-*.example.com       A   <your-server-ip>
+rusdimedia.com        A   <your-server-ip>
+*.rusdimedia.com       A   <your-server-ip>
 ```
 
 A single wildcard `A` record covers every category subdomain — you don't
@@ -163,10 +163,10 @@ At minimum, also set in `.env.production`:
 
 ```bash
 NODE_ENV=production
-APP_URL=https://app.example.com
-API_URL=https://api.example.com
-CORS_ORIGINS=https://app.example.com
-COOKIE_DOMAIN=example.com
+APP_URL=https://app.rusdimedia.com
+API_URL=https://api.rusdimedia.com
+CORS_ORIGINS=https://app.rusdimedia.com
+COOKIE_DOMAIN=rusdimedia.com
 COOKIE_SECURE=true
 
 DATABASE_URL=postgresql://ainews_app:<strong-app-password>@postgres:5432/ainews_db
@@ -180,37 +180,29 @@ REDIS_PASSWORD=<same strong redis password>
 OPENSEARCH_URL=http://opensearch:9200
 
 S3_ENDPOINT=http://minio:9000
-S3_PUBLIC_URL=https://media.example.com/ainews-media
+S3_PUBLIC_URL=https://media.rusdimedia.com/ainews-media
 MINIO_ROOT_USER=<strong minio user>
 MINIO_ROOT_PASSWORD=<strong minio password>
 S3_ACCESS_KEY=<same as MINIO_ROOT_USER>
 S3_SECRET_KEY=<same as MINIO_ROOT_PASSWORD>
 
-NEXT_PUBLIC_API_URL=https://api.example.com/api/v1
-NEXT_PUBLIC_MEDIA_URL=https://media.example.com/ainews-media
-NEXT_PUBLIC_SITE_URL=https://app.example.com
+NEXT_PUBLIC_API_URL=https://api.rusdimedia.com/api/v1
+NEXT_PUBLIC_MEDIA_URL=https://media.rusdimedia.com/ainews-media
+NEXT_PUBLIC_SITE_URL=https://app.rusdimedia.com
 
 # Category subdomains (§2.1/§7.1) - safe to leave at these defaults even if
 # you don't want the feature; ROOT_DOMAIN only matters once
 # ENABLE_CATEGORY_SUBDOMAINS is true.
-ROOT_DOMAIN=example.com
-NEXT_PUBLIC_ROOT_DOMAIN=example.com
+ROOT_DOMAIN=rusdimedia.com
+NEXT_PUBLIC_ROOT_DOMAIN=rusdimedia.com
 ENABLE_CATEGORY_SUBDOMAINS=false
-
-# Only relevant if this deployment is migrating an existing site that needs
-# its article URLs preserved exactly (e.g. WordPress's /%postname%/
-# permalinks) - see apps/web/lib/site-url.ts and
-# apps/api/src/common/url/site-url.util.ts. Leave both false for a normal
-# (non-migrated) deployment; serves articles at /news/:slug either way.
-FLAT_ARTICLE_URLS=false
-NEXT_PUBLIC_FLAT_ARTICLE_URLS=false
 
 SMTP_HOST=<your real SMTP provider>
 SMTP_PORT=587
 SMTP_SECURE=true
 SMTP_USER=<...>
 SMTP_PASSWORD=<...>
-EMAIL_FROM=noreply@example.com
+EMAIL_FROM=noreply@rusdimedia.com
 
 PUBLIC_SITE_ORG_ID=   # fill in after you create your organization (§9)
 ```
@@ -280,8 +272,8 @@ docker compose -f docker-compose.prod.yml --env-file .env.production \
   up -d api web caddy
 ```
 
-Edit `infrastructure/caddy/Caddyfile` first and replace `app.example.com`/
-`api.example.com` with your real domains (matching §2's DNS records) —
+Edit `infrastructure/caddy/Caddyfile` first and replace `app.rusdimedia.com`/
+`api.rusdimedia.com` with your real domains (matching §2's DNS records) —
 Caddy requests a Let's Encrypt certificate for whatever hostnames are in
 that file the moment it starts, and needs them to already resolve here.
 
@@ -298,12 +290,12 @@ the slowest to start).
 
 Skip this entirely if you didn't set up the wildcard DNS record in §2.1 —
 `ENABLE_CATEGORY_SUBDOMAINS=false` (the default) means none of this is
-needed and every category lives at `example.com/category/:slug`.
+needed and every category lives at `rusdimedia.com/category/:slug`.
 
 **Why a wildcard cert needs extra setup.** Let's Encrypt can only issue a
-certificate covering `*.example.com` via the **DNS-01** challenge (proving
+certificate covering `*.rusdimedia.com` via the **DNS-01** challenge (proving
 you control the domain by creating a TXT record), not the plain **HTTP-01**
-challenge Caddy uses by default for `app.example.com`/`api.example.com`
+challenge Caddy uses by default for `app.rusdimedia.com`/`api.rusdimedia.com`
 above (proving control by serving a file over HTTP). The stock
 `caddy:2-alpine` image in `docker-compose.prod.yml` does not include a
 DNS-01 provider module — you need a custom-built Caddy image with one.
@@ -340,15 +332,14 @@ DNS-01 provider module — you need a custom-built Caddy image with one.
    only>` to `.env.production`, and pass it through to the `caddy` service
    in `docker-compose.prod.yml` (`environment: - CF_API_TOKEN`).
 
-3. **Uncomment the wildcard site block** in
-   `infrastructure/caddy/Caddyfile` (`*.example.com { reverse_proxy
-   web:3100 }`) and replace `beritabot.com`/`example.com` throughout the
-   file with your real domain.
+3. **Confirm the wildcard site block** in `infrastructure/caddy/Caddyfile`
+   (`*.rusdimedia.com { reverse_proxy web:3100 }`) matches your real
+   domain — it already does if you're deploying rusdimedia.com as-is.
 
 4. **Confirm the wildcard cert actually issues** before flipping the app
    flag on: `docker compose -f docker-compose.prod.yml --env-file
    .env.production up -d caddy` and watch `docker compose ... logs -f
-   caddy` for a successful ACME DNS-01 completion for `*.example.com`.
+   caddy` for a successful ACME DNS-01 completion for `*.rusdimedia.com`.
 
 5. **Assign at least one category a subdomain** in the admin dashboard
    (Categories → edit a category → Subdomain field) before turning the
@@ -380,9 +371,9 @@ categories are simply ignored again, not deleted.
 ## 8. Verify the deployment
 
 ```bash
-curl https://api.example.com/api/v1/health
-curl https://api.example.com/api/v1/health/ready
-curl -I https://app.example.com/login
+curl https://api.rusdimedia.com/api/v1/health
+curl https://api.rusdimedia.com/api/v1/health/ready
+curl -I https://app.rusdimedia.com/login
 ```
 
 `health/ready` returns a non-200 status if Postgres/Redis aren't actually
@@ -400,37 +391,30 @@ is (wrong password, RLS role missing, Redis auth failure).
 Public self-registration is disabled in this app (an earlier deliberate
 security decision — new users are invited by an existing admin, not signed
 up openly), so there's no `/register` page to visit. Bootstrap the first
-organization and admin account via the seed script instead:
+organization and admin account via `apps/api/scripts/bootstrap-org.ts`
+instead — a real, named organization (e.g. "Rusdi Media"), not the
+"Demo Organization" fixture `prisma/seed.ts` creates for local dev:
 
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.production \
-  run --rm api-migrate sh -c "cd apps/api && npx ts-node prisma/seed.ts"
+  run --rm api-migrate sh -c "cd apps/api && \
+    ORG_NAME='Rusdi Media' ORG_SLUG='rusdimedia' \
+    ADMIN_EMAIL='<real admin email>' ADMIN_PASSWORD='<real password>' \
+    ADMIN_FIRST_NAME='<first name>' ADMIN_LAST_NAME='<last name>' \
+    npx ts-node -r tsconfig-paths/register scripts/bootstrap-org.ts"
 ```
 
-(If this deployment is for a real, named publication rather than a demo —
-e.g. a WordPress migration — use `apps/api/scripts/bootstrap-org.ts`
-instead, which takes the organization name/slug and admin details as env
-vars rather than hardcoding "Demo Organization". See
-`deploy/rusdimedia/README.md` for a worked example.)
+It prints the new organization's id and the admin login you just set.
 
-This creates a "Demo Organization" and an admin user with the **hardcoded**
-credentials `admin@demo.local` / `Admin123!` (see `apps/api/prisma/seed.ts`)
-— fine for confirming everything works, not safe to leave as-is on a
-publicly reachable server. Immediately after your first successful login:
-
-1. Change that account's password (Account settings in the dashboard, or
-   `POST /api/v1/auth/change-password`) to something real.
-2. Rename the organization and update its details (Site Settings) to match
-   your actual publication, not "Demo Organization".
-3. Copy the organization's ID from Site Settings into `PUBLIC_SITE_ORG_ID`
-   in `.env.production` if you want the public reader site to actually
-   serve its published articles — it 404s on every public route until this
-   is set.
-4. `docker compose -f docker-compose.prod.yml --env-file .env.production
+1. Paste that id into `PUBLIC_SITE_ORG_ID` in `.env.production` — the
+   public reader site 404s on every public route until this is set.
+2. `docker compose -f docker-compose.prod.yml --env-file .env.production
    restart api` to pick up the `PUBLIC_SITE_ORG_ID` change (env vars are
    read at process start, not live).
-5. Invite any other editors/writers you need from Users & Roles — that
-   screen is where new accounts are created now, not a public sign-up form.
+3. Log in with the admin email/password you passed to `bootstrap-org.ts`
+   and invite any other editors/writers you need from Users & Roles —
+   that screen is where new accounts are created now, not a public
+   sign-up form.
 
 ---
 
@@ -519,7 +503,7 @@ pointing at this server yet, or ports 80/443 aren't actually reachable
 group too — some providers block inbound traffic at the network level
 separately from the OS firewall).
 
-**Caddy won't get a certificate for `*.example.com` specifically** (while
+**Caddy won't get a certificate for `*.rusdimedia.com` specifically** (while
 `app.`/`api.` work fine) — this is expected with the stock `caddy:2-alpine`
 image; a wildcard cert requires the DNS-01 setup in §7.1 (custom image +
 DNS provider module + `acme_dns` block), not just DNS pointing at the

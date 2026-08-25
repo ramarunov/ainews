@@ -615,14 +615,11 @@ export class ArticlesService {
       trim: true,
     }).substring(0, 480);
 
-    // Only meaningful when this deployment serves articles at a bare
-    // `/{slug}` path (see FLAT_ARTICLE_URLS / apps/web/lib/site-url.ts) -
-    // a migrated-site article whose slug collided with one of the public
-    // site's other single-segment paths (apps/web/proxy.ts's
-    // PUBLIC_PATH_PREFIXES) would be permanently unreachable at its own
-    // URL. Harmless to skip for the default `/news/{slug}` deployment mode,
-    // where none of these words are actually reserved.
-    if (process.env.FLAT_ARTICLE_URLS === 'true' && RESERVED_FLAT_SLUGS.has(base)) {
+    // Articles live at a bare `/{slug}` (see apps/web/lib/site-url.ts) - a
+    // slug that collided with one of the public site's other single-segment
+    // paths (apps/web/proxy.ts's PUBLIC_PATH_PREFIXES) would be permanently
+    // unreachable at its own URL.
+    if (RESERVED_FLAT_SLUGS.has(base)) {
       throw new BadRequestException(
         `Slug "${base}" is reserved and can't be used for an article on this site.`,
       );

@@ -34,12 +34,7 @@ export const configValidationSchema = Joi.object({
   // Bare root domain (no protocol/subdomain) used to build category-subdomain
   // URLs — see common/url/site-url.util.ts. Also the suffix CORS_ORIGINS'
   // wildcard check matches *.{ROOT_DOMAIN} against.
-  ROOT_DOMAIN: Joi.string().default('beritabot.com'),
-  // Serves articles at a bare `/{slug}` instead of `/news/{slug}` - see
-  // common/url/site-url.util.ts's isFlatArticleUrlsEnabled(). Only meant
-  // for a deployment migrated from a site with `/%postname%/`-style
-  // permalinks that needs its existing URLs preserved; off by default.
-  FLAT_ARTICLE_URLS: Joi.string().valid('true', 'false').default('false'),
+  ROOT_DOMAIN: Joi.string().default('rusdimedia.com'),
 
   DATABASE_URL: Joi.string().required(),
 

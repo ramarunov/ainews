@@ -20,7 +20,7 @@ import {
   resolveRedirect,
 } from "@/lib/public-api";
 import { SITE_NAME } from "@/lib/brand";
-import { getArticleUrl, getCategoryUrl, getRootDomain, isFlatArticleUrlsEnabled } from "@/lib/site-url";
+import { getArticleUrl, getCategoryUrl, getRootDomain } from "@/lib/site-url";
 import type { PublicSetting } from "@/lib/types";
 
 // Shared between apps/web/app/(public)/news/[slug]/page.tsx (this app's
@@ -117,12 +117,11 @@ export async function ArticleView({ slug }: { slug: string }) {
   const article = await getPublishedArticleBySlug(slug);
 
   if (!article) {
-    // The path actually requested for this article - matches whichever
-    // route rendered ArticleView (see news/[slug]/page.tsx and
-    // (public)/[slug]/page.tsx), since that's the path a migrated site's
-    // Redirect rows (e.g. WordPress URLs that changed/were removed) are
-    // keyed on.
-    const requestedPath = isFlatArticleUrlsEnabled() ? `/${slug}` : `/news/${slug}`;
+    // The path actually requested for this article - rusdimedia.com's
+    // articles live at this bare `/{slug}` (see lib/site-url.ts), which is
+    // what a migrated site's Redirect rows (e.g. WordPress URLs that
+    // changed/were removed) are keyed on.
+    const requestedPath = `/${slug}`;
     const referrer = (await headers()).get("referer") ?? undefined;
     const match = await resolveRedirect(requestedPath, referrer);
     if (match && match.statusCode !== 410) {

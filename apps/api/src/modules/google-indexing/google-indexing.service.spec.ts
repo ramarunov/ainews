@@ -32,7 +32,7 @@ describe('GoogleIndexingService', () => {
     config = {
       get: jest.fn((key: string, def?: any) => {
         if (key === 'PUBLIC_SITE_ORG_ID') return 'org-public';
-        if (key === 'ROOT_DOMAIN') return 'beritabot.example';
+        if (key === 'ROOT_DOMAIN') return 'rusdimedia.example';
         return def;
       }),
     };
@@ -70,7 +70,7 @@ describe('GoogleIndexingService', () => {
 
     expect(mockedAxios.post).toHaveBeenCalledWith(
       'https://indexing.googleapis.com/v3/urlNotifications:publish',
-      { url: 'https://kesehatan.beritabot.example/news/big-story-breaks', type: 'URL_UPDATED' },
+      { url: 'https://kesehatan.rusdimedia.example/big-story-breaks', type: 'URL_UPDATED' },
       { headers: { Authorization: 'Bearer fake-access-token' }, timeout: 10000 },
     );
   });
@@ -86,7 +86,7 @@ describe('GoogleIndexingService', () => {
 
     expect(mockedAxios.post).toHaveBeenCalledWith(
       'https://indexing.googleapis.com/v3/urlNotifications:publish',
-      { url: 'https://kesehatan.beritabot.example/news/big-story-breaks', type: 'URL_DELETED' },
+      { url: 'https://kesehatan.rusdimedia.example/big-story-breaks', type: 'URL_DELETED' },
       expect.any(Object),
     );
   });

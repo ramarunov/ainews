@@ -298,7 +298,7 @@ model Category {
   metaTitle       String?   @db.VarChar(255)
   metaDescription String?   @db.VarChar(500)
   // Public-site subdomain for this category (e.g. "kesehatan" ->
-  // kesehatan.beritabot.com). Null until an admin opts the category into
+  // kesehatan.rusdimedia.com). Null until an admin opts the category into
   // subdomain-based routing; existing categories/articles keep resolving to
   // apex-relative URLs via the fallback in site-url.util.ts until then.
   subdomain       String?   @db.VarChar(63)
@@ -322,7 +322,7 @@ model Category {
 }
 
 // Admin-managed static pages (About Us, Contact, Disclaimer, Privacy
-// Policy, ...) served at the apex domain root, e.g. beritabot.com/kontak -
+// Policy, ...) served at the apex domain root, e.g. rusdimedia.com/kontak -
 // see apps/web/app/(public)/[slug]/page.tsx. Deliberately flat (no
 // parent/tree like Category) since these are standalone informational
 // pages, not a taxonomy.

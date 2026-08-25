@@ -91,7 +91,7 @@ function CommentsTable({ status }: { status: CommentStatus | "ALL" }) {
                   </TableCell>
                   <TableCell className="max-w-40">
                     <Link
-                      href={`/news/${comment.article.slug}`}
+                      href={`/${comment.article.slug}`}
                       target="_blank"
                       className="line-clamp-2 text-sm hover:underline"
                     >

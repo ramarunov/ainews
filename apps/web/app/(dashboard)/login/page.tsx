@@ -159,7 +159,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>Sign in</CardTitle>
-          <CardDescription>BeritaBot CMS — editorial dashboard</CardDescription>
+          <CardDescription>RusdiMedia CMS — editorial dashboard</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">

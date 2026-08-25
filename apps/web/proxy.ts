@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getCategories, getPages } from "@/lib/public-api";
-import { getRootDomain, isFlatArticleUrlsEnabled, resolveHostCategory } from "@/lib/site-url";
+import { getCategories } from "@/lib/public-api";
+import { getRootDomain, resolveHostCategory } from "@/lib/site-url";
 import type { Category } from "@/lib/types";
 
 // Route groups like (public)/(dashboard) don't appear in the URL, so this
@@ -11,11 +11,12 @@ import type { Category } from "@/lib/types";
 // allowlist of public paths, not a blocklist of dashboard ones: a new
 // dashboard page added later without updating this file gets redirected by
 // default instead of silently becoming reachable on the public domain.
-// Admin-created static pages (About, Contact, ...) are NOT listed here -
-// they're arbitrary, admin-chosen single-segment slugs (see
-// getCachedPageSlugs below), checked against real published-page data
-// instead of a fixed prefix, the same way category subdomains are checked
-// against real category data rather than a hardcoded list.
+// Admin-created static pages (About, Contact, ...) and articles (rusdimedia
+// carries over its previous WordPress site's flat `/{slug}` permalinks -
+// see lib/site-url.ts) are NOT listed here - they're both arbitrary
+// single-segment slugs that [slug]/page.tsx resolves (Page, then Article)
+// and 404s itself if neither matches, the same way category subdomains are
+// checked against real category data rather than a hardcoded list.
 const PUBLIC_PATH_PREFIXES = [
   "/author",
   "/category",
@@ -38,22 +39,18 @@ const PUBLIC_PATH_PREFIXES = [
 // (non-nested) [slug]/page.tsx route.
 const SINGLE_SEGMENT_PATTERN = /^\/([a-z0-9-]+)$/;
 
-async function isPublicPath(pathname: string): Promise<boolean> {
+function isPublicPath(pathname: string): boolean {
   if (pathname === "/") return true;
   if (PUBLIC_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`))) {
     return true;
   }
-  const match = SINGLE_SEGMENT_PATTERN.exec(pathname);
-  if (!match) return false;
-  // In flat-article-URL mode (see lib/site-url.ts), a single-segment path
-  // can be either a static Page or an Article slug - apps/web/app/(public)/
-  // [slug]/page.tsx resolves which and 404s itself if neither matches, so
-  // there's no fixed slug list to check against here the way there is for
-  // Pages alone (an org could have thousands of article slugs; caching them
-  // all just to answer "is this public" would cost more than it saves).
-  if (isFlatArticleUrlsEnabled()) return true;
-  const pageSlugs = await getCachedPageSlugs();
-  return pageSlugs.has(match[1]);
+  // A single-segment path could be either a static Page or an Article slug -
+  // [slug]/page.tsx resolves which one (and 404s itself if neither matches),
+  // so there's no fixed slug list to check against here the way there was
+  // when this only had to account for Pages (an org can have thousands of
+  // article slugs; caching them all just to answer "is this public" would
+  // cost more than it saves).
+  return SINGLE_SEGMENT_PATTERN.test(pathname);
 }
 
 // proxy.ts runs on every request, so a bare fetch per-request would double
@@ -75,24 +72,6 @@ async function getCachedCategories(): Promise<Category[]> {
     // Fail open on the last known-good list rather than treating every
     // category subdomain as unknown just because one fetch hiccuped.
     return categoryCache?.data ?? [];
-  }
-}
-
-let pageSlugCache: { data: Set<string>; expiresAt: number } | null = null;
-const PAGE_SLUG_CACHE_TTL_MS = 60_000;
-
-async function getCachedPageSlugs(): Promise<Set<string>> {
-  const now = Date.now();
-  if (pageSlugCache && pageSlugCache.expiresAt > now) return pageSlugCache.data;
-  try {
-    const pages = await getPages();
-    const slugs = new Set(pages.map((p) => p.slug));
-    pageSlugCache = { data: slugs, expiresAt: now + PAGE_SLUG_CACHE_TTL_MS };
-    return slugs;
-  } catch {
-    // Fail open on the last known-good set rather than 404ing/redirecting
-    // every static page away just because one fetch hiccuped.
-    return pageSlugCache?.data ?? new Set();
   }
 }
 
@@ -202,7 +181,7 @@ export async function proxy(request: NextRequest) {
       return NextResponse.next();
     }
     if (hostname === rootDomain) {
-      if (!(await isPublicPath(pathname))) return redirectToApp(request, appUrl);
+      if (!isPublicPath(pathname)) return redirectToApp(request, appUrl);
       return NextResponse.next();
     }
     return new NextResponse("Not Found", { status: 404 });
@@ -216,7 +195,7 @@ export async function proxy(request: NextRequest) {
 
   // Apex: cross-category aggregator, same public-path allowlist as always.
   if (hostname === rootDomain) {
-    if (!(await isPublicPath(pathname))) return redirectToApp(request, appUrl);
+    if (!isPublicPath(pathname)) return redirectToApp(request, appUrl);
     return NextResponse.next();
   }
 
@@ -240,7 +219,7 @@ export async function proxy(request: NextRequest) {
   }
 
   // A subcategory has no subdomain of its own - it lives at a single-segment
-  // path directly under its parent's subdomain (kesehatan.beritabot.com/gizi,
+  // path directly under its parent's subdomain (kesehatan.rusdimedia.com/gizi,
   // see getCategoryUrl in lib/site-url.ts), rewritten to the same
   // category/[slug] page a top-level category renders. Checked before the
   // generic isPublicPath/static-page check below so it isn't shadowed by an
@@ -259,7 +238,7 @@ export async function proxy(request: NextRequest) {
     }
   }
 
-  if (!(await isPublicPath(pathname))) return redirectToApp(request, appUrl);
+  if (!isPublicPath(pathname)) return redirectToApp(request, appUrl);
 
   return NextResponse.next();
 }

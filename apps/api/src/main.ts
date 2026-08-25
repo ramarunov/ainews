@@ -80,7 +80,7 @@ async function bootstrap() {
     // per category subdomain would otherwise need a config edit + restart
     // every time an admin adds a category subdomain. The leading-dot check
     // is deliberate: a naive `hostname.endsWith(rootDomain)` would wrongly
-    // accept "evilberitabot.com" as a match for "beritabot.com".
+    // accept "evilrusdimedia.com" as a match for "rusdimedia.com".
     origin: (origin, callback) => {
       if (!origin) return callback(null, true);
       if (corsOrigins.includes(origin)) return callback(null, true);

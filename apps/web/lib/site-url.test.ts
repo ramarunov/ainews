@@ -5,7 +5,6 @@ import {
   getCategoryUrl,
   getRootDomain,
   isCategorySubdomainsEnabled,
-  isFlatArticleUrlsEnabled,
   resolveHostCategory,
 } from "./site-url";
 
@@ -29,10 +28,10 @@ describe("getRootDomain", () => {
     expect(getRootDomain()).toBe("server.example.com");
   });
 
-  it("defaults to beritabot.com when nothing is configured", () => {
+  it("defaults to rusdimedia.com when nothing is configured", () => {
     delete process.env.NEXT_PUBLIC_ROOT_DOMAIN;
     delete process.env.ROOT_DOMAIN;
-    expect(getRootDomain()).toBe("beritabot.com");
+    expect(getRootDomain()).toBe("rusdimedia.com");
   });
 });
 
@@ -55,59 +54,22 @@ describe("isCategorySubdomainsEnabled", () => {
   });
 });
 
-describe("isFlatArticleUrlsEnabled", () => {
-  it("is false by default", () => {
-    vi.stubEnv("NEXT_PUBLIC_FLAT_ARTICLE_URLS", "");
-    vi.stubEnv("FLAT_ARTICLE_URLS", "");
-    expect(isFlatArticleUrlsEnabled()).toBe(false);
-  });
-
-  it("is true when NEXT_PUBLIC_FLAT_ARTICLE_URLS=true", () => {
-    vi.stubEnv("NEXT_PUBLIC_FLAT_ARTICLE_URLS", "true");
-    expect(isFlatArticleUrlsEnabled()).toBe(true);
-  });
-
-  it("is true when the server-only FLAT_ARTICLE_URLS=true", () => {
-    vi.stubEnv("NEXT_PUBLIC_FLAT_ARTICLE_URLS", "");
-    vi.stubEnv("FLAT_ARTICLE_URLS", "true");
-    expect(isFlatArticleUrlsEnabled()).toBe(true);
-  });
-});
-
-describe("getArticleUrl with flat article URLs enabled", () => {
-  it("drops the /news prefix at the apex when there's no primary category", () => {
-    vi.stubEnv("NEXT_PUBLIC_FLAT_ARTICLE_URLS", "true");
-    expect(getArticleUrl({ slug: "artikel-a", primaryCategory: null }, "beritabot.com")).toBe(
-      "https://beritabot.com/artikel-a",
-    );
-  });
-
-  it("drops the /news prefix on a category subdomain too", () => {
-    vi.stubEnv("NEXT_PUBLIC_FLAT_ARTICLE_URLS", "true");
-    vi.stubEnv("NEXT_PUBLIC_ENABLE_CATEGORY_SUBDOMAINS", "true");
-    const category = { slug: "kesehatan", subdomain: "kesehatan" };
-    expect(getArticleUrl({ slug: "artikel-a", primaryCategory: category }, "beritabot.com")).toBe(
-      "https://kesehatan.beritabot.com/artikel-a",
-    );
-  });
-});
-
 describe("getCategoryUrl / getArticleUrl", () => {
   it("resolves to the category subdomain when assigned and the feature flag is on", () => {
     vi.stubEnv("NEXT_PUBLIC_ENABLE_CATEGORY_SUBDOMAINS", "true");
     const category = { slug: "kesehatan", subdomain: "kesehatan" };
-    expect(getCategoryUrl(category, "beritabot.com")).toBe("https://kesehatan.beritabot.com");
-    expect(getArticleUrl({ slug: "artikel-a", primaryCategory: category }, "beritabot.com")).toBe(
-      "https://kesehatan.beritabot.com/news/artikel-a",
+    expect(getCategoryUrl(category, "rusdimedia.com")).toBe("https://kesehatan.rusdimedia.com");
+    expect(getArticleUrl({ slug: "artikel-a", primaryCategory: category }, "rusdimedia.com")).toBe(
+      "https://kesehatan.rusdimedia.com/artikel-a",
     );
   });
 
   it("falls back to the apex /category/:slug path when the category has no subdomain", () => {
     vi.stubEnv("NEXT_PUBLIC_ENABLE_CATEGORY_SUBDOMAINS", "true");
     const category = { slug: "kesehatan", subdomain: null };
-    expect(getCategoryUrl(category, "beritabot.com")).toBe("https://beritabot.com/category/kesehatan");
-    expect(getArticleUrl({ slug: "artikel-a", primaryCategory: category }, "beritabot.com")).toBe(
-      "https://beritabot.com/news/artikel-a",
+    expect(getCategoryUrl(category, "rusdimedia.com")).toBe("https://rusdimedia.com/category/kesehatan");
+    expect(getArticleUrl({ slug: "artikel-a", primaryCategory: category }, "rusdimedia.com")).toBe(
+      "https://rusdimedia.com/artikel-a",
     );
   });
 
@@ -115,53 +77,53 @@ describe("getCategoryUrl / getArticleUrl", () => {
     vi.stubEnv("NEXT_PUBLIC_ENABLE_CATEGORY_SUBDOMAINS", "");
     vi.stubEnv("ENABLE_CATEGORY_SUBDOMAINS", "");
     const category = { slug: "kesehatan", subdomain: "kesehatan" };
-    expect(getCategoryUrl(category, "beritabot.com")).toBe("https://beritabot.com/category/kesehatan");
+    expect(getCategoryUrl(category, "rusdimedia.com")).toBe("https://rusdimedia.com/category/kesehatan");
   });
 
-  it("falls back to the apex /news/:slug path when the article has no primary category", () => {
-    expect(getArticleUrl({ slug: "artikel-a", primaryCategory: null }, "beritabot.com")).toBe(
-      "https://beritabot.com/news/artikel-a",
+  it("falls back to the apex /:slug path when the article has no primary category", () => {
+    expect(getArticleUrl({ slug: "artikel-a", primaryCategory: null }, "rusdimedia.com")).toBe(
+      "https://rusdimedia.com/artikel-a",
     );
   });
 
   it("resolves a subcategory to a path under its parent's subdomain, not a subdomain of its own", () => {
     vi.stubEnv("NEXT_PUBLIC_ENABLE_CATEGORY_SUBDOMAINS", "true");
     const gizi = { slug: "gizi", subdomain: null, parent: { subdomain: "kesehatan" } };
-    expect(getCategoryUrl(gizi, "beritabot.com")).toBe("https://kesehatan.beritabot.com/gizi");
-    expect(getArticleUrl({ slug: "artikel-a", primaryCategory: gizi }, "beritabot.com")).toBe(
-      "https://kesehatan.beritabot.com/news/artikel-a",
+    expect(getCategoryUrl(gizi, "rusdimedia.com")).toBe("https://kesehatan.rusdimedia.com/gizi");
+    expect(getArticleUrl({ slug: "artikel-a", primaryCategory: gizi }, "rusdimedia.com")).toBe(
+      "https://kesehatan.rusdimedia.com/artikel-a",
     );
   });
 
   it("a subcategory's own subdomain (if ever assigned) still wins over its parent's", () => {
     vi.stubEnv("NEXT_PUBLIC_ENABLE_CATEGORY_SUBDOMAINS", "true");
     const gizi = { slug: "gizi", subdomain: "gizi", parent: { subdomain: "kesehatan" } };
-    expect(getCategoryUrl(gizi, "beritabot.com")).toBe("https://gizi.beritabot.com");
+    expect(getCategoryUrl(gizi, "rusdimedia.com")).toBe("https://gizi.rusdimedia.com");
   });
 
   it("falls back to the apex /category/:slug path for a subcategory whose parent has no subdomain either", () => {
     vi.stubEnv("NEXT_PUBLIC_ENABLE_CATEGORY_SUBDOMAINS", "true");
     const gizi = { slug: "gizi", subdomain: null, parent: { subdomain: null } };
-    expect(getCategoryUrl(gizi, "beritabot.com")).toBe("https://beritabot.com/category/gizi");
+    expect(getCategoryUrl(gizi, "rusdimedia.com")).toBe("https://rusdimedia.com/category/gizi");
   });
 
   it("ignores parent-subdomain inheritance when the feature flag is off", () => {
     vi.stubEnv("NEXT_PUBLIC_ENABLE_CATEGORY_SUBDOMAINS", "");
     vi.stubEnv("ENABLE_CATEGORY_SUBDOMAINS", "");
     const gizi = { slug: "gizi", subdomain: null, parent: { subdomain: "kesehatan" } };
-    expect(getCategoryUrl(gizi, "beritabot.com")).toBe("https://beritabot.com/category/gizi");
+    expect(getCategoryUrl(gizi, "rusdimedia.com")).toBe("https://rusdimedia.com/category/gizi");
   });
 });
 
 describe("getAbsoluteUrl", () => {
   it("joins a leading-slash path onto the hostname", () => {
-    expect(getAbsoluteUrl("/sitemap.xml", "kesehatan.beritabot.com")).toBe(
-      "https://kesehatan.beritabot.com/sitemap.xml",
+    expect(getAbsoluteUrl("/sitemap.xml", "kesehatan.rusdimedia.com")).toBe(
+      "https://kesehatan.rusdimedia.com/sitemap.xml",
     );
   });
 
   it("adds the missing leading slash for a bare path", () => {
-    expect(getAbsoluteUrl("sitemap.xml", "beritabot.com")).toBe("https://beritabot.com/sitemap.xml");
+    expect(getAbsoluteUrl("sitemap.xml", "rusdimedia.com")).toBe("https://rusdimedia.com/sitemap.xml");
   });
 });
 
@@ -173,24 +135,24 @@ describe("resolveHostCategory", () => {
   ];
 
   it("returns undefined for the apex hostname itself", () => {
-    expect(resolveHostCategory("beritabot.com", "beritabot.com", categories)).toBeUndefined();
+    expect(resolveHostCategory("rusdimedia.com", "rusdimedia.com", categories)).toBeUndefined();
   });
 
   it("returns undefined for an empty hostname", () => {
-    expect(resolveHostCategory("", "beritabot.com", categories)).toBeUndefined();
+    expect(resolveHostCategory("", "rusdimedia.com", categories)).toBeUndefined();
   });
 
   it("matches a known category subdomain", () => {
-    expect(resolveHostCategory("kesehatan.beritabot.com", "beritabot.com", categories)).toEqual(
+    expect(resolveHostCategory("kesehatan.rusdimedia.com", "rusdimedia.com", categories)).toEqual(
       categories[0],
     );
   });
 
   it("returns undefined for an unregistered subdomain - never invents a category", () => {
-    expect(resolveHostCategory("sembarang.beritabot.com", "beritabot.com", categories)).toBeUndefined();
+    expect(resolveHostCategory("sembarang.rusdimedia.com", "rusdimedia.com", categories)).toBeUndefined();
   });
 
   it("returns undefined for a host that isn't even a subdomain of the root domain", () => {
-    expect(resolveHostCategory("kesehatan.evil-beritabot.com", "beritabot.com", categories)).toBeUndefined();
+    expect(resolveHostCategory("kesehatan.evil-rusdimedia.com", "rusdimedia.com", categories)).toBeUndefined();
   });
 });

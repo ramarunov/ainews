@@ -63,7 +63,7 @@ export class CreateCategoryDto {
     required: false,
     example: 'world-news',
     description:
-      'Public-site subdomain (e.g. "world-news" -> world-news.beritabot.com). ' +
+      'Public-site subdomain (e.g. "world-news" -> world-news.rusdimedia.com). ' +
       'Lowercased and spaces/underscores turned into hyphens automatically; ' +
       'reserved words and uniqueness are enforced in CategoriesService.',
   })

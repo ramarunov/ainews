@@ -460,7 +460,7 @@ export class AuthService {
     }
 
     const secret = authenticator.generateSecret(32);
-    const appName = this.config.get('MFA_APP_NAME', 'AI News CMS');
+    const appName = this.config.get('MFA_APP_NAME', 'RusdiMedia CMS');
     const otpAuthUrl = authenticator.keyuri(user.email, appName, secret);
     const qrCodeUrl = await toDataURL(otpAuthUrl);
 

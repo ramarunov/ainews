@@ -120,7 +120,7 @@ function AddRedirectDialog({
             <Label htmlFor="redirect-to">To URL</Label>
             <Input
               id="redirect-to"
-              placeholder="/news/new-article-slug"
+              placeholder="/new-article-slug"
               {...register("toUrl")}
             />
             {errors.toUrl && <p className="text-sm text-destructive">{errors.toUrl.message}</p>}

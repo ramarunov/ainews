@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { notFound, permanentRedirect } from "next/navigation";
+import { permanentRedirect } from "next/navigation";
 import { getPageBySlug } from "@/lib/public-api";
-import { getRootDomain, isFlatArticleUrlsEnabled } from "@/lib/site-url";
+import { getRootDomain } from "@/lib/site-url";
 import { SITE_NAME } from "@/lib/brand";
 import { ArticleView, buildArticleMetadata } from "@/components/public/article-view";
 
@@ -26,23 +26,19 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     };
   }
 
-  // Only tried when this deployment serves articles at a bare `/{slug}`
-  // (see FLAT_ARTICLE_URLS) - otherwise a single-segment path that isn't a
-  // known static page is never an article here (that's `/news/{slug}`).
-  if (isFlatArticleUrlsEnabled()) {
-    return buildArticleMetadata(slug);
-  }
-
-  return {};
+  // A single-segment path that isn't a known static page is an article -
+  // rusdimedia.com's articles live at this bare `/{slug}` (see
+  // lib/site-url.ts), not `/news/{slug}`. ArticleView/buildArticleMetadata
+  // handle the not-found case themselves.
+  return buildArticleMetadata(slug);
 }
 
 // Admin-created static pages (About, Contact, Disclaimer, Privacy Policy,
-// ...) - apps/web/proxy.ts already checked this slug against real published
-// pages (or, in flat-article-URL mode, let it through unconditionally,
-// since it could be an article slug too) before letting the request reach
-// here, so a 404 here only happens for a race (page/article
-// deleted/unpublished between the middleware check and this render), a
-// genuinely unknown slug, or a direct hit outside the matcher.
+// ...) and articles both live at this single-segment path - proxy.ts lets
+// any such path through unconditionally (it could be either), so a 404 here
+// only happens for a genuinely unknown slug, a race (page/article
+// deleted/unpublished between the middleware check and this render), or a
+// direct hit outside the matcher.
 export default async function StaticPageOrArticle({ params }: Props) {
   const { slug } = await params;
   const page = await getPageBySlug(slug);
@@ -67,9 +63,5 @@ export default async function StaticPageOrArticle({ params }: Props) {
     );
   }
 
-  if (isFlatArticleUrlsEnabled()) {
-    return <ArticleView slug={slug} />;
-  }
-
-  notFound();
+  return <ArticleView slug={slug} />;
 }

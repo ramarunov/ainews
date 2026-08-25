@@ -229,7 +229,7 @@ export interface Category {
   metaDescription?: string | null;
   parentId?: string | null;
   sortOrder?: number;
-  // Public-site subdomain (e.g. "kesehatan" -> kesehatan.beritabot.com).
+  // Public-site subdomain (e.g. "kesehatan" -> kesehatan.rusdimedia.com).
   // Null/undefined until an admin opts this category into subdomain
   // routing — see apps/web/lib/site-url.ts.
   subdomain?: string | null;

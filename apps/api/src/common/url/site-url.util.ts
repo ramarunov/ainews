@@ -5,6 +5,12 @@
  * this existed — one hardcoded `/news/:slug`, the other `/${category.slug}/
  * :slug`) should call these instead.
  *
+ * Articles live at a bare `/{slug}` — rusdimedia.com's permalink shape,
+ * carried over from its previous WordPress site. `/news/{slug}` still
+ * exists as a permanent redirect (apps/web/app/(public)/news/[slug]/
+ * page.tsx) for any link still using it, but nothing here produces that
+ * form anymore.
+ *
  * A category without a `subdomain` assigned yet falls back to an
  * apex-relative URL — this is what keeps every *existing* category/article
  * resolving unchanged until an admin explicitly opts a category into
@@ -20,20 +26,13 @@
 import { ConfigService } from '@nestjs/config';
 
 export function getRootDomain(config: ConfigService): string {
-  return config.get<string>('ROOT_DOMAIN', 'beritabot.com');
-}
-
-// Mirrors apps/web/lib/site-url.ts's isFlatArticleUrlsEnabled() - see that
-// file's comment. Off by default so beritabot.com (and any other
-// deployment still using `/news/{slug}`) is unaffected.
-export function isFlatArticleUrlsEnabled(config: ConfigService): boolean {
-  return config.get<string>('FLAT_ARTICLE_URLS') === 'true';
+  return config.get<string>('ROOT_DOMAIN', 'rusdimedia.com');
 }
 
 // A category's own subdomain always wins; a subcategory (no subdomain of
 // its own) inherits its parent's subdomain and lives at a path underneath
 // it instead - e.g. gizi (child of kesehatan) resolves to
-// kesehatan.beritabot.com/gizi, not a subdomain of its own. This keeps a
+// kesehatan.rusdimedia.com/gizi, not a subdomain of its own. This keeps a
 // topic's link equity concentrated on one host instead of fragmenting
 // across a subdomain per subcategory. Returns null (apex) when neither the
 // category nor its parent has a subdomain assigned.
@@ -67,13 +66,9 @@ export function getArticleUrl(
     } | null;
   },
   rootDomain: string,
-  // See isFlatArticleUrlsEnabled() above - defaults to the current
-  // `/news/{slug}` shape so any not-yet-updated call site keeps its
-  // existing behavior rather than silently changing URLs.
-  flatUrls = false,
 ): string {
   const host = article.primaryCategory ? getCategoryHost(article.primaryCategory, rootDomain) : null;
-  const path = flatUrls ? `/${article.slug}` : `/news/${article.slug}`;
+  const path = `/${article.slug}`;
   if (host) return `https://${host}${path}`;
   return `https://${rootDomain}${path}`;
 }

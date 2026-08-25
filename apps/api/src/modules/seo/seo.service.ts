@@ -4,7 +4,7 @@ import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AIGatewayService } from '../ai/ai-gateway.service';
 import { AIWriterService } from '../ai/ai-writer.service';
-import { getArticleUrl, getRootDomain, isFlatArticleUrlsEnabled } from '../../common/url/site-url.util';
+import { getArticleUrl, getRootDomain } from '../../common/url/site-url.util';
 
 export interface SeoData {
   metaTitle: string;
@@ -129,14 +129,14 @@ export class SeoService {
 
   // ─── Meta Title Generation ─────────────────────────────────────────────────
 
-  // The public site's <title> tag always gets " — BeritaBot.com" (16 chars)
+  // The public site's <title> tag always gets " — RusdiMedia.com" (17 chars)
   // appended by the frontend's sitewide title template (apps/web's
   // app/(public)/layout.tsx) - a metaTitle generated all the way up to
   // Google's ~60-char display budget left no room for that suffix, so it
   // routinely got truncated in search results, losing the branding it was
   // meant to add. Reserving that width here keeps the *rendered* title
   // (this value + the suffix) inside the real budget.
-  private static readonly SITE_SUFFIX_RESERVE = 16;
+  private static readonly SITE_SUFFIX_RESERVE = 17;
   private static readonly META_TITLE_MAX =
     60 - SeoService.SITE_SUFFIX_RESERVE;
 
@@ -378,7 +378,13 @@ Return ONLY the title text, no quotes or explanation.`,
     // same as headingStructure below, rather than an external option nothing
     // ever supplied (this used to always read 0 regardless of real links,
     // including links inserted by the automatic internal-linking feature).
-    const internalLinks = (content.match(/<a\s[^>]*href=["']\/news\//gi) ?? []).length;
+    // A relative href (starts with a single `/`, not `//` - that's a
+    // protocol-relative external link) is "internal" regardless of which
+    // section of the site it points at (article, category, tag, author,
+    // ...) - articles link at a bare `/{slug}` now (see
+    // ArticleInternalLinkingService), not the `/news/{slug}` this used to
+    // match exclusively on.
+    const internalLinks = (content.match(/<a\s[^>]*href=["']\/(?!\/)/gi) ?? []).length;
     if (internalLinks >= 3) {
       details.internalLinks = 10;
     } else if (internalLinks >= 1) {
@@ -467,11 +473,10 @@ Return ONLY the title text, no quotes or explanation.`,
       orderBy: { publishedAt: 'desc' },
     });
 
-    const rootDomain = this.config ? getRootDomain(this.config) : 'beritabot.com';
-    const flatUrls = this.config ? isFlatArticleUrlsEnabled(this.config) : false;
+    const rootDomain = this.config ? getRootDomain(this.config) : 'rusdimedia.com';
 
     return articles.map((article) => ({
-      url: getArticleUrl(article, rootDomain, flatUrls),
+      url: getArticleUrl(article, rootDomain),
       lastmod: article.updatedAt.toISOString().split('T')[0],
       changefreq: 'weekly',
       priority: 0.8,
@@ -480,11 +485,11 @@ Return ONLY the title text, no quotes or explanation.`,
 
   // ─── Private Helpers ──────────────────────────────────────────────────────
 
-  // Falls back to the org's freeform siteUrl setting (`/news/:slug`) unless
-  // both a category with a subdomain assigned AND ConfigService (for
-  // ROOT_DOMAIN) are available - this keeps every existing call site (the
-  // manual admin schema/canonical endpoints, which don't have category data)
-  // working exactly as before, while the auto-generation flow in
+  // Falls back to the org's freeform siteUrl setting unless both a category
+  // with a subdomain assigned AND ConfigService (for ROOT_DOMAIN) are
+  // available - this keeps every existing call site (the manual admin
+  // schema/canonical endpoints, which don't have category data) working
+  // exactly as before, while the auto-generation flow in
   // onArticlePublished below gets a real category-subdomain canonical URL.
   // Public (not just used internally by generateSeoData) so
   // scripts/backfill-article-schema.ts can reuse this exact logic instead
@@ -495,19 +500,13 @@ Return ONLY the title text, no quotes or explanation.`,
     slug: string,
     category?: { slug: string; subdomain?: string | null; parent?: { subdomain?: string | null } | null } | null,
   ): string {
-    if (this.config) {
-      const flatUrls = isFlatArticleUrlsEnabled(this.config);
-      if (category?.subdomain || category?.parent?.subdomain) {
-        return getArticleUrl({ slug, primaryCategory: category }, getRootDomain(this.config), flatUrls);
-      }
-      // Same as getArticleUrl's own path logic, just against the caller's
-      // siteUrl instead of ROOT_DOMAIN - most articles hit this branch (no
-      // category-subdomain assigned), so this needs FLAT_ARTICLE_URLS
-      // support too, not just the subdomain branch above.
-      const path = flatUrls ? `/${slug}` : `/news/${slug}`;
-      return `${siteUrl.replace(/\/$/, '')}${path}`;
+    if (this.config && (category?.subdomain || category?.parent?.subdomain)) {
+      return getArticleUrl({ slug, primaryCategory: category }, getRootDomain(this.config));
     }
-    return `${siteUrl.replace(/\/$/, '')}/news/${slug}`;
+    // Same as getArticleUrl's own path logic, just against the caller's
+    // siteUrl instead of ROOT_DOMAIN - articles live at a bare `/{slug}`
+    // (see common/url/site-url.util.ts).
+    return `${siteUrl.replace(/\/$/, '')}/${slug}`;
   }
 
   // ─── Event Handlers ────────────────────────────────────────────────────────

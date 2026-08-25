@@ -28,7 +28,7 @@ describe('TelegramNotificationService', () => {
     config = {
       get: jest.fn((key: string, def?: any) => {
         if (key === 'PUBLIC_SITE_ORG_ID') return 'org-public';
-        if (key === 'ROOT_DOMAIN') return 'beritabot.example';
+        if (key === 'ROOT_DOMAIN') return 'rusdimedia.example';
         return def;
       }),
     };
@@ -62,15 +62,15 @@ describe('TelegramNotificationService', () => {
       expect.any(Object),
     );
     const caption = mockedAxios.post.mock.calls[0][1] as any;
-    expect(caption.caption).toContain('https://kesehatan.beritabot.example/news/big-story-breaks');
+    expect(caption.caption).toContain('https://kesehatan.rusdimedia.example/big-story-breaks');
   });
 
   it('links to the article\'s own category subdomain, not the app/dashboard host', async () => {
     await service.handleArticlePublished(publishedEvent());
 
     const payload = mockedAxios.post.mock.calls[0][1] as any;
-    expect(payload.caption).toContain('https://kesehatan.beritabot.example/news/big-story-breaks');
-    expect(payload.caption).not.toContain('app.beritabot');
+    expect(payload.caption).toContain('https://kesehatan.rusdimedia.example/big-story-breaks');
+    expect(payload.caption).not.toContain('app.rusdimedia');
   });
 
   it('falls back to the apex host when the article has no category subdomain', async () => {
@@ -82,7 +82,7 @@ describe('TelegramNotificationService', () => {
     await service.handleArticlePublished(publishedEvent());
 
     const payload = mockedAxios.post.mock.calls[0][1] as any;
-    expect(payload.caption).toContain('https://beritabot.example/news/big-story-breaks');
+    expect(payload.caption).toContain('https://rusdimedia.example/big-story-breaks');
   });
 
   it('falls back to a plain text message when sendPhoto fails (e.g. a photo URL Telegram cannot reach)', async () => {

@@ -213,7 +213,7 @@ services:
     # proxies to this container by service name, not gated on Docker health
     # status) but the container was permanently misreported unhealthy.
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "--header=Host: app.beritabot.com", "http://127.0.0.1:3100/login"]
+      test: ["CMD", "wget", "-qO-", "--header=Host: app.rusdimedia.com", "http://127.0.0.1:3100/login"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -224,7 +224,7 @@ services:
   # ─── Caddy (reverse proxy + automatic HTTPS) ───────────────────────────────
   # Custom-built (see infrastructure/caddy/Dockerfile), not the stock
   # caddy:2-alpine image, so the Cloudflare DNS module is available for the
-  # wildcard (*.beritabot.com) certificate's DNS-01 challenge - see
+  # wildcard (*.rusdimedia.com) certificate's DNS-01 challenge - see
   # docs/DEPLOY.md §7.1. CF_API_TOKEN is only read by Caddy itself (via the
   # Caddyfile's `acme_dns cloudflare {env.CF_API_TOKEN}`), not by the app,
   # but needs to reach this container's environment regardless.

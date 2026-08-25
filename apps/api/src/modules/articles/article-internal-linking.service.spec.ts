@@ -23,7 +23,6 @@ describe('ArticleInternalLinkingService', () => {
   let service: ArticleInternalLinkingService;
   let prisma: any;
   let aiWriter: any;
-  let config: any;
 
   const baseArticle = {
     id: 'article-1',
@@ -47,8 +46,7 @@ describe('ArticleInternalLinkingService', () => {
       },
     };
     aiWriter = { suggestInternalLinks: jest.fn().mockResolvedValue([]) };
-    config = { get: jest.fn().mockReturnValue(undefined) };
-    service = new ArticleInternalLinkingService(prisma, aiWriter, config);
+    service = new ArticleInternalLinkingService(prisma, aiWriter);
   });
 
   it('is a no-op when there are fewer than the minimum candidate count', async () => {
@@ -89,7 +87,7 @@ describe('ArticleInternalLinkingService', () => {
     expect(prisma.article.update).not.toHaveBeenCalled();
   });
 
-  it('inserts a verbatim match as a real anchor pointing at /news/<slug>', async () => {
+  it('inserts a verbatim match as a real anchor pointing at /<slug>', async () => {
     aiWriter.suggestInternalLinks.mockResolvedValue([
       { searchText: 'fusion energy research', targetSlug: 'fusion-basics' },
     ]);
@@ -98,14 +96,14 @@ describe('ArticleInternalLinkingService', () => {
 
     expect(prisma.article.update).toHaveBeenCalledWith({
       where: { id: 'article-1' },
-      data: { content: expect.stringContaining('<a href="/news/fusion-basics">fusion energy research</a>') },
+      data: { content: expect.stringContaining('<a href="/fusion-basics">fusion energy research</a>') },
     });
   });
 
   it('skips text that already sits inside an existing <a> tag', async () => {
     prisma.article.findFirst.mockResolvedValue({
       ...baseArticle,
-      content: '<p><a href="/news/existing">fusion energy research</a> was announced today.</p>',
+      content: '<p><a href="/existing">fusion energy research</a> was announced today.</p>',
     });
     aiWriter.suggestInternalLinks.mockResolvedValue([
       { searchText: 'fusion energy research', targetSlug: 'fusion-basics' },

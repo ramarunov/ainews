@@ -18,9 +18,9 @@ describe('SeoService', () => {
         Array.from({ length: 1000 }, () => 'word').join(' ') +
         ' widget ' +
         '</p>' +
-        '<a href="/news/related-one">related one</a>' +
-        '<a href="/news/related-two">related two</a>' +
-        '<a href="/news/related-three">related three</a>' +
+        '<a href="/related-one">related one</a>' +
+        '<a href="/related-two">related two</a>' +
+        '<a href="/related-three">related three</a>' +
         '<img src="/a.jpg" alt="a photo">' +
         '<img src="/b.jpg" alt="another photo">' +
         '<h2>Body</h2>';
@@ -80,7 +80,7 @@ describe('SeoService', () => {
 
     it('counts real internal links from the content, not an external option', () => {
       const withLinks = service.calculateSeoScore(
-        '<p>content</p>' + '<a href="/news/a">a</a>'.repeat(3),
+        '<p>content</p>' + '<a href="/a">a</a>'.repeat(3),
         'Title',
         {},
       );
@@ -129,10 +129,10 @@ describe('SeoService', () => {
       );
 
       expect(schema['@type']).toBe('NewsArticle');
-      expect(schema.url).toBe('https://example.com/news/breaking-news');
+      expect(schema.url).toBe('https://example.com/breaking-news');
       expect(schema.mainEntityOfPage).toEqual({
         '@type': 'WebPage',
-        '@id': 'https://example.com/news/breaking-news',
+        '@id': 'https://example.com/breaking-news',
       });
       expect(schema.speakable).toEqual({
         '@type': 'SpeakableSpecification',
@@ -253,12 +253,12 @@ describe('SeoService', () => {
       const schema: any = await service.generateArticleSchema(
         { title: 'Org Story', slug: 'org-story' },
         'https://example.com',
-        { name: 'BeritaBot.com', logoUrl: 'https://example.com/logo.png' },
+        { name: 'RusdiMedia.com', logoUrl: 'https://example.com/logo.png' },
       );
 
       expect(schema.publisher).toEqual({
         '@type': 'NewsMediaOrganization',
-        name: 'BeritaBot.com',
+        name: 'RusdiMedia.com',
         url: 'https://example.com/about',
         logo: { '@type': 'ImageObject', url: 'https://example.com/logo.png' },
       });
@@ -268,12 +268,12 @@ describe('SeoService', () => {
       const schema: any = await service.generateArticleSchema(
         { title: 'No Logo Story', slug: 'no-logo-story' },
         'https://example.com',
-        { name: 'BeritaBot.com' },
+        { name: 'RusdiMedia.com' },
       );
 
       expect(schema.publisher).toEqual({
         '@type': 'NewsMediaOrganization',
-        name: 'BeritaBot.com',
+        name: 'RusdiMedia.com',
         url: 'https://example.com/about',
       });
     });
@@ -298,7 +298,7 @@ describe('SeoService', () => {
 
       expect((result.schemaJsonld as any)['@type']).toBe('NewsArticle');
       expect((result.schemaJsonld as any).headline).toBe(longTitle);
-      expect(result.metaTitle).toBe(longTitle.substring(0, 44));
+      expect(result.metaTitle).toBe(longTitle.substring(0, 43));
       expect(result.metaDescription).toBe('A short excerpt.');
     });
   });

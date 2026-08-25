@@ -57,7 +57,8 @@ describe('UsersService', () => {
     });
 
     it('lowercases the email and hashes the password before creating the row', async () => {
-      prisma.user.findFirst.mockResolvedValueOnce(null); // no existing user
+      prisma.user.findFirst.mockResolvedValueOnce(null); // no existing user (email check)
+      prisma.user.findFirst.mockResolvedValueOnce(null); // slug not taken (generateSlug)
       prisma.user.create.mockResolvedValue({ id: 'new-user' });
       prisma.user.findFirst.mockResolvedValueOnce({ id: 'new-user', email: 'jane@example.com' }); // findOne() re-fetch
 
@@ -88,10 +89,11 @@ describe('UsersService', () => {
     });
 
     it('assigns the requested roles after creating the user', async () => {
-      prisma.user.findFirst.mockResolvedValueOnce(null);
+      prisma.user.findFirst.mockResolvedValueOnce(null); // no existing user (email check)
+      prisma.user.findFirst.mockResolvedValueOnce(null); // slug not taken (generateSlug)
       prisma.role.count.mockResolvedValue(2);
       prisma.user.create.mockResolvedValue({ id: 'new-user' });
-      prisma.user.findFirst.mockResolvedValueOnce({ id: 'new-user' });
+      prisma.user.findFirst.mockResolvedValueOnce({ id: 'new-user' }); // findOne() re-fetch
 
       await service.create({ ...dto, roleIds: ['role-1', 'role-2'] }, 'org-1', 'admin-1');
 
@@ -104,9 +106,10 @@ describe('UsersService', () => {
     });
 
     it('emails the new user their temporary password, without letting a send failure break creation', async () => {
-      prisma.user.findFirst.mockResolvedValueOnce(null);
+      prisma.user.findFirst.mockResolvedValueOnce(null); // no existing user (email check)
+      prisma.user.findFirst.mockResolvedValueOnce(null); // slug not taken (generateSlug)
       prisma.user.create.mockResolvedValue({ id: 'new-user', email: 'jane@example.com' });
-      prisma.user.findFirst.mockResolvedValueOnce({ id: 'new-user', email: 'jane@example.com' });
+      prisma.user.findFirst.mockResolvedValueOnce({ id: 'new-user', email: 'jane@example.com' }); // findOne() re-fetch
       emailService.send.mockRejectedValue(new Error('SMTP down'));
 
       await expect(service.create(dto, 'org-1', 'admin-1')).resolves.toBeDefined();

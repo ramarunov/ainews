@@ -1,5 +1,5 @@
 # Custom Caddy build with the Cloudflare DNS module, needed for the
-# wildcard (*.beritabot.com) certificate's DNS-01 ACME challenge - the
+# wildcard (*.rusdimedia.com) certificate's DNS-01 ACME challenge - the
 # stock caddy:2-alpine image (used for the apex/app/api hosts, which only
 # ever needed HTTP-01) doesn't include any DNS provider plugin.
 #

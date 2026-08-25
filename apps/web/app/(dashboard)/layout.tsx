@@ -18,8 +18,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "BeritaBot CMS",
-  description: "AI Native News CMS — Editorial Dashboard for BeritaBot.com",
+  title: "RusdiMedia CMS",
+  description: "AI Native News CMS — Editorial Dashboard for RusdiMedia.com",
   robots: { index: false, follow: false },
 };
 

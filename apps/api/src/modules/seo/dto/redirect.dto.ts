@@ -7,7 +7,7 @@ export class CreateRedirectDto {
   @MaxLength(1000)
   fromPath: string;
 
-  @ApiProperty({ example: '/news/new-article-slug' })
+  @ApiProperty({ example: '/new-article-slug' })
   @IsString()
   @MaxLength(2000)
   toUrl: string;
@@ -49,7 +49,7 @@ export class UpdateRedirectDto {
 }
 
 export class ResolvePathDto {
-  @ApiProperty({ example: '/news/some-path' })
+  @ApiProperty({ example: '/some-path' })
   @IsString()
   @MaxLength(1000)
   path: string;

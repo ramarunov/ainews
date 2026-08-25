@@ -13,7 +13,7 @@
 # TXT record via the Cloudflare API (CF_API_TOKEN, passed through from
 # docker-compose.prod.yml's caddy service) instead of serving an HTTP
 # challenge file, which is the only way to get a certificate that covers a
-# wildcard hostname like *.beritabot.com. Every hostname below - wildcard or
+# wildcard hostname like *.rusdimedia.com. Every hostname below - wildcard or
 # not - ends up using this DNS-01 method once it's configured, which is
 # fine; it just means cert issuance depends on the Cloudflare API being
 # reachable, same as it already depended on port 80 being reachable before.
@@ -24,12 +24,12 @@
 # Apex + dashboard host + www (redirected to the apex by apps/web/proxy.ts
 # itself, not here) all point at the same web app - proxy.ts is what
 # actually keeps the reader-facing pages on the apex domain and redirects
-# everything else to app.beritabot.com.
-beritabot.com, app.beritabot.com, www.beritabot.com {
+# everything else to app.rusdimedia.com.
+rusdimedia.com, app.rusdimedia.com, www.rusdimedia.com {
 	reverse_proxy web:3100
 }
 
-# Every category subdomain (kesehatan.beritabot.com, teknologi.beritabot.com,
+# Every category subdomain (kesehatan.rusdimedia.com, teknologi.rusdimedia.com,
 # ...) also goes to the same web app - apps/web/proxy.ts decides per-hostname
 # whether it's a known, active category (renders that category's homepage)
 # or an unrecognized subdomain (plain 404, never a fake/guessable site).
@@ -44,11 +44,11 @@ beritabot.com, app.beritabot.com, www.beritabot.com {
 # apps/web/proxy.ts) - this block existing just means a subdomain *can*
 # resolve/get a cert, not that the app treats any subdomain as a real
 # category yet.
-*.beritabot.com {
+*.rusdimedia.com {
 	reverse_proxy web:3100
 }
 
-api.beritabot.com {
+api.rusdimedia.com {
 	# Publicly-readable media objects (MinIO) served under the API host at
 	# this one path, rather than a fourth DNS record - avoids needing
 	# another subdomain just to expose the object storage bucket.

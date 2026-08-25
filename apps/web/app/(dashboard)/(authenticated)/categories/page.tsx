@@ -258,7 +258,7 @@ function CategoryFormDialog({
           {effectiveParentId && (
             <p className="text-xs text-muted-foreground">
               Subcategories don&apos;t get a subdomain of their own - this will live at a path
-              under its parent&apos;s subdomain instead (e.g. kesehatan.beritabot.com/gizi).
+              under its parent&apos;s subdomain instead (e.g. kesehatan.rusdimedia.com/gizi).
             </p>
           )}
           <div className="flex flex-col gap-2">
@@ -269,7 +269,7 @@ function CategoryFormDialog({
             <Label htmlFor="cat-meta-title">Meta title</Label>
             <Input
               id="cat-meta-title"
-              placeholder={category ? `${category.name} Terbaru Hari Ini | BeritaBot` : undefined}
+              placeholder={category ? `${category.name} Terbaru Hari Ini | RusdiMedia` : undefined}
               {...register("metaTitle")}
             />
           </div>
