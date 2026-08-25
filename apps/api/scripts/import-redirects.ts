@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { readFileSync } from 'fs';
 import { PrismaClient } from '@prisma/client';
 import { createWithOrgTx } from './lib/org-tx';
+import { parseCsv } from './lib/csv';
 
 // Bulk-imports a redirects CSV (fromPath,toUrl,statusCode,note) into the
 // Redirect table for one Organization - the dashboard's Redirects screen
@@ -37,51 +38,6 @@ interface RedirectRow {
   toUrl: string;
   statusCode: number;
   note?: string;
-}
-
-// Minimal RFC4180-ish CSV parser - handles quoted fields with embedded
-// commas/quotes/newlines (matches generate-redirect-suggestions.ts's own
-// csvEscape). Not a general-purpose CSV library since this repo has none
-// as a dependency yet and the format here is fully self-controlled.
-function parseCsv(text: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let field = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (inQuotes) {
-      if (ch === '"') {
-        if (text[i + 1] === '"') {
-          field += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        field += ch;
-      }
-    } else if (ch === '"') {
-      inQuotes = true;
-    } else if (ch === ',') {
-      row.push(field);
-      field = '';
-    } else if (ch === '\n' || ch === '\r') {
-      if (ch === '\r' && text[i + 1] === '\n') i++;
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = '';
-    } else {
-      field += ch;
-    }
-  }
-  if (field.length > 0 || row.length > 0) {
-    row.push(field);
-    rows.push(row);
-  }
-  return rows.filter((r) => r.length > 0 && !(r.length === 1 && r[0] === ''));
 }
 
 function parseRedirectCsv(text: string): RedirectRow[] {

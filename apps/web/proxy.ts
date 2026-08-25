@@ -100,6 +100,38 @@ async function getCachedCategories(): Promise<Category[]> {
 // anyway), rather than adding a native `/page/N` route just for this.
 const PAGE_NUMBER_PATTERN = /^(.*)\/page\/(\d+)\/?$/;
 
+// The prior WordPress install used slightly different archive-path prefixes
+// than this app's routes: a plural "/tags/" instead of "/tag/", the
+// Indonesian "/kategori/" instead of "/category/", and static Pages served
+// under "/pages/{slug}" instead of flat "/{slug}" - all confirmed live from
+// real Google Search Console traffic (see scripts/analyze-gsc-redirects.ts),
+// not a guess. Rather than enumerating every individual old tag/category URL
+// as a Redirect row (which could never cover a slug outside the one GSC
+// sample happened to catch), alias the whole prefix the same way trailing-
+// slash/pagination are normalized below. WordPress tag archives aren't
+// nested, but its category archives can be ("/kategori/berita/olahraga") -
+// taking the last path segment handles both uniformly, the same way
+// generate-redirect-suggestions.ts already flattens nested /category/ paths.
+const WP_PREFIX_ALIASES: Array<[string, string]> = [
+  ["/kategori/", "/category/"],
+  ["/tags/", "/tag/"],
+  ["/pages/", "/"],
+];
+
+function redirectForPrefixAlias(request: NextRequest): NextResponse | null {
+  const { pathname } = request.nextUrl;
+  for (const [from, to] of WP_PREFIX_ALIASES) {
+    if (!pathname.startsWith(from)) continue;
+    const segments = pathname.slice(from.length).split("/").filter(Boolean);
+    const lastSegment = segments[segments.length - 1];
+    if (!lastSegment) return null;
+    const redirectUrl = new URL(request.nextUrl);
+    redirectUrl.pathname = `${to}${lastSegment}`;
+    return NextResponse.redirect(redirectUrl, 301);
+  }
+  return null;
+}
+
 // WordPress permalinks always carry a trailing slash; this app's routes
 // don't expect one (no `trailingSlash` in next.config.ts) - normalize so
 // already-indexed WP URLs (`/judul-artikel/`, `/category/tekno/`) don't
@@ -133,6 +165,9 @@ function redirectForPathNormalization(request: NextRequest): NextResponse | null
     redirectUrl.pathname = pathname.replace(/\/+$/, "");
     return NextResponse.redirect(redirectUrl, 301);
   }
+
+  const aliased = redirectForPrefixAlias(request);
+  if (aliased) return aliased;
 
   return null;
 }

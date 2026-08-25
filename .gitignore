@@ -70,3 +70,15 @@ backups/
 # content/data dumps, not source, and can be tens of MB.
 *.WordPress.*.xml
 /*.xml
+
+# Google Search Console exports (scripts/analyze-gsc-redirects.ts input) -
+# real production analytics data, not source.
+/GSC/
+
+# Default output of scripts/generate-redirect-suggestions.ts and
+# scripts/analyze-gsc-redirects.ts - generated CSVs derived from real site
+# data, not source. Explicit OUTPUT_FILE/AUTO_OUTPUT_FILE/REVIEW_OUTPUT_FILE
+# paths outside the repo avoid this entirely.
+redirect-suggestions.csv
+gsc-redirects-auto.csv
+gsc-redirects-review.csv
