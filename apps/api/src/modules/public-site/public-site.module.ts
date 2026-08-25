@@ -10,9 +10,18 @@ import { CategoriesModule } from '../categories/categories.module';
 import { PagesModule } from '../pages/pages.module';
 import { SearchModule } from '../search/search.module';
 import { SettingsModule } from '../settings/settings.module';
+import { TagsModule } from '../tags/tags.module';
 
 @Module({
-  imports: [ArticlesModule, SeoModule, CategoriesModule, PagesModule, SearchModule, SettingsModule],
+  imports: [
+    ArticlesModule,
+    SeoModule,
+    CategoriesModule,
+    PagesModule,
+    SearchModule,
+    SettingsModule,
+    TagsModule,
+  ],
   providers: [PublicSiteService],
   controllers: [PublicSiteController, PublicRedirectsController, PublicContentController],
   exports: [PublicSiteService],

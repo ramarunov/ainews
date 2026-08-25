@@ -81,6 +81,20 @@ export class TagsService {
     return tag;
   }
 
+  // ─── Find By Slug ──────────────────────────────────────────────────────────
+
+  async findBySlug(slug: string, organizationId: string) {
+    const tag = await this.prisma.tag.findFirst({
+      where: { slug, organizationId, deletedAt: null },
+    });
+
+    if (!tag) {
+      throw new NotFoundException(`Tag with slug "${slug}" not found`);
+    }
+
+    return tag;
+  }
+
   // ─── Find or Create by Names (helper, no route) ───────────────────────────
 
   async findOrCreateByNames(names: string[], organizationId: string) {

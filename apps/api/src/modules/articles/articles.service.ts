@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ArticleStatus, Prisma } from '@prisma/client';
 import slugify from 'slugify';
@@ -8,6 +8,29 @@ import { withOrgTransaction } from '../../infrastructure/prisma/rls-extension';
 import { sanitizeArticleHtml } from '../../common/sanitize-html';
 import { CreateArticleDto, UpdateArticleDto, ArticleQueryDto } from './dto/article.dto';
 import { ArticleInternalLinkingService } from './article-internal-linking.service';
+
+// Mirrors apps/web/proxy.ts's PUBLIC_PATH_PREFIXES (kept in sync manually,
+// same reasoning as apps/web/lib/site-url.ts's header comment on why
+// there's no shared package between apps/web and apps/api) - these are the
+// single-segment paths the public reader site already reserves for
+// something other than an article, so a flat-URL article slug must not
+// collide with any of them.
+const RESERVED_FLAT_SLUGS = new Set([
+  'news',
+  'category',
+  'tag',
+  'author',
+  'search',
+  'feed',
+  'sitemap.xml',
+  'news-sitemap.xml',
+  'image-sitemap.xml',
+  'robots.txt',
+  'ads.txt',
+  'llms.txt',
+  'icon',
+  'apple-icon',
+]);
 
 @Injectable()
 export class ArticlesService {
@@ -592,6 +615,19 @@ export class ArticlesService {
       trim: true,
     }).substring(0, 480);
 
+    // Only meaningful when this deployment serves articles at a bare
+    // `/{slug}` path (see FLAT_ARTICLE_URLS / apps/web/lib/site-url.ts) -
+    // a migrated-site article whose slug collided with one of the public
+    // site's other single-segment paths (apps/web/proxy.ts's
+    // PUBLIC_PATH_PREFIXES) would be permanently unreachable at its own
+    // URL. Harmless to skip for the default `/news/{slug}` deployment mode,
+    // where none of these words are actually reserved.
+    if (process.env.FLAT_ARTICLE_URLS === 'true' && RESERVED_FLAT_SLUGS.has(base)) {
+      throw new BadRequestException(
+        `Slug "${base}" is reserved and can't be used for an article on this site.`,
+      );
+    }
+
     let slug = base;
     let counter = 1;
 
@@ -663,6 +699,7 @@ export class ArticlesService {
       primaryAuthor: {
         select: {
           id: true,
+          slug: true,
           displayName: true,
           avatarUrl: true,
           bio: true,

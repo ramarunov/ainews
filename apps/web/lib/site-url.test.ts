@@ -5,6 +5,7 @@ import {
   getCategoryUrl,
   getRootDomain,
   isCategorySubdomainsEnabled,
+  isFlatArticleUrlsEnabled,
   resolveHostCategory,
 } from "./site-url";
 
@@ -51,6 +52,43 @@ describe("isCategorySubdomainsEnabled", () => {
     vi.stubEnv("NEXT_PUBLIC_ENABLE_CATEGORY_SUBDOMAINS", "");
     vi.stubEnv("ENABLE_CATEGORY_SUBDOMAINS", "true");
     expect(isCategorySubdomainsEnabled()).toBe(true);
+  });
+});
+
+describe("isFlatArticleUrlsEnabled", () => {
+  it("is false by default", () => {
+    vi.stubEnv("NEXT_PUBLIC_FLAT_ARTICLE_URLS", "");
+    vi.stubEnv("FLAT_ARTICLE_URLS", "");
+    expect(isFlatArticleUrlsEnabled()).toBe(false);
+  });
+
+  it("is true when NEXT_PUBLIC_FLAT_ARTICLE_URLS=true", () => {
+    vi.stubEnv("NEXT_PUBLIC_FLAT_ARTICLE_URLS", "true");
+    expect(isFlatArticleUrlsEnabled()).toBe(true);
+  });
+
+  it("is true when the server-only FLAT_ARTICLE_URLS=true", () => {
+    vi.stubEnv("NEXT_PUBLIC_FLAT_ARTICLE_URLS", "");
+    vi.stubEnv("FLAT_ARTICLE_URLS", "true");
+    expect(isFlatArticleUrlsEnabled()).toBe(true);
+  });
+});
+
+describe("getArticleUrl with flat article URLs enabled", () => {
+  it("drops the /news prefix at the apex when there's no primary category", () => {
+    vi.stubEnv("NEXT_PUBLIC_FLAT_ARTICLE_URLS", "true");
+    expect(getArticleUrl({ slug: "artikel-a", primaryCategory: null }, "beritabot.com")).toBe(
+      "https://beritabot.com/artikel-a",
+    );
+  });
+
+  it("drops the /news prefix on a category subdomain too", () => {
+    vi.stubEnv("NEXT_PUBLIC_FLAT_ARTICLE_URLS", "true");
+    vi.stubEnv("NEXT_PUBLIC_ENABLE_CATEGORY_SUBDOMAINS", "true");
+    const category = { slug: "kesehatan", subdomain: "kesehatan" };
+    expect(getArticleUrl({ slug: "artikel-a", primaryCategory: category }, "beritabot.com")).toBe(
+      "https://kesehatan.beritabot.com/artikel-a",
+    );
   });
 });
 

@@ -1,4 +1,4 @@
-import { Controller, Get, Header, Param, ParseUUIDPipe, Query } from '@nestjs/common';
+import { Controller, Get, Header, Param, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 
@@ -41,11 +41,18 @@ export class PublicContentController {
     return this.publicSiteService.getPublishedPageBySlug(slug);
   }
 
-  @Get('authors/:id')
+  @Get('tags/:slug')
   @Header('Cache-Control', PUBLIC_CACHE_CONTROL)
-  @ApiOperation({ summary: 'Get a public author profile' })
-  getAuthor(@Param('id', ParseUUIDPipe) id: string) {
-    return this.publicSiteService.getAuthorProfile(id);
+  @ApiOperation({ summary: 'Get a tag by slug, for the public tag archive page' })
+  getTag(@Param('slug') slug: string) {
+    return this.publicSiteService.getPublicTagBySlug(slug);
+  }
+
+  @Get('authors/:idOrSlug')
+  @Header('Cache-Control', PUBLIC_CACHE_CONTROL)
+  @ApiOperation({ summary: 'Get a public author profile by slug (or id, for pre-slug links)' })
+  getAuthor(@Param('idOrSlug') idOrSlug: string) {
+    return this.publicSiteService.getAuthorProfile(idOrSlug);
   }
 
   // Deliberately not cached like the endpoints above - full-text search

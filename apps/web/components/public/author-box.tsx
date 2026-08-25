@@ -18,12 +18,12 @@ export function AuthorBox({ author }: { author: PublicAuthor }) {
       )}
       <div className="flex flex-col gap-1.5">
         <p className="text-xs font-bold tracking-wide text-muted-foreground uppercase">Ditulis oleh</p>
-        <Link href={`/author/${author.id}`} className="w-fit text-lg font-black hover:text-primary hover:underline">
+        <Link href={`/author/${author.slug ?? author.id}`} className="w-fit text-lg font-black hover:text-primary hover:underline">
           {author.displayName}
         </Link>
         {author.bio && <p className="text-sm leading-relaxed text-muted-foreground">{author.bio}</p>}
         <Link
-          href={`/author/${author.id}`}
+          href={`/author/${author.slug ?? author.id}`}
           className="mt-1 w-fit text-sm font-bold text-primary hover:underline"
         >
           Lihat semua artikel oleh {author.displayName} &rarr;

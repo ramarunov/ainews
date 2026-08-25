@@ -40,6 +40,7 @@ describe('PublicSiteService', () => {
   let pagesService: any;
   let searchService: any;
   let settingsService: any;
+  let tagsService: any;
   let config: any;
 
   beforeEach(() => {
@@ -58,6 +59,7 @@ describe('PublicSiteService', () => {
     };
     searchService = { search: jest.fn() };
     settingsService = { list: jest.fn() };
+    tagsService = { findBySlug: jest.fn() };
     config = { get: jest.fn().mockReturnValue('org-1') };
     service = new PublicSiteService(
       prisma,
@@ -66,6 +68,7 @@ describe('PublicSiteService', () => {
       pagesService,
       searchService,
       settingsService,
+      tagsService,
       config,
     );
   });
@@ -305,22 +308,41 @@ describe('PublicSiteService', () => {
     it('throws NotFoundException when the user does not exist in the public org', async () => {
       prisma.user.findFirst.mockResolvedValue(null);
 
-      await expect(service.getAuthorProfile('user-1')).rejects.toThrow(NotFoundException);
+      await expect(service.getAuthorProfile('jane-doe')).rejects.toThrow(NotFoundException);
     });
 
-    it('returns only public-safe fields for an active user in the public org', async () => {
-      const author = { id: 'user-1', displayName: 'Jane Doe', avatarUrl: null, bio: 'Reporter' };
+    it('looks up a slug by slug only (not a valid id/UUID)', async () => {
+      const author = { id: 'user-1', slug: 'jane-doe', displayName: 'Jane Doe', avatarUrl: null, bio: 'Reporter' };
       prisma.user.findFirst.mockResolvedValue(author);
 
-      const result = await service.getAuthorProfile('user-1');
+      const result = await service.getAuthorProfile('jane-doe');
 
       expect(prisma.user.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            id: 'user-1',
             organizationId: 'org-1',
             deletedAt: null,
             isActive: true,
+            OR: [{ slug: 'jane-doe' }],
+          }),
+        }),
+      );
+      expect(result).toBe(author);
+    });
+
+    it('falls back to id (not just slug) when the param looks like a UUID - for pre-slug links', async () => {
+      const author = { id: '11111111-1111-1111-1111-111111111111', slug: null, displayName: 'Jane Doe' };
+      prisma.user.findFirst.mockResolvedValue(author);
+
+      const result = await service.getAuthorProfile('11111111-1111-1111-1111-111111111111');
+
+      expect(prisma.user.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: [
+              { id: '11111111-1111-1111-1111-111111111111' },
+              { slug: '11111111-1111-1111-1111-111111111111' },
+            ],
           }),
         }),
       );

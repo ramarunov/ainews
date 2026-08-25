@@ -9,6 +9,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import slugify from 'slugify';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { EmailService } from '../../common/email/email.service';
@@ -22,6 +23,7 @@ const SAFE_SELECT: Prisma.UserSelect = {
   firstName: true,
   lastName: true,
   displayName: true,
+  slug: true,
   avatarUrl: true,
   bio: true,
   timezone: true,
@@ -70,6 +72,8 @@ export class UsersService {
 
     const rounds = this.config.get<number>('BCRYPT_ROUNDS', 12);
     const passwordHash = await bcrypt.hash(dto.password, rounds);
+    const displayName = `${dto.firstName} ${dto.lastName}`;
+    const slug = await this.generateSlug(displayName, organizationId);
 
     const user = await this.prisma.user.create({
       data: {
@@ -78,7 +82,8 @@ export class UsersService {
         passwordHash,
         firstName: dto.firstName,
         lastName: dto.lastName,
-        displayName: `${dto.firstName} ${dto.lastName}`,
+        displayName,
+        slug,
       },
     });
 
@@ -442,5 +447,32 @@ export class UsersService {
     });
 
     return { success: true, message: 'Role revoked' };
+  }
+
+  // ─── Private Helpers ──────────────────────────────────────────────────────
+
+  // Generated once at creation from the user's name, then left alone - unlike
+  // Articles/Categories/Tags' generateSlug (which regenerates on every title
+  // change), an author's public archive URL (/author/{slug}) is meant to stay
+  // permanent even if they later change their display name, since it may
+  // already be linked/indexed externally.
+  private async generateSlug(input: string, organizationId: string): Promise<string> {
+    const base = (
+      slugify(input, { lower: true, strict: true, trim: true }) || 'author'
+    ).substring(0, 200);
+
+    let slug = base;
+    let counter = 1;
+
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const existing = await this.prisma.user.findFirst({
+        where: { organizationId, slug },
+      });
+      if (!existing) break;
+      slug = `${base}-${counter++}`;
+    }
+
+    return slug;
   }
 }

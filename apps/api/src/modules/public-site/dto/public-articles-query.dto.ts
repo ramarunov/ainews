@@ -23,6 +23,11 @@ export class PublicArticlesQueryDto {
   @IsString()
   categorySlug?: string;
 
+  @ApiPropertyOptional({ description: 'Filter by tag slug, e.g. "election-2024"' })
+  @IsOptional()
+  @IsString()
+  tagSlug?: string;
+
   @ApiPropertyOptional({ description: 'Filter by author (user) id' })
   @IsOptional()
   @IsUUID()

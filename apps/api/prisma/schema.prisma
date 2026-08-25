@@ -126,6 +126,14 @@ model User {
   firstName         String    @db.VarChar(100)
   lastName          String    @db.VarChar(100)
   displayName       String?   @db.VarChar(200)
+  // Public author-archive URL slug (/author/{slug}) - nullable because
+  // existing users predate this column and aren't backfilled by the
+  // migration that adds it (see apps/api/scripts/backfill-user-slugs.ts);
+  // a null slug just means that author's page is still reachable by id
+  // only (getAuthorProfile() in public-site.service.ts falls back to id
+  // lookup). Postgres unique indexes don't treat NULLs as duplicates, so
+  // any number of not-yet-backfilled users can coexist under one org.
+  slug              String?   @db.VarChar(220)
   avatarUrl         String?   @db.VarChar(500)
   bio               String?
   timezone          String    @default("UTC") @db.VarChar(100)
@@ -161,6 +169,7 @@ model User {
   auditLogs         AuditLog[]
 
   @@unique([organizationId, email])
+  @@unique([organizationId, slug])
   @@index([organizationId])
   @@map("users")
 }

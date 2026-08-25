@@ -23,6 +23,7 @@ describe('ArticleInternalLinkingService', () => {
   let service: ArticleInternalLinkingService;
   let prisma: any;
   let aiWriter: any;
+  let config: any;
 
   const baseArticle = {
     id: 'article-1',
@@ -46,7 +47,8 @@ describe('ArticleInternalLinkingService', () => {
       },
     };
     aiWriter = { suggestInternalLinks: jest.fn().mockResolvedValue([]) };
-    service = new ArticleInternalLinkingService(prisma, aiWriter);
+    config = { get: jest.fn().mockReturnValue(undefined) };
+    service = new ArticleInternalLinkingService(prisma, aiWriter, config);
   });
 
   it('is a no-op when there are fewer than the minimum candidate count', async () => {

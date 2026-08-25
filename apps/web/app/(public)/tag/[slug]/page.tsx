@@ -1,0 +1,150 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { headers } from "next/headers";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { notFound, permanentRedirect } from "next/navigation";
+import { ArticleCard } from "@/components/public/article-card";
+import { TrendingList } from "@/components/public/trending-list";
+import { Breadcrumb } from "@/components/public/breadcrumb";
+import { getTagBySlug, getPublishedArticles } from "@/lib/public-api";
+import { getRootDomain } from "@/lib/site-url";
+import { SITE_NAME } from "@/lib/brand";
+
+interface Props {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ page?: string }>;
+}
+
+export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  const { page: pageParam } = await searchParams;
+  const page = Math.max(1, Number(pageParam) || 1);
+  const tag = await getTagBySlug(slug);
+  if (!tag) return {};
+  const tagUrl = `https://${getRootDomain()}/tag/${tag.slug}`;
+  // Same reasoning as category/[slug]/page.tsx's canonical: a distinct
+  // canonical per page, not collapsed to page 1 - each page lists genuinely
+  // different articles.
+  const canonical = page > 1 ? `${tagUrl}?page=${page}` : tagUrl;
+  return {
+    title: `#${tag.name}`,
+    description: tag.description || `Berita terbaru bertopik ${tag.name} di ${SITE_NAME}.`,
+    alternates: { canonical },
+  };
+}
+
+// Tag archives are apex-only (not per-category-subdomain) - a tag isn't
+// scoped to one category, so unlike category/[slug]/page.tsx there's no
+// per-tag subdomain to resolve, just one canonical apex URL.
+export default async function TagPage({ params, searchParams }: Props) {
+  const { slug } = await params;
+  const { page: pageParam } = await searchParams;
+  const page = Math.max(1, Number(pageParam) || 1);
+
+  const tag = await getTagBySlug(slug);
+  if (!tag) notFound();
+
+  const rootDomain = getRootDomain();
+  const requestHostname = (await headers()).get("host")?.split(":")[0] ?? "";
+  if (requestHostname && requestHostname !== rootDomain) {
+    const redirectUrl = new URL(`https://${rootDomain}/tag/${tag.slug}`);
+    if (page > 1) redirectUrl.searchParams.set("page", String(page));
+    permanentRedirect(redirectUrl.toString());
+  }
+
+  const [{ data: articles, meta }, trending] = await Promise.all([
+    getPublishedArticles({ tagSlug: slug, page, limit: 13 }),
+    getPublishedArticles({ sortBy: "viewCount", limit: 5 }),
+  ]);
+
+  const breadcrumbItems = [
+    { label: "Beranda", href: `https://${rootDomain}` },
+    { label: `#${tag.name}` },
+  ];
+
+  const tagSchema = [
+    {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      name: `#${tag.name}`,
+      description: tag.description || undefined,
+      url: `https://${rootDomain}/tag/${tag.slug}`,
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: breadcrumbItems.map((item, i) => ({
+        "@type": "ListItem",
+        position: i + 1,
+        name: item.label,
+        item: item.href ?? `https://${rootDomain}/tag/${tag.slug}`,
+      })),
+    },
+  ];
+
+  return (
+    <div className="flex flex-col gap-8">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(tagSchema) }}
+      />
+      <div className="bg-[var(--zone)] py-10">
+        <div className="mx-auto w-full max-w-6xl px-4">
+          <Breadcrumb className="mb-3" items={breadcrumbItems} />
+          <h1 className="text-4xl font-black tracking-tight uppercase md:text-5xl">
+            #{tag.name}
+          </h1>
+          {tag.description && (
+            <p className="mt-2 max-w-2xl text-muted-foreground">{tag.description}</p>
+          )}
+        </div>
+      </div>
+
+      <div className="mx-auto w-full max-w-6xl px-4 pb-16">
+        {articles.length === 0 && (
+          <p className="py-12 text-center text-muted-foreground">
+            Belum ada artikel dengan tag ini.
+          </p>
+        )}
+
+        {articles.length > 0 && (
+          <div className="grid gap-10 lg:grid-cols-[1fr_320px]">
+            <div className="flex flex-col gap-8">
+              <div className="grid gap-8 sm:grid-cols-2">
+                {articles.map((article) => (
+                  <ArticleCard key={article.id} article={article} variant="medium" />
+                ))}
+              </div>
+
+              {meta.totalPages > 1 && (
+                <div className="flex items-center justify-center gap-4 border-t pt-6">
+                  <Link
+                    href={`?page=${page - 1}`}
+                    aria-disabled={page <= 1}
+                    className={`flex items-center gap-1 text-sm font-semibold hover:text-primary ${page <= 1 ? "pointer-events-none opacity-30" : ""}`}
+                  >
+                    <ChevronLeft className="h-4 w-4" /> Sebelumnya
+                  </Link>
+                  <span className="text-sm text-muted-foreground">
+                    Halaman {page} dari {meta.totalPages}
+                  </span>
+                  <Link
+                    href={`?page=${page + 1}`}
+                    aria-disabled={page >= meta.totalPages}
+                    className={`flex items-center gap-1 text-sm font-semibold hover:text-primary ${page >= meta.totalPages ? "pointer-events-none opacity-30" : ""}`}
+                  >
+                    Selanjutnya <ChevronRight className="h-4 w-4" />
+                  </Link>
+                </div>
+              )}
+            </div>
+
+            <aside className="flex flex-col gap-6">
+              <TrendingList articles={trending.data} />
+            </aside>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -7,6 +7,7 @@ import type {
   PublicAuthor,
   PublicSearchResult,
   PublicSetting,
+  Tag,
 } from "./types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
@@ -23,6 +24,7 @@ export interface ArticleFilters {
   page?: number;
   limit?: number;
   categorySlug?: string;
+  tagSlug?: string;
   authorId?: string;
   isBreaking?: boolean;
   isFeatured?: boolean;
@@ -38,6 +40,7 @@ export async function getPublishedArticles(
   params.set("page", String(filters.page ?? 1));
   params.set("limit", String(filters.limit ?? 20));
   if (filters.categorySlug) params.set("categorySlug", filters.categorySlug);
+  if (filters.tagSlug) params.set("tagSlug", filters.tagSlug);
   if (filters.authorId) params.set("authorId", filters.authorId);
   if (filters.isBreaking !== undefined) params.set("isBreaking", String(filters.isBreaking));
   if (filters.isFeatured !== undefined) params.set("isFeatured", String(filters.isFeatured));
@@ -130,6 +133,18 @@ export async function getCategoryBySlug(slug: string): Promise<Category | null> 
 // Published static pages (About, Contact, Disclaimer, Privacy Policy, ...) -
 // list is small and mostly for footer/nav links, so full objects (not just
 // slug/title) are fine to fetch upfront the same way categories are.
+export async function getTagBySlug(slug: string): Promise<Tag | null> {
+  try {
+    const res = await fetch(`${API_URL}/public/tags/${slug}`, {
+      next: { revalidate: 300 },
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 export async function getPages(): Promise<Page[]> {
   try {
     const res = await fetch(`${API_URL}/public/pages`, {
@@ -154,9 +169,9 @@ export async function getPageBySlug(slug: string): Promise<Page | null> {
   }
 }
 
-export async function getAuthorProfile(id: string): Promise<PublicAuthor | null> {
+export async function getAuthorProfile(idOrSlug: string): Promise<PublicAuthor | null> {
   try {
-    const res = await fetch(`${API_URL}/public/authors/${id}`, {
+    const res = await fetch(`${API_URL}/public/authors/${idOrSlug}`, {
       next: { revalidate: 300 },
     });
     if (!res.ok) return null;

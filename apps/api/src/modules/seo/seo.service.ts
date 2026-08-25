@@ -4,7 +4,7 @@ import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AIGatewayService } from '../ai/ai-gateway.service';
 import { AIWriterService } from '../ai/ai-writer.service';
-import { getArticleUrl, getRootDomain } from '../../common/url/site-url.util';
+import { getArticleUrl, getRootDomain, isFlatArticleUrlsEnabled } from '../../common/url/site-url.util';
 
 export interface SeoData {
   metaTitle: string;
@@ -468,9 +468,10 @@ Return ONLY the title text, no quotes or explanation.`,
     });
 
     const rootDomain = this.config ? getRootDomain(this.config) : 'beritabot.com';
+    const flatUrls = this.config ? isFlatArticleUrlsEnabled(this.config) : false;
 
     return articles.map((article) => ({
-      url: getArticleUrl(article, rootDomain),
+      url: getArticleUrl(article, rootDomain, flatUrls),
       lastmod: article.updatedAt.toISOString().split('T')[0],
       changefreq: 'weekly',
       priority: 0.8,
@@ -494,8 +495,17 @@ Return ONLY the title text, no quotes or explanation.`,
     slug: string,
     category?: { slug: string; subdomain?: string | null; parent?: { subdomain?: string | null } | null } | null,
   ): string {
-    if ((category?.subdomain || category?.parent?.subdomain) && this.config) {
-      return getArticleUrl({ slug, primaryCategory: category }, getRootDomain(this.config));
+    if (this.config) {
+      const flatUrls = isFlatArticleUrlsEnabled(this.config);
+      if (category?.subdomain || category?.parent?.subdomain) {
+        return getArticleUrl({ slug, primaryCategory: category }, getRootDomain(this.config), flatUrls);
+      }
+      // Same as getArticleUrl's own path logic, just against the caller's
+      // siteUrl instead of ROOT_DOMAIN - most articles hit this branch (no
+      // category-subdomain assigned), so this needs FLAT_ARTICLE_URLS
+      // support too, not just the subdomain branch above.
+      const path = flatUrls ? `/${slug}` : `/news/${slug}`;
+      return `${siteUrl.replace(/\/$/, '')}${path}`;
     }
     return `${siteUrl.replace(/\/$/, '')}/news/${slug}`;
   }

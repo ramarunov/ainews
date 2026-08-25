@@ -1,18 +1,23 @@
 import Image from "next/image";
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { headers } from "next/headers";
+import { notFound, permanentRedirect } from "next/navigation";
 import { ArticleCard } from "@/components/public/article-card";
 import { getAuthorProfile, getPublishedArticles } from "@/lib/public-api";
 import { getRootDomain } from "@/lib/site-url";
 import { SITE_NAME } from "@/lib/brand";
 
 interface Props {
-  params: Promise<{ id: string }>;
+  // Named `slug` to match the current URL shape (/author/{slug}), but
+  // getAuthorProfile() also accepts a raw user id here - see
+  // UsersService.generateSlug and PublicSiteService.getAuthorProfile for why
+  // both need to keep working.
+  params: Promise<{ slug: string }>;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { id } = await params;
-  const author = await getAuthorProfile(id);
+  const { slug } = await params;
+  const author = await getAuthorProfile(slug);
   if (!author) return {};
   return {
     // No manual "— SITE_NAME" suffix - the root layout's title template
@@ -23,11 +28,24 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function AuthorPage({ params }: Props) {
-  const { id } = await params;
-  const author = await getAuthorProfile(id);
+  const { slug } = await params;
+  const author = await getAuthorProfile(slug);
   if (!author) notFound();
 
-  const { data: articles } = await getPublishedArticles({ authorId: id, limit: 20 });
+  // A pre-slug link (/author/{uuid}) or a not-yet-backfilled author's id
+  // still resolves above, but once the author has a real slug that's the
+  // one canonical URL - redirect there instead of rendering a second copy.
+  if (author.slug && author.slug !== slug) {
+    const rootDomain = getRootDomain();
+    const requestHostname = (await headers()).get("host")?.split(":")[0] ?? "";
+    if (!requestHostname || requestHostname === rootDomain) {
+      permanentRedirect(`/author/${author.slug}`);
+    }
+  }
+
+  const { data: articles } = await getPublishedArticles({ authorId: author.id, limit: 20 });
+
+  const authorUrl = `https://${getRootDomain()}/author/${author.slug ?? author.id}`;
 
   // A dereferenceable Person entity (not just a bare name string on each
   // article's NewsArticle.author) is what Google's E-E-A-T guidance
@@ -39,7 +57,7 @@ export default async function AuthorPage({ params }: Props) {
     name: author.displayName,
     description: author.bio || undefined,
     image: author.avatarUrl || undefined,
-    url: `https://${getRootDomain()}/author/${id}`,
+    url: authorUrl,
   };
 
   return (

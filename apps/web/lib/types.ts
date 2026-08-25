@@ -388,6 +388,7 @@ export interface PublicArticleSeo {
 
 export interface PublicAuthor {
   id: string;
+  slug?: string | null;
   displayName?: string | null;
   firstName?: string;
   lastName?: string;

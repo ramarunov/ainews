@@ -7,7 +7,7 @@ import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { SystemSettingsService } from '../system-settings/system-settings.service';
 import { TELEGRAM_SETTING_KEYS } from '../system-settings/system-settings.constants';
 import { getPublicSiteOrgId } from '../../common/config/public-site-org.util';
-import { getArticleUrl, getRootDomain } from '../../common/url/site-url.util';
+import { getArticleUrl, getRootDomain, isFlatArticleUrlsEnabled } from '../../common/url/site-url.util';
 
 interface ArticlePublishedEvent {
   articleId: string;
@@ -94,7 +94,7 @@ export class TelegramNotificationService {
     // canonical URL (its category's own subdomain, e.g.
     // kesehatan.beritabot.com/news/:slug). getArticleUrl is the same helper
     // every public-facing link already goes through.
-    const link = getArticleUrl(article, getRootDomain(this.config));
+    const link = getArticleUrl(article, getRootDomain(this.config), isFlatArticleUrlsEnabled(this.config));
     const caption = [
       `<b>${escapeHtml(article.title)}</b>`,
       article.excerpt ? escapeHtml(article.excerpt) : null,

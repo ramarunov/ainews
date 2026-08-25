@@ -1,9 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { ArticleStatus } from '@prisma/client';
 import { JSDOM } from 'jsdom';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { sanitizeArticleHtml } from '../../common/sanitize-html';
+import { isFlatArticleUrlsEnabled } from '../../common/url/site-url.util';
 import { AIWriterService } from '../ai/ai-writer.service';
 
 const MAX_CANDIDATES = 10;
@@ -26,6 +28,7 @@ export class ArticleInternalLinkingService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aiWriter: AIWriterService,
+    private readonly config: ConfigService,
   ) {}
 
   async insertLinks(articleId: string, organizationId: string): Promise<void> {
@@ -124,7 +127,8 @@ export class ArticleInternalLinkingService {
     const after = fullText.slice(index + searchText.length);
 
     const anchor = document.createElement('a');
-    anchor.setAttribute('href', `/news/${targetSlug}`);
+    const href = isFlatArticleUrlsEnabled(this.config) ? `/${targetSlug}` : `/news/${targetSlug}`;
+    anchor.setAttribute('href', href);
     anchor.textContent = searchText;
 
     const parent = textNode.parentNode;

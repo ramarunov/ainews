@@ -23,6 +23,13 @@ export function getRootDomain(config: ConfigService): string {
   return config.get<string>('ROOT_DOMAIN', 'beritabot.com');
 }
 
+// Mirrors apps/web/lib/site-url.ts's isFlatArticleUrlsEnabled() - see that
+// file's comment. Off by default so beritabot.com (and any other
+// deployment still using `/news/{slug}`) is unaffected.
+export function isFlatArticleUrlsEnabled(config: ConfigService): boolean {
+  return config.get<string>('FLAT_ARTICLE_URLS') === 'true';
+}
+
 // A category's own subdomain always wins; a subcategory (no subdomain of
 // its own) inherits its parent's subdomain and lives at a path underneath
 // it instead - e.g. gizi (child of kesehatan) resolves to
@@ -60,10 +67,15 @@ export function getArticleUrl(
     } | null;
   },
   rootDomain: string,
+  // See isFlatArticleUrlsEnabled() above - defaults to the current
+  // `/news/{slug}` shape so any not-yet-updated call site keeps its
+  // existing behavior rather than silently changing URLs.
+  flatUrls = false,
 ): string {
   const host = article.primaryCategory ? getCategoryHost(article.primaryCategory, rootDomain) : null;
-  if (host) return `https://${host}/news/${article.slug}`;
-  return `https://${rootDomain}/news/${article.slug}`;
+  const path = flatUrls ? `/${article.slug}` : `/news/${article.slug}`;
+  if (host) return `https://${host}${path}`;
+  return `https://${rootDomain}${path}`;
 }
 
 export function getAbsoluteUrl(path: string, hostname: string): string {

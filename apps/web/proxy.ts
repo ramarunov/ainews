@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getCategories, getPages } from "@/lib/public-api";
-import { getRootDomain, resolveHostCategory } from "@/lib/site-url";
+import { getRootDomain, isFlatArticleUrlsEnabled, resolveHostCategory } from "@/lib/site-url";
 import type { Category } from "@/lib/types";
 
 // Route groups like (public)/(dashboard) don't appear in the URL, so this
@@ -19,6 +19,7 @@ import type { Category } from "@/lib/types";
 const PUBLIC_PATH_PREFIXES = [
   "/author",
   "/category",
+  "/tag",
   "/news",
   "/search",
   "/feed",
@@ -44,6 +45,13 @@ async function isPublicPath(pathname: string): Promise<boolean> {
   }
   const match = SINGLE_SEGMENT_PATTERN.exec(pathname);
   if (!match) return false;
+  // In flat-article-URL mode (see lib/site-url.ts), a single-segment path
+  // can be either a static Page or an Article slug - apps/web/app/(public)/
+  // [slug]/page.tsx resolves which and 404s itself if neither matches, so
+  // there's no fixed slug list to check against here the way there is for
+  // Pages alone (an org could have thousands of article slugs; caching them
+  // all just to answer "is this public" would cost more than it saves).
+  if (isFlatArticleUrlsEnabled()) return true;
   const pageSlugs = await getCachedPageSlugs();
   return pageSlugs.has(match[1]);
 }
@@ -88,6 +96,41 @@ async function getCachedPageSlugs(): Promise<Set<string>> {
   }
 }
 
+// WordPress's own archive pagination (`/page/2/`, `/category/tekno/page/2/`)
+// has no equivalent route here - this app paginates with `?page=N` (see
+// category/[slug]/page.tsx) - so a migrated site's already-indexed page-2+
+// URLs would otherwise 404. A plain 301 to the query-string equivalent is
+// an acceptable trade-off (Google mostly only indexes page 1 of an archive
+// anyway), rather than adding a native `/page/N` route just for this.
+const PAGE_NUMBER_PATTERN = /^(.*)\/page\/(\d+)\/?$/;
+
+// WordPress permalinks always carry a trailing slash; this app's routes
+// don't expect one (no `trailingSlash` in next.config.ts) - normalize so
+// already-indexed WP URLs (`/judul-artikel/`, `/category/tekno/`) don't
+// 404 post-migration. Scoped to public-site hosts only (see call site) -
+// the dashboard/app host's own routes are unrelated to any WP migration.
+function redirectForPathNormalization(request: NextRequest): NextResponse | null {
+  const { pathname } = request.nextUrl;
+
+  const pageMatch = PAGE_NUMBER_PATTERN.exec(pathname);
+  if (pageMatch) {
+    const [, base, pageNum] = pageMatch;
+    const redirectUrl = new URL(request.nextUrl);
+    redirectUrl.pathname = base || "/";
+    redirectUrl.search = "";
+    redirectUrl.searchParams.set("page", pageNum);
+    return NextResponse.redirect(redirectUrl, 301);
+  }
+
+  if (pathname.length > 1 && pathname.endsWith("/")) {
+    const redirectUrl = new URL(request.nextUrl);
+    redirectUrl.pathname = pathname.replace(/\/+$/, "");
+    return NextResponse.redirect(redirectUrl, 301);
+  }
+
+  return null;
+}
+
 function redirectToApp(request: NextRequest, appUrl: URL) {
   const redirectUrl = new URL(request.nextUrl);
   redirectUrl.hostname = appUrl.hostname;
@@ -120,6 +163,14 @@ export async function proxy(request: NextRequest) {
     redirectUrl.protocol = "https:";
     redirectUrl.port = "";
     return NextResponse.redirect(redirectUrl, 308);
+  }
+
+  // Trailing-slash/pagination normalization only applies to public-site
+  // hosts (apex or a category subdomain) - the dashboard host's own routes
+  // (e.g. a legitimately trailing-slash-free /login) are unrelated.
+  if (hostname !== appUrl.hostname) {
+    const normalized = redirectForPathNormalization(request);
+    if (normalized) return normalized;
   }
 
   // Kill switch for the whole category-subdomain feature - while this is

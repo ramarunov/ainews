@@ -9,7 +9,10 @@ import { CategoriesService } from '../categories/categories.service';
 import { PagesService } from '../pages/pages.service';
 import { SearchService } from '../search/search.service';
 import { SettingsService } from '../settings/settings.service';
+import { TagsService } from '../tags/tags.service';
 import { PublicArticlesQueryDto } from './dto/public-articles-query.dto';
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 @Injectable()
 export class PublicSiteService {
@@ -20,6 +23,7 @@ export class PublicSiteService {
     private readonly pagesService: PagesService,
     private readonly searchService: SearchService,
     private readonly settingsService: SettingsService,
+    private readonly tagsService: TagsService,
     private readonly config: ConfigService,
   ) {}
 
@@ -53,6 +57,12 @@ export class PublicSiteService {
       }
     }
 
+    let tagId: string | undefined;
+    if (query.tagSlug) {
+      const tag = await this.tagsService.findBySlug(query.tagSlug, organizationId);
+      tagId = tag.id;
+    }
+
     const requestedLimit = query.limit ?? 20;
     // Fetch one extra when excluding an id (e.g. "related articles" for the
     // article currently being read) so filtering it out still leaves a full
@@ -64,6 +74,7 @@ export class PublicSiteService {
         status: ArticleStatus.PUBLISHED,
         categoryId,
         primaryCategoryIds,
+        tagId,
         authorId: query.authorId,
         isBreaking: query.isBreaking,
         isFeatured: query.isFeatured,
@@ -154,10 +165,25 @@ export class PublicSiteService {
     return page;
   }
 
-  async getAuthorProfile(id: string) {
+  async getPublicTagBySlug(slug: string) {
+    return this.tagsService.findBySlug(slug, this.getPublicOrgId());
+  }
+
+  // Accepts either the author's slug (/author/{slug}, the current URL shape
+  // - see UsersService.generateSlug) or their raw id (the URL shape before
+  // slugs existed, or for a user created before slug backfill ran - see
+  // apps/api/scripts/backfill-user-slugs.ts) so neither an old link nor a
+  // not-yet-backfilled author's URL breaks.
+  async getAuthorProfile(idOrSlug: string) {
+    const isUuid = UUID_PATTERN.test(idOrSlug);
     const author = await this.prisma.user.findFirst({
-      where: { id, organizationId: this.getPublicOrgId(), deletedAt: null, isActive: true },
-      select: { id: true, displayName: true, firstName: true, lastName: true, avatarUrl: true, bio: true },
+      where: {
+        organizationId: this.getPublicOrgId(),
+        deletedAt: null,
+        isActive: true,
+        OR: isUuid ? [{ id: idOrSlug }, { slug: idOrSlug }] : [{ slug: idOrSlug }],
+      },
+      select: { id: true, slug: true, displayName: true, firstName: true, lastName: true, avatarUrl: true, bio: true },
     });
 
     if (!author) {

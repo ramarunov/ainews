@@ -46,6 +46,21 @@ export function isCategorySubdomainsEnabled(): boolean {
   return false;
 }
 
+// Per-deployment switch for a migrated site (e.g. a WordPress site with
+// `/%postname%/` permalinks) that needs articles at a bare `/{slug}` instead
+// of this app's default `/news/{slug}` - see apps/web/app/(public)/[slug]/
+// page.tsx and proxy.ts's isPublicPath. Off by default so beritabot.com
+// (and any other deployment still using `/news/{slug}`) is unaffected.
+// Same NEXT_PUBLIC_-then-plain fallback as isCategorySubdomainsEnabled,
+// for the same client/server reason.
+export function isFlatArticleUrlsEnabled(): boolean {
+  if (process.env.NEXT_PUBLIC_FLAT_ARTICLE_URLS === "true") return true;
+  if (typeof process !== "undefined" && process.env.FLAT_ARTICLE_URLS === "true") {
+    return true;
+  }
+  return false;
+}
+
 // A category's own subdomain always wins; a subcategory (no subdomain of
 // its own) inherits its parent's subdomain and lives at a path underneath
 // it instead - e.g. gizi (child of kesehatan) resolves to
@@ -86,8 +101,9 @@ export function getArticleUrl(
   rootDomain: string = getRootDomain(),
 ): string {
   const host = article.primaryCategory ? getCategoryHost(article.primaryCategory, rootDomain) : null;
-  if (host) return `https://${host}/news/${article.slug}`;
-  return `https://${rootDomain}/news/${article.slug}`;
+  const path = isFlatArticleUrlsEnabled() ? `/${article.slug}` : `/news/${article.slug}`;
+  if (host) return `https://${host}${path}`;
+  return `https://${rootDomain}${path}`;
 }
 
 export function getAbsoluteUrl(path: string, hostname: string): string {

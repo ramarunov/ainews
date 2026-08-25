@@ -35,6 +35,11 @@ export const configValidationSchema = Joi.object({
   // URLs — see common/url/site-url.util.ts. Also the suffix CORS_ORIGINS'
   // wildcard check matches *.{ROOT_DOMAIN} against.
   ROOT_DOMAIN: Joi.string().default('beritabot.com'),
+  // Serves articles at a bare `/{slug}` instead of `/news/{slug}` - see
+  // common/url/site-url.util.ts's isFlatArticleUrlsEnabled(). Only meant
+  // for a deployment migrated from a site with `/%postname%/`-style
+  // permalinks that needs its existing URLs preserved; off by default.
+  FLAT_ARTICLE_URLS: Joi.string().valid('true', 'false').default('false'),
 
   DATABASE_URL: Joi.string().required(),
 
