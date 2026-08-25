@@ -45,6 +45,12 @@ import { sanitizeArticleHtml } from '../src/common/sanitize-html';
 //                        test run - default unlimited.
 //   DEFAULT_AUTHOR_EMAIL fallback email domain-part for a WP author with no
 //                        <wp:author_email> - default "imported.invalid".
+//
+// Safe to interrupt and re-run: every post/page is its own short-lived
+// transaction (see withOrgTx below), not one transaction for the whole
+// import - a crash, Ctrl-C, or Prisma's interactive-transaction timeout
+// only loses the one item in flight, not everything already committed, and
+// re-running just skips what's already there (see the `existing` checks).
 const prisma = new PrismaClient();
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -56,6 +62,26 @@ const RESERVED_FLAT_SLUGS = new Set([
   'sitemap.xml', 'news-sitemap.xml', 'image-sitemap.xml',
   'robots.txt', 'ads.txt', 'llms.txt', 'icon', 'apple-icon',
 ]);
+
+// `articles`/`categories`/`tags`/`media_files` have FORCE ROW LEVEL
+// SECURITY (see prisma/migrations/20260712120000_row_level_security) - any
+// write/read through those tables needs `app.current_org_id` set for the
+// duration of the transaction it runs in (mirrors
+// infrastructure/prisma/rls-extension.ts's own pattern, which this
+// standalone script doesn't use directly since it isn't running inside
+// Nest DI). Deliberately ONE SHORT transaction per call, not one big
+// transaction wrapping the whole import - see the file-level comment above
+// for why. `users`/`pages`/`article_seo` are NOT RLS-protected; those use
+// the plain `prisma` client with no wrapper.
+async function withOrgTx<T>(organizationId: string, fn: (tx: any) => Promise<T>): Promise<T> {
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRawUnsafe(`SET LOCAL app.current_org_id = '${organizationId}'`);
+      return fn(tx);
+    },
+    { timeout: 30_000 },
+  );
+}
 
 interface WpAuthor {
   login: string;
@@ -241,14 +267,17 @@ function getPublicUrl(key: string): string {
 // worth wiring up ConfigService/StorageService DI for this one call).
 // Returns null (leaving the caller to fall back to the original URL) on any
 // failure - a single missing/unreachable old image must not abort the whole
-// import. Takes `tx` (not the module-level `prisma`) so the `mediaFile.create`
-// runs inside the same RLS-scoped transaction as everything else (see
-// main()'s `SET LOCAL app.current_org_id`) - `media_files` has
-// FORCE ROW LEVEL SECURITY, so writing through the plain client fails closed.
+// import.
+//
+// The network download + S3 upload deliberately happen OUTSIDE any DB
+// transaction (they can each take seconds, and thousands of them across a
+// full import would hold a transaction open for hours otherwise - this is
+// exactly what caused the P2028 "transaction expired" failure the first
+// version of this script hit against the real export). Only the final
+// `mediaFile.create` needs the RLS-scoped transaction, via withOrgTx.
 const mediaUrlCache = new Map<string, { id: string; url: string } | null>();
 
 async function rehostImage(
-  tx: any,
   sourceUrl: string,
   organizationId: string,
   uploadedBy: string,
@@ -284,20 +313,22 @@ async function rehostImage(
     );
     const url = getPublicUrl(key);
 
-    const media = await tx.mediaFile.create({
-      data: {
-        organizationId,
-        uploadedBy,
-        filename: key.split('/').pop()!,
-        originalName: sourceUrl.split('/').pop() || 'imported-image',
-        mimeType: detected.mime,
-        fileSize: BigInt(buffer.byteLength),
-        storageKey: key,
-        storageBucket: process.env.S3_BUCKET ?? 'ainews-media',
-        publicUrl: url,
-        folder: '/imported',
-      },
-    });
+    const media: any = await withOrgTx(organizationId, (tx: any) =>
+      tx.mediaFile.create({
+        data: {
+          organizationId,
+          uploadedBy,
+          filename: key.split('/').pop()!,
+          originalName: sourceUrl.split('/').pop() || 'imported-image',
+          mimeType: detected.mime,
+          fileSize: BigInt(buffer.byteLength),
+          storageKey: key,
+          storageBucket: process.env.S3_BUCKET ?? 'ainews-media',
+          publicUrl: url,
+          folder: '/imported',
+        },
+      }),
+    );
 
     const result = { id: media.id, url };
     mediaUrlCache.set(sourceUrl, result);
@@ -313,7 +344,6 @@ async function rehostImage(
 // WordPress site's /wp-content/uploads/ path to the newly re-hosted URL,
 // downloading each distinct image at most once (rehostImage caches by URL).
 async function rehostInlineImages(
-  tx: any,
   html: string,
   organizationId: string,
   uploadedBy: string,
@@ -324,7 +354,7 @@ async function rehostInlineImages(
   for (const img of imgs) {
     const src = $(img).attr('src');
     if (!src) continue;
-    const rehosted = await rehostImage(tx, src, organizationId, uploadedBy, dryRun);
+    const rehosted = await rehostImage(src, organizationId, uploadedBy, dryRun);
     if (rehosted) $(img).attr('src', rehosted.url);
   }
   return $.html();
@@ -333,7 +363,7 @@ async function rehostInlineImages(
 // ─── Slug helpers ───────────────────────────────────────────────────────────
 
 async function ensureUniqueSlug(
-  tx: any,
+  client: any,
   table: 'article' | 'user' | 'category' | 'tag',
   organizationId: string,
   desiredSlug: string,
@@ -346,7 +376,7 @@ async function ensureUniqueSlug(
   let counter = 1;
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const existing = await tx[table].findFirst({ where: { organizationId, slug } });
+    const existing = await client[table].findFirst({ where: { organizationId, slug } });
     if (!existing) break;
     slug = `${base}-${counter++}`;
   }
@@ -420,278 +450,292 @@ async function main() {
     failed: 0,
   };
 
-  await prisma.$transaction(
-    async (tx) => {
-      await tx.$executeRawUnsafe(`SET LOCAL app.current_org_id = '${org.id}'`);
+  // ── Authors ── `users` isn't RLS-protected, so the plain client is fine.
+  const authorIdByLogin = new Map<string, string>();
+  for (const author of authors) {
+    const email = (author.email || `${author.login}@${fallbackEmailDomain}`).toLowerCase();
+    let user = await prisma.user.findFirst({ where: { organizationId: org.id, email } });
 
-      // ── Authors ──────────────────────────────────────────────────────────
-      const authorIdByLogin = new Map<string, string>();
-      for (const author of authors) {
-        const email = (author.email || `${author.login}@${fallbackEmailDomain}`).toLowerCase();
-        let user = await tx.user.findFirst({ where: { organizationId: org.id, email } });
+    if (!user) {
+      let firstName = author.firstName;
+      let lastName = author.lastName;
+      if (!firstName && !lastName) {
+        const parts = (author.displayName || author.login).trim().split(/\s+/);
+        firstName = parts[0] || author.login;
+        lastName = parts.slice(1).join(' ');
+      }
+      const displayName = author.displayName || `${firstName} ${lastName}`.trim();
+      const slug = await ensureUniqueSlug(prisma, 'user', org.id, displayName || author.login);
 
-        if (!user) {
-          let firstName = author.firstName;
-          let lastName = author.lastName;
-          if (!firstName && !lastName) {
-            const parts = (author.displayName || author.login).trim().split(/\s+/);
-            firstName = parts[0] || author.login;
-            lastName = parts.slice(1).join(' ');
+      if (!dryRun) {
+        user = await prisma.user.create({
+          data: {
+            organizationId: org.id,
+            email,
+            firstName: firstName || author.login,
+            lastName: lastName || '',
+            displayName,
+            slug,
+            isActive: true,
+            // No passwordHash - an imported author can't log in until an
+            // admin invites them for real (matches an OAuth-only account's
+            // shape, already supported elsewhere).
+          },
+        });
+      }
+      stats.usersCreated++;
+    } else {
+      stats.usersMatched++;
+    }
+    if (user) authorIdByLogin.set(author.login, user.id);
+  }
+
+  // ── Categories & Tags ── RLS-protected, but pure DB work (no network) -
+  // one transaction each is fine, they finish in well under its timeout
+  // even at several thousand rows.
+  const categoryIdByNicename = new Map<string, string>();
+  const tagIdBySlug = new Map<string, string>();
+
+  await withOrgTx(org.id, async (tx) => {
+    const remaining = [...categories];
+    let guard = remaining.length + 1;
+    while (remaining.length > 0 && guard-- > 0) {
+      const idx = remaining.findIndex(
+        (c) => !c.parentNicename || categoryIdByNicename.has(c.parentNicename),
+      );
+      if (idx === -1) break; // orphaned parent reference - import as top-level below
+      const [cat] = remaining.splice(idx, 1);
+      const parentId = cat.parentNicename ? categoryIdByNicename.get(cat.parentNicename) : undefined;
+
+      if (!dryRun) {
+        const category = await tx.category.upsert({
+          where: { organizationId_slug: { organizationId: org.id, slug: cat.nicename } },
+          update: { name: cat.name, parentId },
+          create: { organizationId: org.id, slug: cat.nicename, name: cat.name, parentId },
+        });
+        categoryIdByNicename.set(cat.nicename, category.id);
+      } else {
+        categoryIdByNicename.set(cat.nicename, `dry-run:${cat.nicename}`);
+      }
+      stats.categoriesUpserted++;
+    }
+    // Anything left has an unresolvable parent chain - import flat.
+    for (const cat of remaining) {
+      if (!dryRun) {
+        const category = await tx.category.upsert({
+          where: { organizationId_slug: { organizationId: org.id, slug: cat.nicename } },
+          update: { name: cat.name },
+          create: { organizationId: org.id, slug: cat.nicename, name: cat.name },
+        });
+        categoryIdByNicename.set(cat.nicename, category.id);
+      } else {
+        categoryIdByNicename.set(cat.nicename, `dry-run:${cat.nicename}`);
+      }
+      stats.categoriesUpserted++;
+    }
+  });
+
+  await withOrgTx(org.id, async (tx) => {
+    for (const tag of tags) {
+      if (!dryRun) {
+        const created = await tx.tag.upsert({
+          where: { organizationId_slug: { organizationId: org.id, slug: tag.slug } },
+          update: { name: tag.name },
+          create: { organizationId: org.id, slug: tag.slug, name: tag.name },
+        });
+        tagIdBySlug.set(tag.slug, created.id);
+      } else {
+        tagIdBySlug.set(tag.slug, `dry-run:${tag.slug}`);
+      }
+      stats.tagsUpserted++;
+    }
+  });
+
+  // ── Posts & Pages ── one item at a time: a cheap existing-check first (so
+  // a re-run skips already-imported items without re-downloading their
+  // images), then the slow media work OUTSIDE any transaction, then a
+  // short transaction for the final write.
+  let imported = 0;
+  for (const post of posts) {
+    if (imported >= limit) break;
+
+    if (post.status !== 'publish') {
+      stats.articlesSkippedNotPublished++;
+      continue;
+    }
+    if (!post.slug) {
+      console.warn(`  [skip] post ${post.postId} ("${post.title}") has no wp:post_name slug`);
+      stats.failed++;
+      continue;
+    }
+    if (looksLikeUnrenderedContent(post.content)) {
+      console.warn(
+        `  [skip] "${post.slug}" looks like unrendered page-builder shortcode or empty content, not real prose - not imported`,
+      );
+      stats.skippedUnrenderedContent++;
+      continue;
+    }
+
+    try {
+      if (post.postType === 'page') {
+        // `pages` isn't RLS-protected - plain client, no transaction needed
+        // for a single insert with no related rows.
+        const existing = await prisma.page.findFirst({
+          where: { organizationId: org.id, slug: post.slug },
+        });
+        if (existing) {
+          stats.pagesSkippedExisting++;
+          continue;
+        }
+
+        const content = downloadMedia
+          ? await rehostInlineImages(post.content, org.id, systemUser.id, dryRun)
+          : post.content;
+
+        if (!dryRun) {
+          await prisma.page.create({
+            data: {
+              organizationId: org.id,
+              slug: post.slug,
+              title: post.title,
+              content: sanitizeArticleHtml(content),
+              metaTitle: post.metaTitle ?? undefined,
+              metaDescription: post.metaDescription ?? undefined,
+              isPublished: true,
+            },
+          });
+        }
+        stats.pagesCreated++;
+        imported++;
+        continue;
+      }
+
+      // post.postType === 'post'
+      let slug = post.slug;
+      if (RESERVED_FLAT_SLUGS.has(slug)) {
+        console.warn(`  [warn] "${slug}" collides with a reserved path - imported as "${slug}-imported"`);
+        slug = `${slug}-imported`;
+      }
+
+      const existing = await withOrgTx(org.id, (tx) =>
+        tx.article.findFirst({ where: { organizationId: org.id, slug } }),
+      );
+      if (existing) {
+        stats.articlesSkippedExisting++;
+        continue;
+      }
+
+      const authorId = authorIdByLogin.get(post.creatorLogin) ?? systemUser.id;
+
+      const primaryCategoryNicename = post.categoryNicenames[0];
+      const primaryCategoryId = primaryCategoryNicename
+        ? categoryIdByNicename.get(primaryCategoryNicename)
+        : undefined;
+
+      // Slow network work - deliberately outside any transaction.
+      let featuredImageId: string | undefined;
+      let featuredImageUrl: string | undefined;
+      const thumbnailUrl = post.thumbnailAttachmentId
+        ? attachmentUrls.get(post.thumbnailAttachmentId)
+        : undefined;
+      if (thumbnailUrl) {
+        if (downloadMedia) {
+          const rehosted = await rehostImage(thumbnailUrl, org.id, systemUser.id, dryRun);
+          if (rehosted) {
+            featuredImageId = rehosted.id;
+            featuredImageUrl = rehosted.url;
           }
-          const displayName = author.displayName || `${firstName} ${lastName}`.trim();
-          const slug = await ensureUniqueSlug(tx, 'user', org.id, displayName || author.login);
-
-          if (!dryRun) {
-            user = await tx.user.create({
-              data: {
-                organizationId: org.id,
-                email,
-                firstName: firstName || author.login,
-                lastName: lastName || '',
-                displayName,
-                slug,
-                isActive: true,
-                // No passwordHash - an imported author can't log in until an
-                // admin invites them for real (matches an OAuth-only
-                // account's shape, already supported elsewhere).
-              },
-            });
-          }
-          stats.usersCreated++;
         } else {
-          stats.usersMatched++;
+          featuredImageUrl = thumbnailUrl;
         }
-        if (user) authorIdByLogin.set(author.login, user.id);
       }
 
-      // ── Categories (parents before children) ────────────────────────────
-      const categoryIdByNicename = new Map<string, string>();
-      const remaining = [...categories];
-      let guard = remaining.length + 1;
-      while (remaining.length > 0 && guard-- > 0) {
-        const idx = remaining.findIndex(
-          (c) => !c.parentNicename || categoryIdByNicename.has(c.parentNicename),
-        );
-        if (idx === -1) break; // orphaned parent reference - import as top-level below
-        const [cat] = remaining.splice(idx, 1);
-        const parentId = cat.parentNicename ? categoryIdByNicename.get(cat.parentNicename) : undefined;
+      const content = downloadMedia
+        ? await rehostInlineImages(post.content, org.id, systemUser.id, dryRun)
+        : post.content;
+      const sanitizedContent = sanitizeArticleHtml(content);
+      const wordCount = sanitizedContent
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .split(' ')
+        .filter(Boolean).length;
+      const readingTime = Math.ceil(wordCount / 200);
+      const excerpt = sanitizeArticleHtml(post.excerpt).replace(/<[^>]+>/g, '').trim() || undefined;
 
-        if (!dryRun) {
-          const category = await tx.category.upsert({
-            where: { organizationId_slug: { organizationId: org.id, slug: cat.nicename } },
-            update: { name: cat.name, parentId },
-            create: { organizationId: org.id, slug: cat.nicename, name: cat.name, parentId },
-          });
-          categoryIdByNicename.set(cat.nicename, category.id);
-        } else {
-          categoryIdByNicename.set(cat.nicename, `dry-run:${cat.nicename}`);
-        }
-        stats.categoriesUpserted++;
-      }
-      // Anything left has an unresolvable parent chain - import flat.
-      for (const cat of remaining) {
-        if (!dryRun) {
-          const category = await tx.category.upsert({
-            where: { organizationId_slug: { organizationId: org.id, slug: cat.nicename } },
-            update: { name: cat.name },
-            create: { organizationId: org.id, slug: cat.nicename, name: cat.name },
-          });
-          categoryIdByNicename.set(cat.nicename, category.id);
-        } else {
-          categoryIdByNicename.set(cat.nicename, `dry-run:${cat.nicename}`);
-        }
-        stats.categoriesUpserted++;
-      }
-
-      // ── Tags ─────────────────────────────────────────────────────────────
-      const tagIdBySlug = new Map<string, string>();
-      for (const tag of tags) {
-        if (!dryRun) {
-          const created = await tx.tag.upsert({
-            where: { organizationId_slug: { organizationId: org.id, slug: tag.slug } },
-            update: { name: tag.name },
-            create: { organizationId: org.id, slug: tag.slug, name: tag.name },
-          });
-          tagIdBySlug.set(tag.slug, created.id);
-        } else {
-          tagIdBySlug.set(tag.slug, `dry-run:${tag.slug}`);
-        }
-        stats.tagsUpserted++;
-      }
-
-      // ── Posts & Pages ────────────────────────────────────────────────────
-      let imported = 0;
-      for (const post of posts) {
-        if (imported >= limit) break;
-
-        if (post.status !== 'publish') {
-          stats.articlesSkippedNotPublished++;
-          continue;
-        }
-        if (!post.slug) {
-          console.warn(`  [skip] post ${post.postId} ("${post.title}") has no wp:post_name slug`);
-          stats.failed++;
-          continue;
-        }
-        if (looksLikeUnrenderedContent(post.content)) {
-          console.warn(
-            `  [skip] "${post.slug}" looks like unrendered page-builder shortcode or empty content, not real prose - not imported`,
-          );
-          stats.skippedUnrenderedContent++;
-          continue;
-        }
-
-        try {
-          if (post.postType === 'page') {
-            const existing = await tx.page.findFirst({
-              where: { organizationId: org.id, slug: post.slug },
-            });
-            if (existing) {
-              stats.pagesSkippedExisting++;
-              continue;
-            }
-
-            const content = downloadMedia
-              ? await rehostInlineImages(tx, post.content, org.id, systemUser.id, dryRun)
-              : post.content;
-
-            if (!dryRun) {
-              await tx.page.create({
-                data: {
-                  organizationId: org.id,
-                  slug: post.slug,
-                  title: post.title,
-                  content: sanitizeArticleHtml(content),
-                  metaTitle: post.metaTitle ?? undefined,
-                  metaDescription: post.metaDescription ?? undefined,
-                  isPublished: true,
+      if (!dryRun) {
+        const articleId = await withOrgTx(org.id, async (tx) => {
+          const article = await tx.article.create({
+            data: {
+              organizationId: org.id,
+              primaryAuthorId: authorId,
+              primaryCategoryId,
+              title: post.title,
+              slug,
+              excerpt,
+              content: sanitizedContent,
+              wordCount,
+              readingTime,
+              revisionCount: 1,
+              language,
+              status: ArticleStatus.PUBLISHED,
+              publishedAt: post.publishedAt,
+              featuredImageId,
+              featuredImageUrl,
+              sourceUrl: post.link || undefined,
+              sourceName: 'WordPress Import',
+              ...(primaryCategoryId && {
+                articleCategories: {
+                  create: { categoryId: primaryCategoryId, isPrimary: true, sortOrder: 0 },
                 },
-              });
-            }
-            stats.pagesCreated++;
-            imported++;
-            continue;
-          }
-
-          // post.postType === 'post'
-          let slug = post.slug;
-          if (RESERVED_FLAT_SLUGS.has(slug)) {
-            console.warn(`  [warn] "${slug}" collides with a reserved path - imported as "${slug}-imported"`);
-            slug = `${slug}-imported`;
-          }
-
-          const existing = await tx.article.findFirst({
-            where: { organizationId: org.id, slug },
+              }),
+            },
           });
-          if (existing) {
-            stats.articlesSkippedExisting++;
-            continue;
-          }
 
-          const authorId = authorIdByLogin.get(post.creatorLogin) ?? systemUser.id;
-
-          const primaryCategoryNicename = post.categoryNicenames[0];
-          const primaryCategoryId = primaryCategoryNicename
-            ? categoryIdByNicename.get(primaryCategoryNicename)
-            : undefined;
-
-          let featuredImageId: string | undefined;
-          let featuredImageUrl: string | undefined;
-          const thumbnailUrl = post.thumbnailAttachmentId
-            ? attachmentUrls.get(post.thumbnailAttachmentId)
-            : undefined;
-          if (thumbnailUrl) {
-            if (downloadMedia) {
-              const rehosted = await rehostImage(tx, thumbnailUrl, org.id, systemUser.id, dryRun);
-              if (rehosted) {
-                featuredImageId = rehosted.id;
-                featuredImageUrl = rehosted.url;
-              }
-            } else {
-              featuredImageUrl = thumbnailUrl;
-            }
-          }
-
-          const content = downloadMedia
-            ? await rehostInlineImages(tx, post.content, org.id, systemUser.id, dryRun)
-            : post.content;
-          const sanitizedContent = sanitizeArticleHtml(content);
-          const wordCount = sanitizedContent
-            .replace(/<[^>]+>/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim()
-            .split(' ')
-            .filter(Boolean).length;
-          const readingTime = Math.ceil(wordCount / 200);
-          const excerpt = sanitizeArticleHtml(post.excerpt).replace(/<[^>]+>/g, '').trim() || undefined;
-
-          if (!dryRun) {
-            const article = await tx.article.create({
-              data: {
-                organizationId: org.id,
-                primaryAuthorId: authorId,
-                primaryCategoryId,
-                title: post.title,
-                slug,
-                excerpt,
-                content: sanitizedContent,
-                wordCount,
-                readingTime,
-                revisionCount: 1,
-                language,
-                status: ArticleStatus.PUBLISHED,
-                publishedAt: post.publishedAt,
-                featuredImageId,
-                featuredImageUrl,
-                sourceUrl: post.link || undefined,
-                sourceName: 'WordPress Import',
-                ...(primaryCategoryId && {
-                  articleCategories: {
-                    create: { categoryId: primaryCategoryId, isPrimary: true, sortOrder: 0 },
-                  },
-                }),
-              },
+          const extraCategoryNicenames = post.categoryNicenames.slice(1);
+          for (const [idx, nicename] of extraCategoryNicenames.entries()) {
+            const categoryId = categoryIdByNicename.get(nicename);
+            if (!categoryId) continue;
+            await tx.articleCategory.create({
+              data: { articleId: article.id, categoryId, isPrimary: false, sortOrder: idx + 1 },
             });
-
-            const extraCategoryNicenames = post.categoryNicenames.slice(1);
-            for (const [idx, nicename] of extraCategoryNicenames.entries()) {
-              const categoryId = categoryIdByNicename.get(nicename);
-              if (!categoryId) continue;
-              await tx.articleCategory.create({
-                data: { articleId: article.id, categoryId, isPrimary: false, sortOrder: idx + 1 },
-              });
-            }
-
-            for (const [idx, tagSlug] of post.tagSlugs.entries()) {
-              const tagId = tagIdBySlug.get(tagSlug);
-              if (!tagId) continue;
-              await tx.articleTag.create({
-                data: { articleId: article.id, tagId, sortOrder: idx },
-              });
-            }
-
-            if (post.metaTitle || post.metaDescription) {
-              await tx.articleSeo.create({
-                data: {
-                  articleId: article.id,
-                  metaTitle: post.metaTitle ?? undefined,
-                  metaDescription: post.metaDescription ?? undefined,
-                  canonicalUrl: `https://${process.env.ROOT_DOMAIN ?? 'rusdimedia.com'}/${slug}`,
-                },
-              });
-            }
           }
 
-          stats.articlesCreated++;
-          imported++;
-        } catch (err: any) {
-          console.error(`  [failed] "${post.title}" (${post.slug}): ${err.message}`);
-          stats.failed++;
+          for (const [idx, tagSlug] of post.tagSlugs.entries()) {
+            const tagId = tagIdBySlug.get(tagSlug);
+            if (!tagId) continue;
+            await tx.articleTag.create({
+              data: { articleId: article.id, tagId, sortOrder: idx },
+            });
+          }
+
+          return article.id as string;
+        });
+
+        // `article_seo` isn't RLS-protected - plain client, outside the
+        // transaction above.
+        if (post.metaTitle || post.metaDescription) {
+          await prisma.articleSeo.create({
+            data: {
+              articleId,
+              metaTitle: post.metaTitle ?? undefined,
+              metaDescription: post.metaDescription ?? undefined,
+              canonicalUrl: `https://${process.env.ROOT_DOMAIN ?? 'rusdimedia.com'}/${slug}`,
+            },
+          });
         }
       }
-    },
-    { timeout: 600_000 }, // a real WXR import can take a while (media downloads); Prisma's default 5s/10s is nowhere near enough
-  );
+
+      stats.articlesCreated++;
+      imported++;
+      if (imported % 100 === 0) {
+        console.log(`  ... ${imported} imported so far`);
+      }
+    } catch (err: any) {
+      console.error(`  [failed] "${post.title}" (${post.slug}): ${err.message}`);
+      stats.failed++;
+    }
+  }
 
   console.log('\n' + (dryRun ? 'Dry run complete (nothing was written).' : 'Import complete.'));
   console.table(stats);
