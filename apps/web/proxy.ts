@@ -122,6 +122,16 @@ function redirectForPathNormalization(request: NextRequest): NextResponse | null
     return NextResponse.redirect(redirectUrl, 301);
   }
 
+  // Belt-and-suspenders, not the primary mechanism: confirmed live that
+  // this Next.js version's own dev server already 308s a trailing-slash
+  // request (stripping the slash) BEFORE Proxy ever runs, ahead of even
+  // the "Proxy" step in its documented execution order - so a WordPress
+  // URL like `/category/tekno/page/2/` actually resolves in two redirect
+  // hops (Next's own slash-strip, then the PAGE_NUMBER_PATTERN branch
+  // above on the second, slash-free request), not the one hop this
+  // function alone would suggest. Kept anyway as a fallback for whatever
+  // reaches this function with a trailing slash some other way (e.g.
+  // `skipTrailingSlashRedirect`, or a future Next version).
   if (pathname.length > 1 && pathname.endsWith("/")) {
     const redirectUrl = new URL(request.nextUrl);
     redirectUrl.pathname = pathname.replace(/\/+$/, "");
