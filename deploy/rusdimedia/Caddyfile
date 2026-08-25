@@ -1,0 +1,27 @@
+# Reverse proxy for rusdimedia.com, with automatic HTTPS. Copy this to
+# infrastructure/caddy/Caddyfile IN RUSDIMEDIA'S OWN CLONE of this repo (see
+# README.md in this folder) - never point it at the same server as
+# beritabot.com's Caddyfile, which is a different set of hostnames entirely.
+#
+# Simpler than beritabot.com's Caddyfile: no acme_dns/Cloudflare DNS-01
+# block, because rusdimedia.com has ENABLE_CATEGORY_SUBDOMAINS=false (see
+# .env.production.example in this folder) and so needs no wildcard
+# certificate - the stock `caddy:2-alpine` image's default HTTP-01
+# challenge is enough. If category subdomains are ever wanted later, follow
+# docs/DEPLOY.md §7.1 and switch to the custom-built Caddy image the same
+# way beritabot.com's infrastructure/caddy/Dockerfile does.
+
+rusdimedia.com, app.rusdimedia.com, www.rusdimedia.com {
+	reverse_proxy web:3100
+}
+
+api.rusdimedia.com {
+	# Publicly-readable media objects (MinIO) served under the API host at
+	# this one path, rather than a fourth DNS record.
+	handle /ainews-media/* {
+		reverse_proxy minio:9000
+	}
+	handle {
+		reverse_proxy api:4000
+	}
+}

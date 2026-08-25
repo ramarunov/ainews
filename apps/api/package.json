@@ -25,6 +25,7 @@
         "seed:subcategories": "ts-node -r tsconfig-paths/register scripts/seed-subcategories.ts",
         "backfill:article-schema": "ts-node -r tsconfig-paths/register scripts/backfill-article-schema.ts",
         "backfill:user-slugs": "ts-node -r tsconfig-paths/register scripts/backfill-user-slugs.ts",
+        "bootstrap:org": "ts-node -r tsconfig-paths/register scripts/bootstrap-org.ts",
         "clean": "rm -rf dist"
     },
     "dependencies": {

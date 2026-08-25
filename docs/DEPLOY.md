@@ -197,6 +197,14 @@ ROOT_DOMAIN=example.com
 NEXT_PUBLIC_ROOT_DOMAIN=example.com
 ENABLE_CATEGORY_SUBDOMAINS=false
 
+# Only relevant if this deployment is migrating an existing site that needs
+# its article URLs preserved exactly (e.g. WordPress's /%postname%/
+# permalinks) - see apps/web/lib/site-url.ts and
+# apps/api/src/common/url/site-url.util.ts. Leave both false for a normal
+# (non-migrated) deployment; serves articles at /news/:slug either way.
+FLAT_ARTICLE_URLS=false
+NEXT_PUBLIC_FLAT_ARTICLE_URLS=false
+
 SMTP_HOST=<your real SMTP provider>
 SMTP_PORT=587
 SMTP_SECURE=true
@@ -398,6 +406,12 @@ organization and admin account via the seed script instead:
 docker compose -f docker-compose.prod.yml --env-file .env.production \
   run --rm api-migrate sh -c "cd apps/api && npx ts-node prisma/seed.ts"
 ```
+
+(If this deployment is for a real, named publication rather than a demo —
+e.g. a WordPress migration — use `apps/api/scripts/bootstrap-org.ts`
+instead, which takes the organization name/slug and admin details as env
+vars rather than hardcoding "Demo Organization". See
+`deploy/rusdimedia/README.md` for a worked example.)
 
 This creates a "Demo Organization" and an admin user with the **hardcoded**
 credentials `admin@demo.local` / `Admin123!` (see `apps/api/prisma/seed.ts`)
