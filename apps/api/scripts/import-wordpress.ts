@@ -10,6 +10,8 @@ import { extname } from 'path';
 import slugify from 'slugify';
 
 import { sanitizeArticleHtml } from '../src/common/sanitize-html';
+import { parseWxr, looksLikeUnrenderedContent } from './lib/wxr-parser';
+import { createWithOrgTx } from './lib/org-tx';
 
 // Imports a WordPress "WXR" export (Tools -> Export -> All content, an XML
 // file) into an existing Organization - articles/categories/tags/authors,
@@ -47,11 +49,18 @@ import { sanitizeArticleHtml } from '../src/common/sanitize-html';
 //                        <wp:author_email> - default "imported.invalid".
 //
 // Safe to interrupt and re-run: every post/page is its own short-lived
-// transaction (see withOrgTx below), not one transaction for the whole
-// import - a crash, Ctrl-C, or Prisma's interactive-transaction timeout
-// only loses the one item in flight, not everything already committed, and
-// re-running just skips what's already there (see the `existing` checks).
+// transaction (see withOrgTx, scripts/lib/org-tx.ts), not one transaction
+// for the whole import - a crash, Ctrl-C, or Prisma's interactive-
+// transaction timeout only loses the one item in flight, not everything
+// already committed, and re-running just skips what's already there (see
+// the `existing` checks).
+//
+// See also scripts/generate-redirect-suggestions.ts, which reuses this
+// same WXR parser to find old WordPress URLs that need a Redirect row
+// (theme utility pages that got skipped here, reserved-slug collisions,
+// ...) - run it against the same export after this script finishes.
 const prisma = new PrismaClient();
+const withOrgTx = createWithOrgTx(prisma);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Mirrors apps/web/proxy.ts's PUBLIC_PATH_PREFIXES / ArticlesService's
@@ -62,182 +71,6 @@ const RESERVED_FLAT_SLUGS = new Set([
   'sitemap.xml', 'news-sitemap.xml', 'image-sitemap.xml',
   'robots.txt', 'ads.txt', 'llms.txt', 'icon', 'apple-icon',
 ]);
-
-// `articles`/`categories`/`tags`/`media_files` have FORCE ROW LEVEL
-// SECURITY (see prisma/migrations/20260712120000_row_level_security) - any
-// write/read through those tables needs `app.current_org_id` set for the
-// duration of the transaction it runs in (mirrors
-// infrastructure/prisma/rls-extension.ts's own pattern, which this
-// standalone script doesn't use directly since it isn't running inside
-// Nest DI). Deliberately ONE SHORT transaction per call, not one big
-// transaction wrapping the whole import - see the file-level comment above
-// for why. `users`/`pages`/`article_seo` are NOT RLS-protected; those use
-// the plain `prisma` client with no wrapper.
-async function withOrgTx<T>(organizationId: string, fn: (tx: any) => Promise<T>): Promise<T> {
-  return prisma.$transaction(
-    async (tx) => {
-      await tx.$executeRawUnsafe(`SET LOCAL app.current_org_id = '${organizationId}'`);
-      return fn(tx);
-    },
-    { timeout: 30_000 },
-  );
-}
-
-interface WpAuthor {
-  login: string;
-  email: string;
-  displayName: string;
-  firstName: string;
-  lastName: string;
-}
-
-interface WpCategory {
-  nicename: string;
-  name: string;
-  parentNicename: string | null;
-}
-
-interface WpTag {
-  slug: string;
-  name: string;
-}
-
-interface WpPost {
-  postId: string;
-  postType: 'post' | 'page';
-  status: string;
-  title: string;
-  slug: string;
-  link: string;
-  content: string;
-  excerpt: string;
-  creatorLogin: string;
-  publishedAt: Date;
-  categoryNicenames: string[];
-  tagSlugs: string[];
-  thumbnailAttachmentId: string | null;
-  metaTitle: string | null;
-  metaDescription: string | null;
-}
-
-function decodeAndTrim(text: string): string {
-  return text.trim();
-}
-
-function parseWpDate(item: cheerio.Cheerio<any>): Date {
-  const gmt = item.find('wp\\:post_date_gmt').first().text().trim();
-  if (gmt && gmt !== '0000-00-00 00:00:00') {
-    return new Date(gmt.replace(' ', 'T') + 'Z');
-  }
-  const local = item.find('wp\\:post_date').first().text().trim();
-  if (local && local !== '0000-00-00 00:00:00') {
-    return new Date(local.replace(' ', 'T'));
-  }
-  return new Date();
-}
-
-function parseWxr(xml: string) {
-  const $ = cheerio.load(xml, { xmlMode: true });
-
-  const authors: WpAuthor[] = $('wp\\:author')
-    .map((_, el) => {
-      const a = $(el);
-      return {
-        login: decodeAndTrim(a.find('wp\\:author_login').text()),
-        email: decodeAndTrim(a.find('wp\\:author_email').text()),
-        displayName: decodeAndTrim(a.find('wp\\:author_display_name').text()),
-        firstName: decodeAndTrim(a.find('wp\\:author_first_name').text()),
-        lastName: decodeAndTrim(a.find('wp\\:author_last_name').text()),
-      };
-    })
-    .get();
-
-  const categories: WpCategory[] = $('wp\\:category')
-    .map((_, el) => {
-      const c = $(el);
-      const parent = decodeAndTrim(c.find('wp\\:category_parent').text());
-      return {
-        nicename: decodeAndTrim(c.find('wp\\:category_nicename').text()),
-        name: decodeAndTrim(c.find('wp\\:cat_name').text()),
-        parentNicename: parent || null,
-      };
-    })
-    .get();
-
-  const tags: WpTag[] = $('wp\\:tag')
-    .map((_, el) => {
-      const t = $(el);
-      return {
-        slug: decodeAndTrim(t.find('wp\\:tag_slug').text()),
-        name: decodeAndTrim(t.find('wp\\:tag_name').text()),
-      };
-    })
-    .get();
-
-  // Attachments are their own <item>s (wp:post_type = attachment) - build a
-  // postId -> URL map so a post's `_thumbnail_id` postmeta can be resolved.
-  const attachmentUrls = new Map<string, string>();
-  $('item').each((_, el) => {
-    const item = $(el);
-    const postType = item.find('wp\\:post_type').first().text().trim();
-    if (postType !== 'attachment') return;
-    const postId = item.find('wp\\:post_id').first().text().trim();
-    const url = item.find('wp\\:attachment_url').first().text().trim();
-    if (postId && url) attachmentUrls.set(postId, url);
-  });
-
-  const posts: WpPost[] = [];
-  $('item').each((_, el) => {
-    const item = $(el);
-    const postType = item.find('wp\\:post_type').first().text().trim();
-    if (postType !== 'post' && postType !== 'page') return;
-
-    const postmeta = new Map<string, string>();
-    item.find('wp\\:postmeta').each((_, metaEl) => {
-      const meta = $(metaEl);
-      const key = meta.find('wp\\:meta_key').first().text().trim();
-      const value = meta.find('wp\\:meta_value').first().text();
-      if (key) postmeta.set(key, value);
-    });
-
-    const categoryNicenames = item
-      .find('category[domain="category"]')
-      .map((_, catEl) => $(catEl).attr('nicename') ?? '')
-      .get()
-      .filter(Boolean);
-
-    const tagSlugs = item
-      .find('category[domain="post_tag"]')
-      .map((_, tagEl) => $(tagEl).attr('nicename') ?? '')
-      .get()
-      .filter(Boolean);
-
-    const metaTitle =
-      postmeta.get('_yoast_wpseo_title') || postmeta.get('rank_math_title') || null;
-    const metaDescription =
-      postmeta.get('_yoast_wpseo_metadesc') || postmeta.get('rank_math_description') || null;
-
-    posts.push({
-      postId: item.find('wp\\:post_id').first().text().trim(),
-      postType,
-      status: item.find('wp\\:status').first().text().trim(),
-      title: decodeAndTrim(item.find('title').first().text()),
-      slug: decodeAndTrim(item.find('wp\\:post_name').first().text()),
-      link: decodeAndTrim(item.find('link').first().text()),
-      content: item.find('content\\:encoded').first().text(),
-      excerpt: item.find('excerpt\\:encoded').first().text(),
-      creatorLogin: decodeAndTrim(item.find('dc\\:creator').first().text()),
-      publishedAt: parseWpDate(item),
-      categoryNicenames,
-      tagSlugs,
-      thumbnailAttachmentId: postmeta.get('_thumbnail_id') ?? null,
-      metaTitle: metaTitle ? decodeAndTrim(metaTitle) : null,
-      metaDescription: metaDescription ? decodeAndTrim(metaDescription) : null,
-    });
-  });
-
-  return { authors, categories, tags, posts, attachmentUrls };
-}
 
 // ─── Media re-hosting ───────────────────────────────────────────────────────
 
@@ -381,23 +214,6 @@ async function ensureUniqueSlug(
     slug = `${base}-${counter++}`;
   }
   return slug;
-}
-
-// Page-builder plugins (Tagdiv Composer's `[tdc_zone]`/`[vc_row]`, WPPB's
-// `[wppb-login]`, etc.) store their raw shortcode source in
-// content:encoded, not rendered HTML - WXR export never runs the shortcode
-// through WordPress's render pipeline. Confirmed live against
-// rusdimedia.com's real export: every theme-generated utility "page"
-// (login, checkout, account, menu templates, ...) came through as either
-// empty or literal `[shortcode ...]` bracket soup, never real prose - if
-// imported as-is it would publish as visibly broken bracket-text content.
-// A genuine editorial post/page's content:encoded is real HTML
-// (`<p>...`), so "empty or starts with a shortcode bracket" is a safe
-// signal to skip on, not just a slug-based guess.
-function looksLikeUnrenderedContent(html: string): boolean {
-  const trimmed = html.trim();
-  if (!trimmed) return true;
-  return /^\[\w/.test(trimmed);
 }
 
 // ─── Main ───────────────────────────────────────────────────────────────────
