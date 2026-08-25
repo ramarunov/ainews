@@ -65,3 +65,8 @@ secrets/
 # Database backups (contain plaintext-adjacent dumps — never commit)
 apps/api/backups/
 backups/
+
+# WordPress export files (scripts/import-wordpress.ts input) - real site
+# content/data dumps, not source, and can be tens of MB.
+*.WordPress.*.xml
+/*.xml

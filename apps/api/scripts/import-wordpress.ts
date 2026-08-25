@@ -353,6 +353,23 @@ async function ensureUniqueSlug(
   return slug;
 }
 
+// Page-builder plugins (Tagdiv Composer's `[tdc_zone]`/`[vc_row]`, WPPB's
+// `[wppb-login]`, etc.) store their raw shortcode source in
+// content:encoded, not rendered HTML - WXR export never runs the shortcode
+// through WordPress's render pipeline. Confirmed live against
+// rusdimedia.com's real export: every theme-generated utility "page"
+// (login, checkout, account, menu templates, ...) came through as either
+// empty or literal `[shortcode ...]` bracket soup, never real prose - if
+// imported as-is it would publish as visibly broken bracket-text content.
+// A genuine editorial post/page's content:encoded is real HTML
+// (`<p>...`), so "empty or starts with a shortcode bracket" is a safe
+// signal to skip on, not just a slug-based guess.
+function looksLikeUnrenderedContent(html: string): boolean {
+  const trimmed = html.trim();
+  if (!trimmed) return true;
+  return /^\[\w/.test(trimmed);
+}
+
 // ─── Main ───────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -399,6 +416,7 @@ async function main() {
     articlesSkippedNotPublished: 0,
     pagesCreated: 0,
     pagesSkippedExisting: 0,
+    skippedUnrenderedContent: 0,
     failed: 0,
   };
 
@@ -513,6 +531,13 @@ async function main() {
         if (!post.slug) {
           console.warn(`  [skip] post ${post.postId} ("${post.title}") has no wp:post_name slug`);
           stats.failed++;
+          continue;
+        }
+        if (looksLikeUnrenderedContent(post.content)) {
+          console.warn(
+            `  [skip] "${post.slug}" looks like unrendered page-builder shortcode or empty content, not real prose - not imported`,
+          );
+          stats.skippedUnrenderedContent++;
           continue;
         }
 
