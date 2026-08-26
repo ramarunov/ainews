@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArticleCard } from "@/components/public/article-card";
 import { BreakingNewsBanner } from "@/components/public/breaking-news-banner";
 import { FootballScheduleWidget } from "@/components/public/football-schedule-widget";
+import { GoldPriceWidget } from "@/components/public/gold-price-widget";
 import { HomepageWidget } from "@/components/public/homepage-widget";
 import { CategoryMosaicCard } from "@/components/public/category-mosaic-card";
 import { AdSlot } from "@/components/public/ad-slot";
@@ -212,6 +213,7 @@ export default async function HomePage() {
             />
           ))}
           <AdSlot value={findPublicSetting(settings, "ads.sidebar")} />
+          <GoldPriceWidget />
         </aside>
       </div>
 
