@@ -83,7 +83,12 @@ export default async function PublicLayout({
             logoUrl={branding?.logoUrl}
           />
           <main className="flex flex-1 flex-col">{children}</main>
-          <PublicFooter categories={categories} pages={pages} footerSetting={footerSetting} />
+          <PublicFooter
+            categories={categories}
+            pages={pages}
+            footerSetting={footerSetting}
+            logoUrl={branding?.logoUrl}
+          />
           <AdSlot value={customScripts?.footer} />
         </div>
       </body>

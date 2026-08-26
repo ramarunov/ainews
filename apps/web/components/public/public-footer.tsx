@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { Category, FooterWidget, Page, SiteFooterSetting } from "@/lib/types";
 import { getCategoryColors } from "@/lib/category-colors";
@@ -125,10 +126,12 @@ export function PublicFooter({
   categories,
   pages,
   footerSetting,
+  logoUrl,
 }: {
   categories: Category[];
   pages: Page[];
   footerSetting?: SiteFooterSetting;
+  logoUrl?: string;
 }) {
   const rootDomain = getRootDomain();
   // Defensive against a partially-saved or stale value (fewer/more than 4
@@ -139,7 +142,16 @@ export function PublicFooter({
   return (
     <footer className="mt-12 border-t bg-foreground text-background/80">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-12">
-        <p className="text-2xl font-black tracking-tight text-background">{SITE_NAME}</p>
+        {logoUrl ? (
+          // No color/invert filter applied - shows the admin-uploaded logo
+          // exactly as uploaded, same as the header. If it doesn't read
+          // well against this dark footer background, that's a "upload a
+          // footer-suited variant" concern, not something to paper over
+          // with a filter that would flatten an intentionally-colored logo.
+          <Image src={logoUrl} alt={SITE_NAME} width={1606} height={433} className="h-9 w-auto" />
+        ) : (
+          <p className="text-2xl font-black tracking-tight text-background">{SITE_NAME}</p>
+        )}
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           {columns.map((column, i) => (
             <div key={i} className="flex flex-col gap-6">

@@ -236,7 +236,7 @@ export async function ArticleView({ slug }: { slug: string }) {
       <div className="mx-auto w-full max-w-6xl px-4">
         <AdSlot value={findSetting(settings, "ads.article_top")} className="my-3 flex justify-center" />
       </div>
-      <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 pt-4 lg:grid-cols-[1fr_320px]">
+      <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 pt-4 pb-10 lg:grid-cols-[1fr_320px]">
         <div className="flex min-w-0 flex-col gap-5">
           {article.primaryCategory && (
             <Link
