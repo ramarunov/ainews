@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArticleCard } from "@/components/public/article-card";
 import { BreakingNewsBanner } from "@/components/public/breaking-news-banner";
+import { FootballScheduleWidget } from "@/components/public/football-schedule-widget";
 import { HomepageWidget } from "@/components/public/homepage-widget";
 import { CategoryMosaicCard } from "@/components/public/category-mosaic-card";
 import { AdSlot } from "@/components/public/ad-slot";
@@ -136,6 +137,8 @@ export default async function HomePage() {
           </div>
         </section>
       )}
+
+      <FootballScheduleWidget />
 
       <div className="mx-auto w-full max-w-6xl px-4">
         <AdSlot value={findPublicSetting(settings, "ads.header")} className="flex justify-center" />
