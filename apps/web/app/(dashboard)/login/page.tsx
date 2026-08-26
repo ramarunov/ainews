@@ -97,15 +97,19 @@ export default function LoginPage() {
   if (challengeToken) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-6 bg-muted/40 px-4">
-        <Image
-          src={branding?.logoUrl || "/brand/logo.png"}
-          alt={SITE_NAME}
-          width={1606}
-          height={433}
-          unoptimized
-          priority
-          className="h-10 w-auto"
-        />
+        {/* Fixed-size box + fill + object-contain, not a guessed
+            width/height pair - an admin-uploaded logo can be any aspect
+            ratio, and hardcoding one stretched/distorted it. */}
+        <div className="relative h-10 w-40">
+          <Image
+            src={branding?.logoUrl || "/brand/logo.png"}
+            alt={SITE_NAME}
+            fill
+            unoptimized
+            priority
+            className="object-contain"
+          />
+        </div>
         <Card className="w-full max-w-sm">
           <CardHeader>
             <CardTitle>Two-factor verification</CardTitle>

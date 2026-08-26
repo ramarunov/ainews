@@ -201,14 +201,19 @@ export function PublicHeader({
       {/* Masthead */}
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
         <div className="flex items-center gap-3">
-          <Link href="/" className="flex items-center">
+          {/* Fixed-size box + fill + object-contain, not a guessed
+              width/height pair - an admin can upload a logo of any aspect
+              ratio, and hardcoding the original static asset's dimensions
+              (1606x433) here stretched/distorted every differently-shaped
+              logo uploaded since, confirmed live once a real replacement
+              logo (2038x771, a different ratio) was uploaded. */}
+          <Link href="/" className="relative flex h-9 w-36 items-center">
             <Image
               src={logoUrl || "/brand/logo.png"}
               alt={SITE_NAME}
-              width={1606}
-              height={433}
+              fill
               priority
-              className="h-9 w-auto"
+              className="object-contain object-left"
             />
           </Link>
         </div>

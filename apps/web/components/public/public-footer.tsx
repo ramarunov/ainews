@@ -143,12 +143,18 @@ export function PublicFooter({
     <footer className="mt-12 border-t bg-foreground text-background/80">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-12">
         {logoUrl ? (
+          // Fixed-size box + fill + object-contain, not a guessed
+          // width/height pair - same reasoning as public-header.tsx's logo:
+          // an admin can upload a logo of any aspect ratio, and hardcoding
+          // the original static asset's dimensions stretched/distorted it.
           // No color/invert filter applied - shows the admin-uploaded logo
           // exactly as uploaded, same as the header. If it doesn't read
           // well against this dark footer background, that's a "upload a
           // footer-suited variant" concern, not something to paper over
           // with a filter that would flatten an intentionally-colored logo.
-          <Image src={logoUrl} alt={SITE_NAME} width={1606} height={433} className="h-9 w-auto" />
+          <div className="relative h-9 w-36">
+            <Image src={logoUrl} alt={SITE_NAME} fill className="object-contain object-left" />
+          </div>
         ) : (
           <p className="text-2xl font-black tracking-tight text-background">{SITE_NAME}</p>
         )}

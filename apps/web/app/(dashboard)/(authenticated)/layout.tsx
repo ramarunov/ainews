@@ -55,14 +55,18 @@ export default function DashboardLayout({
       <aside className="flex w-64 flex-col border-r bg-muted/20">
         <div className="flex items-center justify-between gap-2 border-b px-6 py-4">
           <div className="min-w-0">
-            <Image
-              src={branding?.logoUrl || "/brand/logo.png"}
-              alt={SITE_NAME}
-              width={1606}
-              height={433}
-              unoptimized
-              className="h-7 w-auto"
-            />
+            {/* Fixed-size box + fill + object-contain, not a guessed
+                width/height pair - an admin-uploaded logo can be any
+                aspect ratio, and hardcoding one stretched/distorted it. */}
+            <div className="relative h-7 w-32">
+              <Image
+                src={branding?.logoUrl || "/brand/logo.png"}
+                alt={SITE_NAME}
+                fill
+                unoptimized
+                className="object-contain object-left"
+              />
+            </div>
             <p className="mt-1 truncate text-xs text-muted-foreground">
               {user?.displayName ?? user?.email}
             </p>
