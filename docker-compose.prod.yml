@@ -203,6 +203,14 @@ services:
     # rebuild (see docs/DEVOPS.md's rollout notes).
     env_file:
       - .env.production
+    # .env.production's PORT=4000 is the api service's port - env_file is
+    # shared between both services, so without this override Next's
+    # standalone server (which reads PORT, defaulting to the Dockerfile's
+    # ENV PORT=3100) binds to 4000 too, instead of the 3100 both the
+    # Caddyfile and this service's own healthcheck expect. Confirmed live:
+    # this silently 502'd every public request until fixed.
+    environment:
+      PORT: "3100"
     depends_on:
       - api
     # --header="Host: ..." matters here, not just cosmetic - proxy.ts routes
