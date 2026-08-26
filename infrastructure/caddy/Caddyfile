@@ -1,50 +1,21 @@
 # Reverse proxy for both hosts, with automatic HTTPS (Caddy requests and
 # renews Let's Encrypt certificates on its own - no certbot, no manual
-# renewal cron). Replace both domains below with your real ones; Caddy
-# needs them to resolve to this server's IP before it can issue a cert.
+# renewal cron) via the default HTTP-01 challenge, which just needs port 80
+# reachable and DNS already pointing here - no DNS provider API/token
+# needed. Replace both domains below with your real ones if this ever
+# serves a different site.
 #
-# See docs/DEPLOY.md for the full setup this plugs into, and
-# docs/DEPLOY.md §7.1 specifically for the wildcard block below (category
-# subdomains) - it needs a DNS-01 challenge, which is why this project now
-# builds a custom Caddy image (infrastructure/caddy/Dockerfile) with the
-# Cloudflare DNS module instead of using the stock caddy:2-alpine image.
-
-# Global options - acme_dns lets Caddy prove domain ownership by creating a
-# TXT record via the Cloudflare API (CF_API_TOKEN, passed through from
-# docker-compose.prod.yml's caddy service) instead of serving an HTTP
-# challenge file, which is the only way to get a certificate that covers a
-# wildcard hostname like *.rusdimedia.com. Every hostname below - wildcard or
-# not - ends up using this DNS-01 method once it's configured, which is
-# fine; it just means cert issuance depends on the Cloudflare API being
-# reachable, same as it already depended on port 80 being reachable before.
-{
-	acme_dns cloudflare {env.CF_API_TOKEN}
-}
+# Category subdomains (kesehatan.rusdimedia.com, ...) are deferred for
+# launch (ENABLE_CATEGORY_SUBDOMAINS=false) - see docs/DEPLOY.md §7.1 for
+# the wildcard block + Cloudflare DNS-01 setup this reintroduces once that
+# feature is turned on; a wildcard hostname can't get a cert via HTTP-01,
+# which is why that block isn't here right now.
 
 # Apex + dashboard host + www (redirected to the apex by apps/web/proxy.ts
 # itself, not here) all point at the same web app - proxy.ts is what
 # actually keeps the reader-facing pages on the apex domain and redirects
 # everything else to app.rusdimedia.com.
 rusdimedia.com, app.rusdimedia.com, www.rusdimedia.com {
-	reverse_proxy web:3100
-}
-
-# Every category subdomain (kesehatan.rusdimedia.com, teknologi.rusdimedia.com,
-# ...) also goes to the same web app - apps/web/proxy.ts decides per-hostname
-# whether it's a known, active category (renders that category's homepage)
-# or an unrecognized subdomain (plain 404, never a fake/guessable site).
-# Caddy automatically prefers the more specific host blocks above (app./www.)
-# over this wildcard for a request that matches both, so this only ever
-# catches subdomains other than app/www/api.
-#
-# Requires the acme_dns global option above (DNS-01) - a wildcard hostname
-# cannot get a certificate via the default HTTP-01 challenge. Uncommented
-# once Cloudflare DNS-01 is configured; ENABLE_CATEGORY_SUBDOMAINS in
-# .env.production stays the actual feature kill switch regardless (see
-# apps/web/proxy.ts) - this block existing just means a subdomain *can*
-# resolve/get a cert, not that the app treats any subdomain as a real
-# category yet.
-*.rusdimedia.com {
 	reverse_proxy web:3100
 }
 

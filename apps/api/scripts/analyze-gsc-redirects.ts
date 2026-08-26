@@ -171,6 +171,7 @@ async function main() {
     ['/kategori/', '/category/'],
     ['/tags/', '/tag/'],
     ['/pages/', '/'],
+    ['/berita/', '/category/'],
   ];
 
   const autoRows: { fromPath: string; toUrl: string; statusCode: number; note: string }[] = [];
@@ -299,6 +300,23 @@ async function main() {
     if (segments.length === 1) {
       const slug = segments[0];
       if (existing.articleSlugs.has(slug) || existing.pageSlugs.has(slug)) continue; // already resolves
+
+      // An even older WordPress permalink era served category archives
+      // bare at "/{category}" (no "/kategori/" or "/berita/" prefix at
+      // all) - confirmed live against rusdimedia.com's real GSC export,
+      // where e.g. "/kecantikan" and "/hukum" turned out to be exactly
+      // existing category slugs, not deleted articles. A flat article/page
+      // slug always wins first (checked just above), so this only fires
+      // once we already know no article or page claims the slug.
+      if (existing.categorySlugs.has(slug)) {
+        autoRows.push({
+          fromPath: pathname,
+          toUrl: `/category/${slug}${query}`,
+          statusCode: 301,
+          note: `Bare pre-"/kategori/" era category URL, matches existing category slug "${slug}"`,
+        });
+        continue;
+      }
 
       const wxrInfo = wxrSlugInfo.get(slug);
       reviewRows.push({

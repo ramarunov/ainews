@@ -102,10 +102,12 @@ const PAGE_NUMBER_PATTERN = /^(.*)\/page\/(\d+)\/?$/;
 
 // The prior WordPress install used slightly different archive-path prefixes
 // than this app's routes: a plural "/tags/" instead of "/tag/", the
-// Indonesian "/kategori/" instead of "/category/", and static Pages served
-// under "/pages/{slug}" instead of flat "/{slug}" - all confirmed live from
-// real Google Search Console traffic (see scripts/analyze-gsc-redirects.ts),
-// not a guess. Rather than enumerating every individual old tag/category URL
+// Indonesian "/kategori/" instead of "/category/", static Pages served
+// under "/pages/{slug}" instead of flat "/{slug}", and an even older
+// "/berita/{category}" news-prefix structure the site apparently used before
+// "/kategori/" - all confirmed live from real Google Search Console traffic
+// (see scripts/analyze-gsc-redirects.ts), not a guess. Rather than
+// enumerating every individual old tag/category URL
 // as a Redirect row (which could never cover a slug outside the one GSC
 // sample happened to catch), alias the whole prefix the same way trailing-
 // slash/pagination are normalized below. WordPress tag archives aren't
@@ -116,6 +118,7 @@ const WP_PREFIX_ALIASES: Array<[string, string]> = [
   ["/kategori/", "/category/"],
   ["/tags/", "/tag/"],
   ["/pages/", "/"],
+  ["/berita/", "/category/"],
 ];
 
 function redirectForPrefixAlias(request: NextRequest): NextResponse | null {
