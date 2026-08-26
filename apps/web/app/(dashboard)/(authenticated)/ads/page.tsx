@@ -19,13 +19,51 @@ import type { ScriptSlot } from "@/lib/types";
 // assertNotSuperadminOnlyKey - any "ads."-prefixed setting key is
 // superadmin-write-only regardless of what the frontend does, so the
 // superadmin guard below is UX (hide the page), not the actual boundary.
+// Recommended sizes below match this slot's actual container width in the
+// public site's layout (see apps/web/app/(public)/page.tsx and
+// components/public/article-view.tsx) - a banner wider than its container
+// just gets constrained/cropped by the layout, and a "Responsive" AdSense
+// ad unit (data-ad-format="auto", data-full-width-responsive="true" - see
+// components/public/ad-slot.tsx) auto-adapts to any of these instead of
+// requiring a fixed size at all, which is what every slot here is
+// currently configured with.
 const AD_SLOTS = [
-  { key: "ads.header", label: "Header Ad", description: "Shown below the hero section on the homepage." },
-  { key: "ads.sidebar", label: "Sidebar Ad", description: "Shown in the homepage sidebar." },
-  { key: "ads.article_top", label: "Article Top Ad", description: "Shown below the navigation menu, above the headline, on every article page." },
-  { key: "ads.article_after_image", label: "Article Featured Image Ad", description: "Shown directly below the featured image on every article page." },
-  { key: "ads.article_middle", label: "Article Mid-Content Ad", description: "Shown spliced into the middle of the article body, between two paragraphs. Skipped on very short articles with no good split point." },
-  { key: "ads.in_article", label: "End of Article Ad", description: "Shown after the content (and tags) on every article page." },
+  {
+    key: "ads.header",
+    label: "Header Ad",
+    description:
+      "Shown below the hero section on the homepage, full page width. Recommended: Leaderboard 728×90 or Billboard 970×250 (desktop), 320×50/320×100 (mobile) - or a Responsive unit.",
+  },
+  {
+    key: "ads.sidebar",
+    label: "Sidebar Ad",
+    description:
+      "Shown in the fixed 320px-wide sidebar column (homepage and article pages). Recommended: Medium Rectangle 300×250 or Half Page 300×600 - or a Responsive unit.",
+  },
+  {
+    key: "ads.article_top",
+    label: "Article Top Ad",
+    description:
+      "Shown below the navigation menu, above the headline, full page width, on every article page. Recommended: Leaderboard 728×90 or Billboard 970×250 (desktop), 320×50/320×100 (mobile) - or a Responsive unit.",
+  },
+  {
+    key: "ads.article_after_image",
+    label: "Article Featured Image Ad",
+    description:
+      "Shown directly below the featured image, inside the ~760px-wide article column (not full page width) on every article page. Recommended: Large Rectangle 336×280 or Medium Rectangle 300×250 - or a Responsive unit.",
+  },
+  {
+    key: "ads.article_middle",
+    label: "Article Mid-Content Ad",
+    description:
+      "Shown spliced into the middle of the article body, between two paragraphs, inside the ~760px-wide article column. Skipped on very short articles with no good split point. Recommended: Large Rectangle 336×280 or Medium Rectangle 300×250 - or a Responsive unit.",
+  },
+  {
+    key: "ads.in_article",
+    label: "End of Article Ad",
+    description:
+      "Shown after the content (and tags), inside the ~760px-wide article column, on every article page. Recommended: Large Rectangle 336×280 or Leaderboard 728×90 - or a Responsive unit.",
+  },
 ] as const;
 
 function AdWidgetSlot({ label, description, settingKey }: { label: string; description: string; settingKey: string }) {
