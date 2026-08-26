@@ -31,24 +31,34 @@ export async function GoldPriceWidget() {
   const rows = prices.filter((p) => DISPLAYED_WEIGHTS.includes(p.weight));
 
   return (
-    <div className="flex flex-col gap-4 rounded-lg border bg-card p-4">
-      <h2 className="flex items-center gap-2 text-base font-black tracking-tight uppercase">
-        <span className="h-4 w-1 rounded-full bg-primary" />
+    // Warm gold-toned treatment (amber, not the site's brand primary) is a
+    // deliberate one-off exception - this widget's subject literally is
+    // gold, and the color makes it read as its own distinct thing in the
+    // sidebar rather than blending into every other bordered card there.
+    <div className="flex flex-col gap-4 rounded-lg border border-amber-200 bg-gradient-to-br from-amber-50 to-yellow-100 p-4">
+      <h2 className="flex items-center gap-2 text-base font-black tracking-tight text-amber-900 uppercase">
+        <span className="h-4 w-1 rounded-full bg-amber-500" />
         Harga Emas Antam
       </h2>
 
       <div className="flex flex-col gap-0.5">
-        <span className="text-2xl font-black tracking-tight">{formatIdr(headline.sellPrice)}</span>
-        <span className="text-xs text-muted-foreground">per gram &middot; {formatDate(headline.recordedDate)}</span>
+        <span className="text-2xl font-black tracking-tight text-amber-800">
+          {formatIdr(headline.sellPrice)}
+        </span>
+        <span className="text-xs text-amber-700/70">
+          per gram &middot; {formatDate(headline.recordedDate)}
+        </span>
       </div>
 
       {rows.length > 1 && (
         <table className="w-full text-sm">
-          <tbody className="divide-y">
+          <tbody className="divide-y divide-amber-200">
             {rows.map((row) => (
               <tr key={row.weight}>
-                <td className="py-1.5 text-muted-foreground">{row.weight} gram</td>
-                <td className="py-1.5 text-right font-semibold">{formatIdr(row.sellPrice)}</td>
+                <td className="py-1.5 text-amber-700/80">{row.weight} gram</td>
+                <td className="py-1.5 text-right font-semibold text-amber-900">
+                  {formatIdr(row.sellPrice)}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -59,7 +69,7 @@ export async function GoldPriceWidget() {
         href="https://www.logammulia.com/id/harga-emas-hari-ini"
         target="_blank"
         rel="noopener noreferrer nofollow"
-        className="text-xs text-muted-foreground hover:text-primary hover:underline"
+        className="text-xs text-amber-700/70 hover:text-amber-900 hover:underline"
       >
         Sumber: Logam Mulia (Antam)
       </a>
