@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { ArticleCard } from "@/components/public/article-card";
+import { Pagination } from "@/components/public/pagination";
 import { getPublishedArticles } from "@/lib/public-api";
 import { SITE_NAME } from "@/lib/brand";
 
@@ -34,29 +34,7 @@ export default async function NewsIndexPage({ searchParams }: Props) {
         ))}
       </div>
 
-      {meta.totalPages > 1 && (
-        <div className="flex items-center justify-center gap-4 pt-4">
-          {page > 1 && (
-            <Link
-              href={`/news?page=${page - 1}`}
-              className="text-sm font-semibold hover:text-primary hover:underline"
-            >
-              &larr; Previous
-            </Link>
-          )}
-          <span className="text-sm text-muted-foreground">
-            Page {page} of {meta.totalPages}
-          </span>
-          {page < meta.totalPages && (
-            <Link
-              href={`/news?page=${page + 1}`}
-              className="text-sm font-semibold hover:text-primary hover:underline"
-            >
-              Next &rarr;
-            </Link>
-          )}
-        </div>
-      )}
+      <Pagination currentPage={page} totalPages={meta.totalPages} basePath="/news" />
     </div>
   );
 }

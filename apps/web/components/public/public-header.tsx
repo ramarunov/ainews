@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { Menu, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import type { Category, PublicArticle } from "@/lib/types";
 import { getCategoryColors } from "@/lib/category-colors";
 import { getCategoryUrl, getRootDomain } from "@/lib/site-url";
@@ -43,7 +43,6 @@ export function PublicHeader({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [menuOpen, setMenuOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
 
@@ -53,6 +52,49 @@ export function PublicHeader({
   const previewsCacheRef = useRef<Record<string, PublicArticle[]>>({});
   const openTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  // The category strip is wider than the viewport for most orgs - a mouse
+  // has no native gesture for horizontal scroll (no shift-wheel convention
+  // most readers know, unlike a trackpad's two-finger swipe), so without
+  // this it just looks "cut off" with no way to reach the rest, which is
+  // exactly what was reported. navScrollRef backs both the wheel-to-
+  // horizontal conversion below and the two click-to-scroll arrow buttons.
+  const navScrollRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateNavScrollButtons = () => {
+    const el = navScrollRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  };
+
+  useEffect(() => {
+    updateNavScrollButtons();
+    window.addEventListener("resize", updateNavScrollButtons);
+    return () => window.removeEventListener("resize", updateNavScrollButtons);
+    // categories.length: re-measure if the nav strip's content changes
+    // shape (e.g. apex categories vs. a subdomain's shorter subcategory
+    // list), not just on window resize.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categories.length]);
+
+  const scrollNavBy = (delta: number) => {
+    navScrollRef.current?.scrollBy({ left: delta, behavior: "smooth" });
+  };
+
+  const handleNavWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    const el = navScrollRef.current;
+    if (!el || el.scrollWidth <= el.clientWidth) return;
+    // Convert an ordinary vertical mouse-wheel scroll into horizontal
+    // movement across the strip - a trackpad's native horizontal swipe
+    // already works via overflow-x-auto and is left untouched.
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    }
+  };
 
   // Closing on navigation covers both a nav-link click (which changes
   // pathname while the mouse may still technically be over the strip) and
@@ -159,14 +201,6 @@ export function PublicHeader({
       {/* Masthead */}
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
         <div className="flex items-center gap-3">
-          <button
-            type="button"
-            className="md:hidden"
-            aria-label="Toggle menu"
-            onClick={() => setMenuOpen((o) => !o)}
-          >
-            {menuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-          </button>
           <Link href="/" className="flex items-center">
             <Image
               src={logoUrl || "/brand/logo.png"}
@@ -197,7 +231,7 @@ export function PublicHeader({
               autoFocus
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
-              placeholder="Cari berita, topik, atau nama tokoh…"
+              placeholder="Yang sedang ramai dicari…"
               className="flex-1 rounded-md border bg-background px-4 py-2 text-base focus:border-primary focus:outline-none"
             />
             <button
@@ -216,22 +250,28 @@ export function PublicHeader({
           shown (not truncated) since an org can have many; the strip
           scrolls horizontally and the edge fades hint that it does,
           matching how these reference sites handle a long channel list
-          instead of hiding items behind a "more" dropdown.
+          instead of hiding items behind a "more" dropdown. Visible at every
+          viewport width (not just desktop) - on a narrow screen the strip
+          itself is the primary way to browse categories, horizontally
+          scrollable by touch, rather than hiding them behind a hamburger
+          toggle's vertical list.
 
           Hovering a category opens a shared mega-menu panel below the whole
           strip (not a per-item dropdown) showing its 3 latest articles,
           fetched lazily on hover-intent and cached per slug so re-hovering
-          the same category doesn't refetch. onMouseLeave/onMouseEnter live
-          on this outer wrapper (not the individual links) so moving from a
-          trigger link down into the panel itself doesn't register as
-          "left" and close it mid-move. */}
-      <div
-        className="relative hidden md:block"
-        onMouseLeave={scheduleClose}
-        onMouseEnter={cancelClose}
-      >
+          the same category doesn't refetch - this simply never triggers on
+          touch (no hover), so a tap just navigates directly via the link's
+          href. onMouseLeave/onMouseEnter live on this outer wrapper (not the
+          individual links) so moving from a trigger link down into the
+          panel itself doesn't register as "left" and close it mid-move. */}
+      <div className="relative" onMouseLeave={scheduleClose} onMouseEnter={cancelClose}>
         <nav className="relative border-t">
-          <div className="no-scrollbar mx-auto flex max-w-6xl items-center gap-1 overflow-x-auto px-4">
+          <div
+            ref={navScrollRef}
+            onScroll={updateNavScrollButtons}
+            onWheel={handleNavWheel}
+            className="no-scrollbar mx-auto flex max-w-6xl items-center gap-1 overflow-x-auto px-4"
+          >
             {categories.map((category) => {
               const colors = getCategoryColors(category.slug ?? category.name);
               const isActive = pathname === `/category/${category.slug}`;
@@ -241,7 +281,7 @@ export function PublicHeader({
                   href={getCategoryUrl(category)}
                   onMouseEnter={() => scheduleOpen(category.slug)}
                   className={cn(
-                    "shrink-0 border-b-2 px-3 py-2.5 text-sm font-bold tracking-wide uppercase transition-colors hover:border-current",
+                    "shrink-0 border-b-2 px-3 py-3 text-sm font-bold tracking-wide uppercase transition-colors hover:border-current",
                     colors.text,
                     isActive ? "border-current" : "border-transparent",
                   )}
@@ -251,10 +291,40 @@ export function PublicHeader({
               );
             })}
           </div>
-          <div
-            aria-hidden
-            className="pointer-events-none absolute top-0 right-0 h-full w-8 bg-gradient-to-l from-background to-transparent"
-          />
+
+          {canScrollLeft && (
+            <>
+              <div
+                aria-hidden
+                className="pointer-events-none absolute top-0 left-0 h-full w-10 bg-gradient-to-r from-background to-transparent"
+              />
+              <button
+                type="button"
+                aria-label="Gulir kategori ke kiri"
+                onClick={() => scrollNavBy(-240)}
+                className="absolute top-1/2 left-1 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border bg-background shadow-sm hover:bg-muted"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+            </>
+          )}
+
+          {canScrollRight && (
+            <>
+              <div
+                aria-hidden
+                className="pointer-events-none absolute top-0 right-0 h-full w-10 bg-gradient-to-l from-background to-transparent"
+              />
+              <button
+                type="button"
+                aria-label="Gulir kategori ke kanan"
+                onClick={() => scrollNavBy(240)}
+                className="absolute top-1/2 right-1 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border bg-background shadow-sm hover:bg-muted"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </>
+          )}
         </nav>
 
         {openCategory && (
@@ -266,27 +336,6 @@ export function PublicHeader({
         )}
       </div>
 
-      {menuOpen && (
-        <nav className="flex flex-col gap-1 border-t bg-background px-4 py-3 md:hidden">
-          {categories.map((category) => {
-            const colors = getCategoryColors(category.slug ?? category.name);
-            const isActive = pathname === `/category/${category.slug}`;
-            return (
-              <Link
-                key={category.id}
-                href={getCategoryUrl(category)}
-                className={cn(
-                  "rounded-md px-2 py-2 text-sm font-bold tracking-wide uppercase hover:bg-muted",
-                  isActive && colors.text,
-                )}
-                onClick={() => setMenuOpen(false)}
-              >
-                {category.name}
-              </Link>
-            );
-          })}
-        </nav>
-      )}
     </header>
   );
 }

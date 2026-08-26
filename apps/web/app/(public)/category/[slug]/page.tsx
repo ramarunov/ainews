@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { headers } from "next/headers";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { notFound, permanentRedirect } from "next/navigation";
 import { ArticleCard } from "@/components/public/article-card";
 import { TrendingList } from "@/components/public/trending-list";
 import { Breadcrumb } from "@/components/public/breadcrumb";
+import { Pagination } from "@/components/public/pagination";
 import { getCategoryColors } from "@/lib/category-colors";
 import { getCategoryBySlug, getPublishedArticles } from "@/lib/public-api";
 import { getCategoryUrl, getRootDomain } from "@/lib/site-url";
@@ -156,27 +156,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
                 ))}
               </div>
 
-              {meta.totalPages > 1 && (
-                <div className="flex items-center justify-center gap-4 border-t pt-6">
-                  <Link
-                    href={`?page=${page - 1}`}
-                    aria-disabled={page <= 1}
-                    className={`flex items-center gap-1 text-sm font-semibold hover:text-primary ${page <= 1 ? "pointer-events-none opacity-30" : ""}`}
-                  >
-                    <ChevronLeft className="h-4 w-4" /> Sebelumnya
-                  </Link>
-                  <span className="text-sm text-muted-foreground">
-                    Halaman {page} dari {meta.totalPages}
-                  </span>
-                  <Link
-                    href={`?page=${page + 1}`}
-                    aria-disabled={page >= meta.totalPages}
-                    className={`flex items-center gap-1 text-sm font-semibold hover:text-primary ${page >= meta.totalPages ? "pointer-events-none opacity-30" : ""}`}
-                  >
-                    Selanjutnya <ChevronRight className="h-4 w-4" />
-                  </Link>
-                </div>
-              )}
+              <Pagination currentPage={page} totalPages={meta.totalPages} />
             </div>
 
             <aside className="flex flex-col gap-6">

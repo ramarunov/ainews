@@ -137,11 +137,14 @@
  * via the @theme inline mapping at the top of this file, so no component
  * changes are needed, just this override block.
  *
- * Deliberately monochrome: a single dominant purple hue (violet) carries the
- * brand — masthead, links, buttons, active states — instead of the earlier
- * per-category rainbow. Category branding (category-colors.ts) now varies
- * tone/weight within this same violet/purple family rather than switching
- * hues, so the whole site reads as one consistent identity.
+ * This violet hue is the site's own chrome color only — masthead, buttons,
+ * focus rings, and cross-category section labels ("Berita Terkini", "Berita
+ * Terpopuler", "Kanal Lainnya") that don't belong to any one channel.
+ * Individual categories each get their own distinct hue instead (red for
+ * hard news, green for business, blue for tech, ...) via category-colors.ts,
+ * detik.com-style — violet is deliberately excluded from that per-category
+ * palette so a reader never confuses "the site's own brand" with "this one
+ * channel's color."
  */
 .pulse-daily {
   --background: oklch(1 0 0);

@@ -158,9 +158,9 @@ export async function ArticleView({ slug }: { slug: string }) {
       ? getPublishedArticles({
           categorySlug: article.primaryCategory.slug,
           excludeId: article.id,
-          limit: 4,
+          limit: 8,
         })
-      : Promise.resolve({ data: [], meta: { total: 0, page: 1, limit: 4, totalPages: 0 } }),
+      : Promise.resolve({ data: [], meta: { total: 0, page: 1, limit: 8, totalPages: 0 } }),
     getPublicSettings(),
     getArticleComments(slug),
     getPublishedArticles({ sortBy: "viewCount", excludeId: article.id, limit: 5 }),
@@ -168,6 +168,11 @@ export async function ArticleView({ slug }: { slug: string }) {
 
   const colors = getCategoryColors(article.primaryCategory?.slug ?? article.primaryCategory?.name);
   const tags = article.articleTags ?? [];
+  // Split the one category-scoped fetch above between the sidebar's compact
+  // list and the full-width "Baca Juga" band below, instead of showing the
+  // exact same 4 articles in both places.
+  const sidebarRelated = related.data.slice(4, 8);
+  const bandRelated = related.data.slice(0, 4);
   const contentSplit = splitContentAtMidpoint(article.content ?? "");
   const contentProseClassName =
     "flex flex-col gap-5 text-lg leading-relaxed break-words [&_a]:text-primary [&_a]:underline [&_blockquote]:border-l-4 [&_blockquote]:border-primary [&_blockquote]:pl-4 [&_blockquote]:text-xl [&_blockquote]:font-medium [&_blockquote]:text-foreground/80 [&_blockquote]:italic [&_h2]:mt-2 [&_h2]:text-2xl [&_h2]:font-black [&_h3]:text-xl [&_h3]:font-bold [&_img]:rounded-lg [&_li]:ml-5 [&_ol]:list-decimal [&_ul]:list-disc";
@@ -342,21 +347,28 @@ export async function ArticleView({ slug }: { slug: string }) {
           {article.primaryAuthor && article.primaryAuthor.displayName && (
             <AuthorBox author={article.primaryAuthor} />
           )}
-
-          {article.sourceUrl && (
-            <p className="border-t pt-4 text-sm break-all text-muted-foreground">
-              Sumber: {article.sourceUrl}
-            </p>
-          )}
         </div>
 
         <aside className="flex flex-col gap-6">
           <AdSlot value={findSetting(settings, "ads.sidebar")} />
+          {sidebarRelated.length > 0 && article.primaryCategory && (
+            <div className="flex flex-col gap-4 rounded-lg border bg-card p-4">
+              <h2 className={`flex items-center gap-2 text-base font-black tracking-tight uppercase ${colors.text}`}>
+                <span className={`h-4 w-1 rounded-full ${colors.badge}`} />
+                Lainnya di {article.primaryCategory.name}
+              </h2>
+              <div className="flex flex-col divide-y">
+                {sidebarRelated.map((item) => (
+                  <ArticleCard key={item.id} article={item} variant="list" className="py-3 first:pt-0 last:pb-0" />
+                ))}
+              </div>
+            </div>
+          )}
           <TrendingList articles={trending.data} />
         </aside>
       </div>
 
-      {related.data.length > 0 && (
+      {bandRelated.length > 0 && (
         <section className="border-t bg-[var(--zone)] py-10">
           <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4">
             <div className="flex items-center gap-2">
@@ -364,7 +376,7 @@ export async function ArticleView({ slug }: { slug: string }) {
               <h2 className="text-lg font-black tracking-tight uppercase">Baca Juga</h2>
             </div>
             <div className="grid gap-6 sm:grid-cols-2">
-              {related.data.map((item) => (
+              {bandRelated.map((item) => (
                 <ArticleCard key={item.id} article={item} variant="horizontal" />
               ))}
             </div>

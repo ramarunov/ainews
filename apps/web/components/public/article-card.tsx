@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { PublicArticle, PublicSearchResult } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, formatRelativeDate } from "@/lib/utils";
 import { getCategoryColors } from "@/lib/category-colors";
 import { getArticleUrl } from "@/lib/site-url";
 import { SmartArticleImage, CategoryPlaceholder } from "./smart-article-image";
@@ -9,11 +9,7 @@ type CardArticle = PublicArticle | PublicSearchResult;
 
 function formatDate(value?: string | null) {
   if (!value) return null;
-  return new Date(value).toLocaleDateString("id-ID", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
+  return formatRelativeDate(value);
 }
 
 function CardImage({
@@ -67,7 +63,7 @@ export function ArticleCard({
   if (variant === "list") {
     return (
       <Link href={getArticleUrl(article)} className={cn("group flex gap-3", className)}>
-        <CardImage article={article} className="aspect-square h-16 w-16 shrink-0 rounded-md" />
+        <CardImage article={article} className="aspect-4/3 w-24 shrink-0 rounded-md" />
         <div className="flex min-w-0 flex-col justify-center gap-1">
           <CategoryTag article={article} />
           <h3 className="line-clamp-2 leading-snug font-bold group-hover:underline">
@@ -106,7 +102,7 @@ export function ArticleCard({
   if (variant === "secondary") {
     return (
       <Link href={getArticleUrl(article)} className={cn("group flex gap-3", className)}>
-        <CardImage article={article} className="aspect-square h-20 w-20 shrink-0 rounded-md" />
+        <CardImage article={article} className="aspect-4/3 w-28 shrink-0 rounded-md" />
         <div className="flex min-w-0 flex-col justify-center gap-1">
           <CategoryTag article={article} />
           <h3 className="line-clamp-2 leading-snug font-bold group-hover:underline">

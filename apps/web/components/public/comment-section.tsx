@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { submitArticleComment } from "@/lib/public-api";
 import type { CommentNode } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, formatRelativeDate } from "@/lib/utils";
 
 // Reply threads visually stop indenting past this depth (they still nest
 // data-wise / can still be replied to) so a long back-and-forth can't push
@@ -17,19 +17,6 @@ function CommentAvatar({ name }: { name: string }) {
       {initial}
     </div>
   );
-}
-
-function formatRelativeDate(iso: string): string {
-  const date = new Date(iso);
-  const diffMs = Date.now() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return "baru saja";
-  if (diffMin < 60) return `${diffMin} menit lalu`;
-  const diffHour = Math.floor(diffMin / 60);
-  if (diffHour < 24) return `${diffHour} jam lalu`;
-  const diffDay = Math.floor(diffHour / 24);
-  if (diffDay < 7) return `${diffDay} hari lalu`;
-  return date.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
 }
 
 interface CommentFormProps {

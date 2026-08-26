@@ -139,9 +139,7 @@ export function PublicFooter({
   return (
     <footer className="mt-12 border-t bg-foreground text-background/80">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-12">
-        <p className="text-2xl font-black tracking-tight text-background">
-          berita<span className="text-primary">bot</span>.com
-        </p>
+        <p className="text-2xl font-black tracking-tight text-background">{SITE_NAME}</p>
         <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           {columns.map((column, i) => (
             <div key={i} className="flex flex-col gap-6">

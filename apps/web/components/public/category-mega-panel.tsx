@@ -62,7 +62,7 @@ export function CategoryMegaPanel({
   const colors = getCategoryColors(category.slug ?? category.name);
 
   return (
-    <div className="absolute top-full left-0 z-50 w-full border-t bg-background shadow-lg">
+    <div className={`absolute top-full left-0 z-50 w-full border-t-2 bg-background shadow-lg ${colors.border}`}>
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6">
         <div className="flex items-center justify-between">
           <span className={`text-xs font-black tracking-wide uppercase ${colors.text}`}>
