@@ -99,9 +99,23 @@ export default async function PublicLayout({
               Not a "sticky ad" under Google's Better Ads standard (which
               specifically means an ad that stays fixed/anchored during
               scroll) since this one just scrolls away normally - no close
-              button required by policy, and none added. */}
+              button required by policy, and none added.
+
+              min-h-* reserves the recommended banner height (320x50
+              mobile / 728x90 desktop, see the Ads admin page's size
+              guidance) up front, before AdSlot's client-side effect has
+              actually injected/rendered the ad - `AdSlot`'s container div
+              has no height of its own until then, so without this the
+              banner collapses to 0px while loading (or if an ad fails to
+              load at all), which also means there's nothing for the
+              header to visibly "take over" from when scrolling past - the
+              sticky effect needs an actual gap above the header to be
+              perceptible at all. */}
           <div className="mx-auto w-full max-w-6xl px-4 pt-2">
-            <AdSlot value={findPublicSetting(settings, "ads.top_banner")} className="flex justify-center" />
+            <AdSlot
+              value={findPublicSetting(settings, "ads.top_banner")}
+              className="flex min-h-[50px] items-center justify-center sm:min-h-[90px]"
+            />
           </div>
           <PublicHeader
             categories={navCategories}
