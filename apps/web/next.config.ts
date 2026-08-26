@@ -44,11 +44,16 @@ const GOOGLE_ADS_CONNECT_SRC =
 const GOOGLE_ADS_IMG_SRC =
   "https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com https://*.gstatic.com";
 
+// Team badge icons for the homepage football-schedule widget
+// (components/public/football-schedule-widget.tsx) are hosted on
+// TheSportsDB's own CDN, not this app's media host.
+const THESPORTSDB_IMG_SRC = "https://r2.thesportsdb.com";
+
 const cspHeader = `
   default-src 'self';
   script-src 'self' 'unsafe-inline' ${GOOGLE_ADS_SCRIPT_SRC}${isDev ? " 'unsafe-eval'" : ""};
   style-src 'self' 'unsafe-inline';
-  img-src 'self' data: ${mediaUrl.origin} ${GOOGLE_ADS_IMG_SRC};
+  img-src 'self' data: ${mediaUrl.origin} ${GOOGLE_ADS_IMG_SRC} ${THESPORTSDB_IMG_SRC};
   font-src 'self';
   connect-src 'self' ${apiUrl.origin} ${GOOGLE_ADS_CONNECT_SRC};
   frame-src ${GOOGLE_ADS_FRAME_SRC};
