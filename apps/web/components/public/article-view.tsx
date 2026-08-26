@@ -174,8 +174,17 @@ export async function ArticleView({ slug }: { slug: string }) {
   const sidebarRelated = related.data.slice(4, 8);
   const bandRelated = related.data.slice(0, 4);
   const contentSplit = splitContentAtMidpoint(article.content ?? "");
+  // Not `flex flex-col` - AI-drafted articles often come back as bare text
+  // nodes with no <p> wrapping at all (see splitContentAtMidpoint's comment
+  // above), separated only by a blank line. A flex column container treats
+  // every inline element (a/strong/em) as its own flex item, which visibly
+  // shatters a single sentence into one fragment per formatted word -
+  // confirmed live against real imported content. Plain block flow plus
+  // `whitespace-pre-line` (so a source blank line still reads as a
+  // paragraph break for that untagged text) fixes both properly-<p>-tagged
+  // and bare-text content the same way.
   const contentProseClassName =
-    "flex flex-col gap-5 text-lg leading-relaxed break-words [&_a]:text-primary [&_a]:underline [&_blockquote]:border-l-4 [&_blockquote]:border-primary [&_blockquote]:pl-4 [&_blockquote]:text-xl [&_blockquote]:font-medium [&_blockquote]:text-foreground/80 [&_blockquote]:italic [&_h2]:mt-2 [&_h2]:text-2xl [&_h2]:font-black [&_h3]:text-xl [&_h3]:font-bold [&_img]:rounded-lg [&_li]:ml-5 [&_ol]:list-decimal [&_ul]:list-disc";
+    "whitespace-pre-line text-lg leading-relaxed break-words [&_p]:mb-5 [&_a]:text-primary [&_a]:underline [&_blockquote]:my-5 [&_blockquote]:border-l-4 [&_blockquote]:border-primary [&_blockquote]:pl-4 [&_blockquote]:text-xl [&_blockquote]:font-medium [&_blockquote]:text-foreground/80 [&_blockquote]:italic [&_h2]:mt-8 [&_h2]:mb-3 [&_h2]:text-2xl [&_h2]:font-black [&_h3]:mt-6 [&_h3]:mb-2 [&_h3]:text-xl [&_h3]:font-bold [&_img]:my-5 [&_img]:rounded-lg [&_ul]:mb-5 [&_ol]:mb-5 [&_li]:ml-5 [&_ol]:list-decimal [&_ul]:list-disc";
   const rootDomain = getRootDomain();
   const breadcrumbItems = [
     { label: "Beranda", href: `https://${rootDomain}` },
