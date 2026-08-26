@@ -90,6 +90,19 @@ export default async function PublicLayout({
       <body className="min-h-full flex flex-col">
         <div className="pulse-daily flex min-h-full flex-1 flex-col bg-background text-foreground">
           <AdSlot value={customScripts?.header} />
+          {/* Deliberately placed ABOVE the header, not inside it - the
+              header is already `sticky top-0` (public-header.tsx), so this
+              banner needs no special CSS/JS of its own to get the
+              "scrolls away and the header takes over the top" effect a
+              real site (kompas.com) does the exact same way with: a plain,
+              non-sticky top-of-page element followed by a sticky header.
+              Not a "sticky ad" under Google's Better Ads standard (which
+              specifically means an ad that stays fixed/anchored during
+              scroll) since this one just scrolls away normally - no close
+              button required by policy, and none added. */}
+          <div className="mx-auto w-full max-w-6xl px-4 pt-2">
+            <AdSlot value={findPublicSetting(settings, "ads.top_banner")} className="flex justify-center" />
+          </div>
           <PublicHeader
             categories={navCategories}
             activeCategory={children_.length > 0 ? activeCategory : undefined}

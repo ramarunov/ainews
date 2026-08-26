@@ -29,6 +29,12 @@ import type { ScriptSlot } from "@/lib/types";
 // currently configured with.
 const AD_SLOTS = [
   {
+    key: "ads.top_banner",
+    label: "Top Banner Ad",
+    description:
+      "Shown above the site header on every public page, full page width. Not sticky - scrolls away normally, so the header (already sticky) takes over the top of the screen once scrolled past. Recommended: 320×50/320×100 (mobile), 728×90 (desktop) - or a Responsive unit.",
+  },
+  {
     key: "ads.header",
     label: "Header Ad",
     description:
