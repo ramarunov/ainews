@@ -20,15 +20,38 @@ const isDev = process.env.NODE_ENV === "development";
 // is Next's documented baseline for apps that don't need a strict,
 // nonce-based policy, and still blocks the actual threat this exists to
 // stop: a third-party origin sneaking in a script/image/fetch target that
-// isn't this app's own API or media host. 'unsafe-eval' is dev-only, for
-// React's dev-mode stack-trace reconstruction (also per Next's own docs).
+// isn't this app's own API or media host, or one of the specific ad-network
+// origins explicitly allowed below. 'unsafe-eval' is dev-only, for React's
+// dev-mode stack-trace reconstruction (also per Next's own docs).
+//
+// Google AdSense allowlist: the admin-configured raw ad HTML (see
+// components/public/ad-slot.tsx, System Settings -> Ad Widgets) loads
+// https://pagead2.googlesyndication.com's adsbygoogle.js and renders ad
+// creatives inside Google-served iframes - confirmed live that without
+// these origins explicitly allowed, the browser's CSP silently blocked the
+// ad script from ever loading even though ads.txt/the DB settings/AdSlot's
+// own script-recreation logic were all otherwise correctly configured.
+// Wildcarded (not pinned to pagead2.* specifically) because Google serves
+// ads/creatives/click-tracking from many subdomains across these
+// registrable domains and adds new ones over time - see Google's own
+// AdSense CSP guidance.
+const GOOGLE_ADS_SCRIPT_SRC =
+  "https://*.googlesyndication.com https://*.doubleclick.net https://*.googleadservices.com https://*.google.com https://*.gstatic.com";
+const GOOGLE_ADS_FRAME_SRC =
+  "https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com https://*.googleadservices.com";
+const GOOGLE_ADS_CONNECT_SRC =
+  "https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com https://*.adtrafficquality.google";
+const GOOGLE_ADS_IMG_SRC =
+  "https://*.googlesyndication.com https://*.doubleclick.net https://*.google.com https://*.gstatic.com";
+
 const cspHeader = `
   default-src 'self';
-  script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""};
+  script-src 'self' 'unsafe-inline' ${GOOGLE_ADS_SCRIPT_SRC}${isDev ? " 'unsafe-eval'" : ""};
   style-src 'self' 'unsafe-inline';
-  img-src 'self' data: ${mediaUrl.origin};
+  img-src 'self' data: ${mediaUrl.origin} ${GOOGLE_ADS_IMG_SRC};
   font-src 'self';
-  connect-src 'self' ${apiUrl.origin};
+  connect-src 'self' ${apiUrl.origin} ${GOOGLE_ADS_CONNECT_SRC};
+  frame-src ${GOOGLE_ADS_FRAME_SRC};
   object-src 'none';
   base-uri 'self';
   form-action 'self';
