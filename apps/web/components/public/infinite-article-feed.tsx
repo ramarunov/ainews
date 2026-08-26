@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArticleContent } from "./article-content";
-import { getArticleComments, getPublishedArticles } from "@/lib/public-api";
+import { getArticleComments, getPublishedArticleBySlug, getPublishedArticles } from "@/lib/public-api";
 import { getArticleUrl } from "@/lib/site-url";
 import type { CommentNode, PaginatedResponse, PublicArticle, PublicSetting } from "@/lib/types";
 
@@ -105,7 +105,18 @@ export function InfiniteArticleFeed({
         return;
       }
 
-      const nextArticle = next;
+      // `next` came from the LIST endpoint (getPublishedArticles), which
+      // deliberately omits the full body HTML for listing performance -
+      // confirmed live that its `content` field is simply absent. Fetch
+      // the single-article detail endpoint (same one the initial
+      // server-rendered load uses) to get the real content before
+      // rendering it - without this the appended article showed a fully
+      // empty gap where the body should be.
+      const nextArticle = await getPublishedArticleBySlug(next.slug);
+      if (!nextArticle) {
+        setExhausted(true);
+        return;
+      }
       seenIdsRef.current.add(nextArticle.id);
 
       const [related, comments, trending] = await Promise.all([
