@@ -163,10 +163,21 @@ export default async function HomePage() {
 
       <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 lg:grid-cols-[1fr_320px]">
         <div className="flex flex-col gap-10">
-          {categorySections.map(({ category, articles }) => {
+          {categorySections.map(({ category, articles }, index) => {
             if (articles.length === 0) return null;
             const colors = getCategoryColors(category.slug ?? category.name);
             const [lead, ...rest] = articles;
+
+            // Three distinct card templates rotated by position, not just a
+            // recolored repeat of the same lead+list layout three times -
+            // detik.com/kompas.com vary the arrangement per section (a big
+            // lead + image grid, a dense text list, a split hero+stack) so
+            // a reader scrolling past several categories gets a different
+            // visual rhythm each time, not the same box shape over and
+            // over. Confirmed by re-checking detik.com's real homepage
+            // structure specifically for this.
+            const template = index % 3;
+
             return (
               <section key={category.id} className="flex flex-col gap-5">
                 <div className={`flex items-center justify-between border-b-2 pb-2 ${colors.border}`}>
@@ -180,14 +191,46 @@ export default async function HomePage() {
                     Lihat semua &rarr;
                   </Link>
                 </div>
-                <div className="grid gap-6 lg:grid-cols-2">
-                  {lead && <ArticleCard article={lead} variant="horizontal" className="lg:row-span-2" />}
-                  <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
-                    {rest.slice(0, 4).map((article) => (
-                      <ArticleCard key={article.id} article={article} variant="secondary" />
+
+                {/* Template 1 - "grid galeri": satu lead lebar di atas, lalu
+                    grid gambar setara di bawahnya. Terasa seperti majalah,
+                    gambar mendominasi. */}
+                {template === 0 && (
+                  <div className="flex flex-col gap-5">
+                    {lead && <ArticleCard article={lead} variant="horizontal" />}
+                    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+                      {rest.slice(0, 4).map((article) => (
+                        <ArticleCard key={article.id} article={article} variant="medium" />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Template 2 - "list padat": tanpa lead besar, semua artikel
+                    jadi daftar ringkas thumbnail-kiri - kontras dengan
+                    template gambar-dominan di atas/bawahnya. */}
+                {template === 1 && (
+                  <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+                    {articles.slice(0, 5).map((article) => (
+                      <ArticleCard key={article.id} article={article} variant="list" />
                     ))}
                   </div>
-                </div>
+                )}
+
+                {/* Template 3 - "split hero": lead besar di kiri, tumpukan
+                    kartu kecil di kanan - pola asli sebelum variasi ini
+                    ditambahkan, dipertahankan sebagai salah satu dari tiga
+                    ritme yang dirotasi. */}
+                {template === 2 && (
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    {lead && <ArticleCard article={lead} variant="horizontal" className="lg:row-span-2" />}
+                    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
+                      {rest.slice(0, 4).map((article) => (
+                        <ArticleCard key={article.id} article={article} variant="secondary" />
+                      ))}
+                    </div>
+                  </div>
+                )}
               </section>
             );
           })}
