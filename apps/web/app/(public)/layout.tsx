@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { PublicHeader } from "@/components/public/public-header";
 import { PublicFooter } from "@/components/public/public-footer";
 import { AdSlot } from "@/components/public/ad-slot";
+import { TopBannerAd } from "@/components/public/top-banner-ad";
 import { findPublicSetting, getCategories, getPages, getPublicSettings } from "@/lib/public-api";
 import { getRootDomain, resolveHostCategory } from "@/lib/site-url";
 import { SITE_NAME, SITE_TAGLINE } from "@/lib/brand";
@@ -90,33 +91,14 @@ export default async function PublicLayout({
       <body className="min-h-full flex flex-col">
         <div className="pulse-daily flex min-h-full flex-1 flex-col bg-background text-foreground">
           <AdSlot value={customScripts?.header} />
-          {/* Deliberately placed ABOVE the header, not inside it - the
-              header is already `sticky top-0` (public-header.tsx), so this
-              banner needs no special CSS/JS of its own to get the
-              "scrolls away and the header takes over the top" effect a
-              real site (kompas.com) does the exact same way with: a plain,
-              non-sticky top-of-page element followed by a sticky header.
-              Not a "sticky ad" under Google's Better Ads standard (which
-              specifically means an ad that stays fixed/anchored during
-              scroll) since this one just scrolls away normally - no close
-              button required by policy, and none added.
-
-              min-h-* reserves the recommended banner height (320x50
-              mobile / 728x90 desktop, see the Ads admin page's size
-              guidance) up front, before AdSlot's client-side effect has
-              actually injected/rendered the ad - `AdSlot`'s container div
-              has no height of its own until then, so without this the
-              banner collapses to 0px while loading (or if an ad fails to
-              load at all), which also means there's nothing for the
-              header to visibly "take over" from when scrolling past - the
-              sticky effect needs an actual gap above the header to be
-              perceptible at all. */}
-          <div className="mx-auto w-full max-w-6xl px-4 pt-2">
-            <AdSlot
-              value={findPublicSetting(settings, "ads.top_banner")}
-              className="flex min-h-[50px] items-center justify-center sm:min-h-[90px]"
-            />
-          </div>
+          {/* Genuinely fixed-position, mobile-only banner + close button -
+              see top-banner-ad.tsx's own comment for the full mechanism
+              (why it needs to be `fixed` + a spacer, not just placed above
+              the sticky header, to get the "header covers the banner once
+              scrolled" effect kompas.com uses, and why that classifies it
+              as a "sticky ad" requiring a close button under Google's
+              Better Ads Standard). */}
+          <TopBannerAd value={findPublicSetting(settings, "ads.top_banner")} />
           <PublicHeader
             categories={navCategories}
             activeCategory={children_.length > 0 ? activeCategory : undefined}
