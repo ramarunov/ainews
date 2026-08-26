@@ -29,6 +29,20 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: { default: SITE_NAME, template: `%s — ${SITE_NAME}` },
   description: SITE_TAGLINE,
+  // Google Discover explicitly requires max-image-preview:large to ever
+  // show the large-image card format (the default without this is a small
+  // thumbnail, in both Discover and regular Search results) - this was
+  // missing sitewide before, costing nothing to add and pure upside.
+  // Individual pages (e.g. buildArticleMetadata's per-article `robots` from
+  // the SEO panel, or /search's noindex) still override this when they
+  // explicitly set their own `robots`.
+  robots: {
+    index: true,
+    follow: true,
+    "max-image-preview": "large",
+    "max-snippet": -1,
+    "max-video-preview": -1,
+  },
 };
 
 export default async function PublicLayout({

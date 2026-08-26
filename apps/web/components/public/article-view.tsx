@@ -46,7 +46,15 @@ export async function buildArticleMetadata(slug: string): Promise<Metadata> {
   return {
     title,
     description,
-    robots: seo?.robots ?? undefined,
+    // Spread conditionally, not `robots: seo?.robots ?? undefined` - Next's
+    // metadata inheritance checks whether the `robots` KEY is present on
+    // this segment's metadata, not whether its value is truthy. A present-
+    // but-undefined key still counts as "this segment sets robots" and
+    // blocks falling through to the root layout's default (which is what
+    // carries max-image-preview:large) - confirmed live, articles without
+    // their own SEO-panel robots value were rendering with NO <meta
+    // name="robots"> tag at all instead of inheriting the default.
+    ...(seo?.robots && { robots: seo.robots }),
     alternates: {
       canonical: seo?.canonicalUrl ?? getArticleUrl(article),
       types: { "application/rss+xml": feedUrl },
