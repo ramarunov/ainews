@@ -10,7 +10,7 @@ import {
   resolveRedirect,
 } from "@/lib/public-api";
 import { SITE_NAME } from "@/lib/brand";
-import { getArticleUrl, getCategoryUrl, getRootDomain } from "@/lib/site-url";
+import { getArticleUrl, getCategoryUrl, getRootDomain, isCategorySubdomainsEnabled } from "@/lib/site-url";
 
 // Shared between apps/web/app/(public)/news/[slug]/page.tsx (this app's
 // default article URL) and apps/web/app/(public)/[slug]/page.tsx (the flat
@@ -101,11 +101,22 @@ export async function ArticleView({ slug }: { slug: string }) {
   // canonical URL for this article instead of rendering it twice under two
   // hostnames. Categories without a subdomain assigned yet resolve to the
   // apex via getArticleUrl's fallback, so this is a no-op for them.
-  const requestHostname = (await headers()).get("host")?.split(":")[0] ?? "";
-  const canonicalArticleUrl = getArticleUrl(article, getRootDomain());
-  const canonicalHostname = new URL(canonicalArticleUrl).hostname;
-  if (requestHostname && requestHostname !== canonicalHostname) {
-    permanentRedirect(canonicalArticleUrl);
+  //
+  // Only worth the headers() call (a Dynamic API - see the layout.tsx
+  // comment on why this matters) when the subdomain feature can actually
+  // produce a mismatch: with it off, getArticleUrl always resolves to the
+  // apex and proxy.ts already guarantees every request reaching this
+  // component is on the apex (it 404s any other host, and redirects the
+  // dashboard host's own public-path hits there before this ever renders),
+  // so the check below would be comparing the apex to itself on every
+  // single article view for nothing.
+  if (isCategorySubdomainsEnabled()) {
+    const requestHostname = (await headers()).get("host")?.split(":")[0] ?? "";
+    const canonicalArticleUrl = getArticleUrl(article, getRootDomain());
+    const canonicalHostname = new URL(canonicalArticleUrl).hostname;
+    if (requestHostname && requestHostname !== canonicalHostname) {
+      permanentRedirect(canonicalArticleUrl);
+    }
   }
 
   const [related, settings, comments, trending] = await Promise.all([

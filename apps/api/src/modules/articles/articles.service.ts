@@ -59,6 +59,11 @@ const RESERVED_FLAT_SLUGS = new Set([
   'activity',
   'system-settings',
   'account',
+  'ads',
+  'ai-settings',
+  'comments',
+  'site-settings',
+  'webhooks',
 ]);
 
 @Injectable()

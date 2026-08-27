@@ -1,6 +1,5 @@
 import Image from "next/image";
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import { notFound, permanentRedirect } from "next/navigation";
 import { ArticleCard } from "@/components/public/article-card";
 import { getAuthorProfile, getPublishedArticles } from "@/lib/public-api";
@@ -35,12 +34,14 @@ export default async function AuthorPage({ params }: Props) {
   // A pre-slug link (/author/{uuid}) or a not-yet-backfilled author's id
   // still resolves above, but once the author has a real slug that's the
   // one canonical URL - redirect there instead of rendering a second copy.
+  // No host check needed here (there used to be one, gated on the apex via
+  // a headers() call) - proxy.ts's own Host-based routing already
+  // guarantees this only ever renders on the apex (see
+  // tag/[slug]/page.tsx's equivalent comment for the full reasoning), so
+  // this redirect can just fire unconditionally without paying for a
+  // Dynamic API call on every author-page view to reconfirm it.
   if (author.slug && author.slug !== slug) {
-    const rootDomain = getRootDomain();
-    const requestHostname = (await headers()).get("host")?.split(":")[0] ?? "";
-    if (!requestHostname || requestHostname === rootDomain) {
-      permanentRedirect(`/author/${author.slug}`);
-    }
+    permanentRedirect(`/author/${author.slug}`);
   }
 
   const { data: articles } = await getPublishedArticles({ authorId: author.id, limit: 20 });

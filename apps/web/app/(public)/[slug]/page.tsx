@@ -1,6 +1,4 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
-import { permanentRedirect } from "next/navigation";
 import { getPageBySlug } from "@/lib/public-api";
 import { getRootDomain } from "@/lib/site-url";
 import { SITE_NAME } from "@/lib/brand";
@@ -45,13 +43,12 @@ export default async function StaticPageOrArticle({ params }: Props) {
 
   if (page) {
     // Static pages are apex-only content (not per-category), same reasoning
-    // as the article/category canonical redirect - one URL, not one per host.
-    const rootDomain = getRootDomain();
-    const requestHostname = (await headers()).get("host")?.split(":")[0] ?? "";
-    if (requestHostname && requestHostname !== rootDomain) {
-      permanentRedirect(`https://${rootDomain}/${page.slug}`);
-    }
-
+    // as the article/category canonical redirect - one URL, not one per
+    // host. No headers()-based check needed to enforce that: proxy.ts's own
+    // Host-based routing already guarantees nothing but the apex ever
+    // reaches this branch (see tag/[slug]/page.tsx's equivalent comment),
+    // so calling a Dynamic API here would only cost every static-page view
+    // its eligibility for static rendering/ISR for no benefit.
     return (
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-12 pb-20">
         <h1 className="text-3xl font-black tracking-tight md:text-4xl">{page.title}</h1>

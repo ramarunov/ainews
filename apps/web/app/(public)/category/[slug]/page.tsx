@@ -8,7 +8,7 @@ import { Breadcrumb } from "@/components/public/breadcrumb";
 import { Pagination } from "@/components/public/pagination";
 import { getCategoryColors } from "@/lib/category-colors";
 import { getCategoryBySlug, getPublishedArticles } from "@/lib/public-api";
-import { getCategoryUrl, getRootDomain } from "@/lib/site-url";
+import { getCategoryUrl, getRootDomain, isCategorySubdomainsEnabled } from "@/lib/site-url";
 import { SITE_NAME } from "@/lib/brand";
 
 interface Props {
@@ -58,13 +58,22 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   // PUBLIC_PATH_PREFIXES' "/category" entry, but a category only has one
   // canonical URL - its own subdomain if it has one, else the apex. Visiting
   // it from any other host must redirect there, not render a second copy.
-  const requestHostname = (await headers()).get("host")?.split(":")[0] ?? "";
-  const canonicalCategoryUrl = getCategoryUrl(category, getRootDomain());
-  const canonicalHostname = new URL(canonicalCategoryUrl).hostname;
-  if (requestHostname && requestHostname !== canonicalHostname) {
-    const redirectUrl = new URL(canonicalCategoryUrl);
-    if (page > 1) redirectUrl.searchParams.set("page", String(page));
-    permanentRedirect(redirectUrl.toString());
+  //
+  // Gated the same way as article-view.tsx's equivalent check - see its
+  // comment. With the subdomain feature off, getCategoryUrl always resolves
+  // to the apex and proxy.ts already guarantees this only ever renders on
+  // the apex, so the headers() call (a Dynamic API) would otherwise force
+  // every single category page view to skip static rendering/ISR to
+  // compare the apex host to itself.
+  if (isCategorySubdomainsEnabled()) {
+    const requestHostname = (await headers()).get("host")?.split(":")[0] ?? "";
+    const canonicalCategoryUrl = getCategoryUrl(category, getRootDomain());
+    const canonicalHostname = new URL(canonicalCategoryUrl).hostname;
+    if (requestHostname && requestHostname !== canonicalHostname) {
+      const redirectUrl = new URL(canonicalCategoryUrl);
+      if (page > 1) redirectUrl.searchParams.set("page", String(page));
+      permanentRedirect(redirectUrl.toString());
+    }
   }
 
   const [{ data: articles, meta }, trending] = await Promise.all([

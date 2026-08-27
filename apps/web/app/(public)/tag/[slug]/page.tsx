@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
-import { notFound, permanentRedirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { ArticleCard } from "@/components/public/article-card";
 import { TrendingList } from "@/components/public/trending-list";
 import { Breadcrumb } from "@/components/public/breadcrumb";
@@ -43,13 +42,16 @@ export default async function TagPage({ params, searchParams }: Props) {
   const tag = await getTagBySlug(slug);
   if (!tag) notFound();
 
+  // No headers()-based wrong-host redirect here - tags are apex-only,
+  // unconditionally (no subdomain a tag could ever canonicalize to, unlike
+  // category/[slug]/page.tsx), and proxy.ts's own Host-based routing
+  // already guarantees nothing but the apex ever reaches this component
+  // (it 404s any other host and redirects the dashboard host's own
+  // public-path hits to the apex before this ever renders). headers() is a
+  // Dynamic API - calling it here regardless would force every tag page
+  // view to opt out of static rendering/ISR just to reconfirm something
+  // already guaranteed one layer up.
   const rootDomain = getRootDomain();
-  const requestHostname = (await headers()).get("host")?.split(":")[0] ?? "";
-  if (requestHostname && requestHostname !== rootDomain) {
-    const redirectUrl = new URL(`https://${rootDomain}/tag/${tag.slug}`);
-    if (page > 1) redirectUrl.searchParams.set("page", String(page));
-    permanentRedirect(redirectUrl.toString());
-  }
 
   const [{ data: articles, meta }, trending] = await Promise.all([
     getPublishedArticles({ tagSlug: slug, page, limit: 13 }),

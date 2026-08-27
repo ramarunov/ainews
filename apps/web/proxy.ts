@@ -209,6 +209,28 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(redirectUrl, 308);
   }
 
+  // Public reader-facing content (articles, categories, tags, author pages,
+  // static Pages, sitemaps/feed, ...) has exactly one canonical URL - the
+  // apex - regardless of which host the request came in on. Both branches
+  // below let the dashboard host (app.{rootDomain}) through unconditionally
+  // for ITS OWN paths, so without this check a public content path would
+  // ALSO render there (a second, non-canonical copy). This used to be
+  // caught per-page instead, via a runtime `headers()` call in each of
+  // article-view.tsx, category/[slug]/page.tsx, tag/[slug]/page.tsx, and
+  // [slug]/page.tsx's static-page branch - which forced every single one of
+  // those pages (i.e. nearly all real reader traffic) to opt out of static
+  // rendering/ISR just to answer a question this function already has the
+  // answer to for free, from the Host header read above. Checked before the
+  // kill-switch branch below so it applies the same way regardless of
+  // whether category subdomains are enabled.
+  if (hostname === appUrl.hostname && isPublicPath(pathname)) {
+    const redirectUrl = new URL(request.nextUrl);
+    redirectUrl.hostname = rootDomain;
+    redirectUrl.protocol = "https:";
+    redirectUrl.port = "";
+    return NextResponse.redirect(redirectUrl, 308);
+  }
+
   // Trailing-slash/pagination normalization only applies to public-site
   // hosts (apex or a category subdomain) - the dashboard host's own routes
   // (e.g. a legitimately trailing-slash-free /login) are unrelated.

@@ -24,4 +24,5 @@ export const DASHBOARD_PATHS = [
   "/articles", "/categories", "/pages", "/tags", "/series", "/media", "/article-search",
   "/workflow", "/calendar", "/news-intelligence", "/analytics", "/redirects",
   "/users", "/api-keys", "/activity", "/system-settings", "/account",
+  "/ads", "/ai-settings", "/comments", "/site-settings", "/webhooks",
 ];

@@ -6,7 +6,7 @@ import { PublicFooter } from "@/components/public/public-footer";
 import { AdSlot } from "@/components/public/ad-slot";
 import { TopBannerAd } from "@/components/public/top-banner-ad";
 import { findPublicSetting, getCategories, getPages, getPublicSettings } from "@/lib/public-api";
-import { getRootDomain, resolveHostCategory } from "@/lib/site-url";
+import { getRootDomain, isCategorySubdomainsEnabled, resolveHostCategory } from "@/lib/site-url";
 import { SITE_NAME, SITE_TAGLINE } from "@/lib/brand";
 import type { CustomScriptsSetting, SiteBrandingSetting, SiteFooterSetting } from "@/lib/types";
 import "../globals.css";
@@ -75,8 +75,20 @@ export default async function PublicLayout({
   // authority: each subdomain's nav stays scoped to its own topic) - see
   // PublicHeader's activeCategory prop. Falls back to the top-level list
   // when the category has no subcategories yet, so the nav is never empty.
-  const hostname = (await headers()).get("host")?.split(":")[0] ?? "";
+  //
+  // headers() is a Dynamic API - calling it unconditionally here forced
+  // EVERY page under this layout (i.e. nearly the entire public site) to
+  // opt out of static rendering/ISR, even though this lookup is a no-op
+  // whenever the subdomain feature itself is off (resolveHostCategory can
+  // only ever match a real subdomain, and no request reaches this app on
+  // one while the feature is disabled - see proxy.ts's kill switch).
+  // Skipping the call entirely in that case is what let the homepage,
+  // articles, categories, tags, etc. become cacheable again - confirmed via
+  // `next build`'s route table (○/ISR vs ƒ Dynamic) before/after this.
   const rootDomain = getRootDomain();
+  const hostname = isCategorySubdomainsEnabled()
+    ? ((await headers()).get("host")?.split(":")[0] ?? "")
+    : rootDomain;
   const activeCategory = resolveHostCategory(hostname, rootDomain, categories);
   const children_ = activeCategory
     ? categories.filter((c) => c.parentId === activeCategory.id && c.isActive !== false)
