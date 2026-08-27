@@ -142,7 +142,10 @@ export default async function HomePage() {
       <FootballScheduleWidget />
 
       <div className="mx-auto w-full max-w-6xl px-4">
-        <AdSlot value={findPublicSetting(settings, "ads.header")} className="flex justify-center" />
+        <AdSlot
+          value={findPublicSetting(settings, "ads.header")}
+          className="flex min-h-[50px] items-center justify-center sm:min-h-[90px]"
+        />
       </div>
 
       {latestStrip.length > 0 && (
@@ -255,7 +258,10 @@ export default async function HomePage() {
               categories={categories}
             />
           ))}
-          <AdSlot value={findPublicSetting(settings, "ads.sidebar")} />
+          <AdSlot
+            value={findPublicSetting(settings, "ads.sidebar")}
+            className="flex min-h-[250px] items-center justify-center"
+          />
           <GoldPriceWidget />
         </aside>
       </div>

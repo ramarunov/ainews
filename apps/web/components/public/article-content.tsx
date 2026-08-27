@@ -143,8 +143,18 @@ export function ArticleContent({
       <div className="mx-auto w-full max-w-6xl px-4 pt-6">
         <Breadcrumb items={breadcrumbItems} />
       </div>
+      {/* min-h-* on every AdSlot below reserves space matching each slot's
+          recommended size (see the Ads admin page's per-slot descriptions)
+          up front - AdSlot's container has no height of its own until its
+          client-side effect actually injects the ad, so without this every
+          ad load is a Cumulative Layout Shift event (one of Core Web
+          Vitals' 3 metrics, affects SEO ranking directly) - same fix
+          already applied to the top-of-page banner (top-banner-ad.tsx). */}
       <div className="mx-auto w-full max-w-6xl px-4">
-        <AdSlot value={findSetting(settings, "ads.article_top")} className="my-3 flex justify-center" />
+        <AdSlot
+          value={findSetting(settings, "ads.article_top")}
+          className="my-3 flex min-h-[50px] items-center justify-center sm:min-h-[90px]"
+        />
       </div>
       <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 pt-4 pb-10 lg:grid-cols-[1fr_320px]">
         <div className="flex min-w-0 flex-col gap-5">
@@ -222,7 +232,10 @@ export function ArticleContent({
             )}
           </div>
 
-          <AdSlot value={findSetting(settings, "ads.article_after_image")} className="my-3 flex justify-center" />
+          <AdSlot
+            value={findSetting(settings, "ads.article_after_image")}
+            className="my-3 flex min-h-[250px] items-center justify-center sm:min-h-[280px]"
+          />
 
           {/* Content is sanitized server-side (DOMPurify) at write time, before
               it's ever stored — see ArticlesService.sanitizeContent(). Split in
@@ -234,7 +247,10 @@ export function ArticleContent({
                 className={`mt-3 ${contentProseClassName}`}
                 dangerouslySetInnerHTML={{ __html: contentSplit.before }}
               />
-              <AdSlot value={findSetting(settings, "ads.article_middle")} className="my-3 flex justify-center" />
+              <AdSlot
+                value={findSetting(settings, "ads.article_middle")}
+                className="my-3 flex min-h-[250px] items-center justify-center sm:min-h-[280px]"
+              />
               <div
                 className={contentProseClassName}
                 dangerouslySetInnerHTML={{ __html: contentSplit.after }}
@@ -261,7 +277,10 @@ export function ArticleContent({
             </div>
           )}
 
-          <AdSlot value={findSetting(settings, "ads.in_article")} className="my-3 flex justify-center" />
+          <AdSlot
+            value={findSetting(settings, "ads.in_article")}
+            className="my-3 flex min-h-[90px] items-center justify-center sm:min-h-[250px]"
+          />
 
           {article.primaryAuthor && article.primaryAuthor.displayName && (
             <AuthorBox author={article.primaryAuthor} />
@@ -269,7 +288,10 @@ export function ArticleContent({
         </div>
 
         <aside className="flex flex-col gap-6">
-          <AdSlot value={findSetting(settings, "ads.sidebar")} />
+          <AdSlot
+            value={findSetting(settings, "ads.sidebar")}
+            className="flex min-h-[250px] items-center justify-center"
+          />
           {sidebarRelated.length > 0 && article.primaryCategory && (
             <div className="flex flex-col gap-4 rounded-lg border bg-card p-4">
               <h2 className={`flex items-center gap-2 text-base font-black tracking-tight uppercase ${colors.text}`}>
