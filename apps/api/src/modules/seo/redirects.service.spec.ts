@@ -137,6 +137,25 @@ describe('RedirectsService', () => {
       expect(prisma.redirect.update).not.toHaveBeenCalled();
       expect(result).toBeNull();
     });
+
+    it('returns null without recording a NotFoundLog for automated scanner probes', async () => {
+      prisma.redirect.findFirst.mockResolvedValue(null);
+
+      for (const path of ['/xmlrpc.php', '/wp-login.php', '/.env', '/2.php', '/wp-admin', '/.git/config']) {
+        expect(await service.resolve(path, 'org-1', 'https://example.com')).toBeNull();
+      }
+
+      expect(prisma.notFoundLog.upsert).not.toHaveBeenCalled();
+    });
+
+    it('still records a NotFoundLog for a plausible content path', async () => {
+      prisma.redirect.findFirst.mockResolvedValue(null);
+      prisma.notFoundLog.upsert.mockResolvedValue({});
+
+      await service.resolve('/berita-lama-yang-hilang', 'org-1');
+
+      expect(prisma.notFoundLog.upsert).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('dismissNotFoundLog', () => {

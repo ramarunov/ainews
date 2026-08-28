@@ -3,6 +3,17 @@ import { ConflictException, Injectable, NotFoundException } from '@nestjs/common
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { CreateRedirectDto, UpdateRedirectDto } from './dto/redirect.dto';
 
+// Automated vulnerability / CMS scanners hit every public domain with requests
+// for files a news site never serves — a fresh rusdimedia.com deploy logged
+// 4,798 hits on /xmlrpc.php in a single day, and ~400 of ~640 NotFoundLog rows
+// were probes like /wp-login.php, /.env, /2.php. Recording these buries the
+// handful of genuine content misses the 404 monitor exists to surface, so
+// resolve() recognises and drops them instead of writing a row. Deliberately
+// conservative: only unambiguous probe shapes, nothing that could collide with
+// a real article / page / category slug.
+const SCANNER_PATH_PATTERN =
+  /\.(php\d?|phtml|aspx?|jsp|cgi|pl|env|git|sql|bak|old|ini|sh|yml|yaml)(\/|\?|$)|(^|\/)(wp-|wp\/|xmlrpc|wlwmanifest|phpmyadmin|adminer|mysqladmin|\.env|\.git|\.aws|\.ssh|vendor\/|cgi-bin\/)/i;
+
 @Injectable()
 export class RedirectsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -87,15 +98,19 @@ export class RedirectsService {
       return { toUrl: redirect.toUrl, statusCode: redirect.statusCode };
     }
 
-    await this.prisma.notFoundLog.upsert({
-      where: { organizationId_path: { organizationId, path } },
-      create: { organizationId, path, referrer },
-      update: {
-        hitCount: { increment: 1 },
-        lastSeenAt: new Date(),
-        ...(referrer !== undefined && { referrer }),
-      },
-    });
+    // A redirect an editor adds for a junk path is still honoured above; we
+    // just don't pollute the 404 monitor with the scan traffic itself.
+    if (!SCANNER_PATH_PATTERN.test(path)) {
+      await this.prisma.notFoundLog.upsert({
+        where: { organizationId_path: { organizationId, path } },
+        create: { organizationId, path, referrer },
+        update: {
+          hitCount: { increment: 1 },
+          lastSeenAt: new Date(),
+          ...(referrer !== undefined && { referrer }),
+        },
+      });
+    }
 
     return null;
   }
