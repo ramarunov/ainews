@@ -135,6 +135,31 @@ function redirectForPrefixAlias(request: NextRequest): NextResponse | null {
   return null;
 }
 
+// The prefixes in WP_PREFIX_ALIASES were later eras; the ORIGINAL WordPress
+// permalink for a category archive was a bare `/{category}` with no prefix
+// at all (and `/{category}/page/N` for pagination). Those URLs are still in
+// Google's index and getting real crawler traffic, but currently fall
+// through to [slug]/page.tsx and 404 - a bare category slug is neither a
+// static Page nor an Article. 301 it to this app's `/category/{slug}` when
+// (and only when) the segment is a real, active category slug - verified at
+// build time that no article or static-page slug collides with a category
+// slug, so this can't shadow real content. Composes with the
+// PAGE_NUMBER_PATTERN branch: `/daerah/page/5` -> `/daerah?page=5` (that
+// branch) -> `/category/daerah?page=5` (this one), the query string carried
+// through by `new URL(request.nextUrl)`. Async because it needs the live
+// category list; getCachedCategories()'s 60s cache keeps it to one API read
+// per minute despite proxy running per-request.
+async function redirectForBareCategoryPath(request: NextRequest): Promise<NextResponse | null> {
+  const match = SINGLE_SEGMENT_PATTERN.exec(request.nextUrl.pathname);
+  if (!match) return null;
+  const slug = match[1];
+  const categories = await getCachedCategories();
+  if (!categories.some((c) => c.slug === slug && c.isActive !== false)) return null;
+  const redirectUrl = new URL(request.nextUrl);
+  redirectUrl.pathname = `/category/${slug}`;
+  return NextResponse.redirect(redirectUrl, 301);
+}
+
 // WordPress permalinks always carry a trailing slash; this app's routes
 // don't expect one (no `trailingSlash` in next.config.ts) - normalize so
 // already-indexed WP URLs (`/judul-artikel/`, `/category/tekno/`) don't
@@ -237,6 +262,15 @@ export async function proxy(request: NextRequest) {
   if (hostname !== appUrl.hostname) {
     const normalized = redirectForPathNormalization(request);
     if (normalized) return normalized;
+
+    // Apex only: on a category subdomain a single-segment path means a
+    // subcategory (resolved further below against the current host's
+    // children), not a top-level category, so the bare-category alias would
+    // send it to the wrong place.
+    if (hostname === rootDomain) {
+      const bareCategory = await redirectForBareCategoryPath(request);
+      if (bareCategory) return bareCategory;
+    }
   }
 
   // Kill switch for the whole category-subdomain feature - while this is
