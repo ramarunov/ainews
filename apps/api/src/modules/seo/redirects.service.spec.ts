@@ -148,11 +148,40 @@ describe('RedirectsService', () => {
       expect(prisma.notFoundLog.upsert).not.toHaveBeenCalled();
     });
 
+    it('returns null without recording a NotFoundLog for spam-crawler canned URL lists', async () => {
+      prisma.redirect.findFirst.mockResolvedValue(null);
+
+      for (const path of [
+        '/Coins___Paper_Money',
+        '/Pottery___Glass',
+        '/sports_mem__cards___fan_shop',
+        '/hand_picked_lists',
+        '/my-account-liberty_case',
+        '/2025',
+        '/2025/page/157',
+      ]) {
+        expect(await service.resolve(path, 'org-1', 'https://example.com')).toBeNull();
+      }
+
+      expect(prisma.notFoundLog.upsert).not.toHaveBeenCalled();
+    });
+
     it('still records a NotFoundLog for a plausible content path', async () => {
       prisma.redirect.findFirst.mockResolvedValue(null);
       prisma.notFoundLog.upsert.mockResolvedValue({});
 
       await service.resolve('/berita-lama-yang-hilang', 'org-1');
+
+      expect(prisma.notFoundLog.upsert).toHaveBeenCalledTimes(1);
+    });
+
+    it('still records a kebab-case miss even when it contains a 4-digit run mid-path', async () => {
+      prisma.redirect.findFirst.mockResolvedValue(null);
+      prisma.notFoundLog.upsert.mockResolvedValue({});
+
+      // only a *leading* /YYYY segment is a date-archive crawl; a year inside a
+      // real headline slug must still be logged
+      await service.resolve('/hasil-liga-1-persib-vs-persija-2025', 'org-1');
 
       expect(prisma.notFoundLog.upsert).toHaveBeenCalledTimes(1);
     });

@@ -14,6 +14,25 @@ import { CreateRedirectDto, UpdateRedirectDto } from './dto/redirect.dto';
 const SCANNER_PATH_PATTERN =
   /\.(php\d?|phtml|aspx?|jsp|cgi|pl|env|git|sql|bak|old|ini|sh|yml|yaml)(\/|\?|$)|(^|\/)(wp-|wp\/|xmlrpc|wlwmanifest|phpmyadmin|adminer|mysqladmin|\.env|\.git|\.aws|\.ssh|vendor\/|cgi-bin\/)/i;
 
+// A second, distinct noise class the scanner pattern above misses: spam / SEO
+// crawlers replaying huge canned URL lists (eBay category names like
+// /Coins___Paper_Money, /Pottery___Glass, /sports_mem__cards___fan_shop;
+// SaaS-template paths like /pricing-plans-modal, /curated_guides,
+// /hand_picked_lists) and bots working Google's stale index of the old
+// WordPress site (/2025/page/157 date archives). None of these are links this
+// site emits. Two shapes catch essentially all of it with no risk to real
+// content: (1) an uppercase letter or underscore anywhere — every real
+// article / page / category / tag slug in this DB is strictly kebab-case
+// [a-z0-9-] (the only two underscore slugs, browser-error articles like
+// dns_probe_finished_nxdomain, still serve on exact match, and any redirect is
+// resolved before this check ever runs); (2) a leading 4-digit year segment,
+// which is only ever a WordPress /YYYY/... date-archive crawl.
+const SPAM_CRAWLER_PATH_PATTERN = /[A-Z_]|^\/\d{4}(\/|$)/;
+
+function isUnloggableProbe(path: string): boolean {
+  return SCANNER_PATH_PATTERN.test(path) || SPAM_CRAWLER_PATH_PATTERN.test(path);
+}
+
 @Injectable()
 export class RedirectsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -100,7 +119,7 @@ export class RedirectsService {
 
     // A redirect an editor adds for a junk path is still honoured above; we
     // just don't pollute the 404 monitor with the scan traffic itself.
-    if (!SCANNER_PATH_PATTERN.test(path)) {
+    if (!isUnloggableProbe(path)) {
       await this.prisma.notFoundLog.upsert({
         where: { organizationId_path: { organizationId, path } },
         create: { organizationId, path, referrer },
