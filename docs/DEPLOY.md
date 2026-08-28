@@ -197,12 +197,17 @@ ROOT_DOMAIN=rusdimedia.com
 NEXT_PUBLIC_ROOT_DOMAIN=rusdimedia.com
 ENABLE_CATEGORY_SUBDOMAINS=false
 
-SMTP_HOST=<your real SMTP provider>
+# SMTP_SECURE is true ONLY for the implicit-TLS port 465. Port 587 (and 25)
+# use STARTTLS, which nodemailer negotiates on its own with secure=false -
+# setting secure=true there makes it attempt a TLS handshake on a plaintext
+# socket and every send fails with "wrong version number".
+SMTP_HOST=<your real SMTP provider>   # e.g. smtp-relay.brevo.com
 SMTP_PORT=587
-SMTP_SECURE=true
+SMTP_SECURE=false
 SMTP_USER=<...>
-SMTP_PASSWORD=<...>
+SMTP_PASSWORD=<...>                   # provider's SMTP key, not your login password
 EMAIL_FROM=noreply@rusdimedia.com
+EMAIL_FROM_NAME="RusdiMedia"
 
 PUBLIC_SITE_ORG_ID=   # fill in after you create your organization (§9)
 ```
