@@ -38,7 +38,14 @@ export interface ArticleSchemaInput {
   featuredImageUrl?: string;
   featuredImageWidth?: number;
   featuredImageHeight?: number;
-  author?: { id?: string; displayName: string };
+  author?: {
+    id?: string;
+    slug?: string | null;
+    displayName: string;
+    // E-E-A-T author signals (stored on user.metadata.authorProfile).
+    jobTitle?: string;
+    sameAs?: string[];
+  };
   publishedAt?: Date;
   updatedAt?: Date;
   tags?: string[];
@@ -48,6 +55,19 @@ export interface ArticleSchemaInput {
   // GeoService.calculateGeoScore.
   geoSummary?: string;
   geoEntities?: string[];
+}
+
+// Publisher-level E-E-A-T / editorial-transparency signals Google News and
+// Discover look for on NewsMediaOrganization. Sourced from
+// organization.settings.publisher.
+export interface PublisherInfo {
+  name: string;
+  logoUrl?: string | null;
+  sameAs?: string[];
+  ethicsPolicyUrl?: string;
+  correctionsPolicyUrl?: string;
+  diversityPolicyUrl?: string;
+  foundingDate?: string;
 }
 
 export interface SeoScoreBreakdown {
@@ -88,7 +108,7 @@ export class SeoService {
     article: ArticleSchemaInput & { content: string },
     siteUrl: string,
     focusKeyword?: string,
-    organization?: { name: string; logoUrl?: string | null },
+    organization?: PublisherInfo,
   ): Promise<SeoData> {
     // Each piece degrades independently rather than via a single Promise.all
     // - the AI-backed meta title/description calls can fail on their own
@@ -165,7 +185,7 @@ Return ONLY the title text, no quotes or explanation.`,
   async generateArticleSchema(
     article: ArticleSchemaInput,
     siteUrl: string,
-    organization?: { name: string; logoUrl?: string | null },
+    organization?: PublisherInfo,
   ): Promise<object> {
     const url = this.buildCanonicalUrl(siteUrl, article.slug, article.primaryCategory);
     const rootUrl = siteUrl.replace(/\/$/, '');
@@ -230,7 +250,19 @@ Return ONLY the title text, no quotes or explanation.`,
             // schema there too - see AuthorPage) rather than a bare name,
             // which is what Google's E-E-A-T guidance actually wants: an
             // identifiable, dereferenceable author, not just a string.
-            url: article.author.id ? `${rootUrl}/author/${article.author.id}` : undefined,
+            // Prefer the slug (the canonical /author URL); the id still
+            // resolves but 301s to the slug.
+            url:
+              article.author.slug || article.author.id
+                ? `${rootUrl}/author/${article.author.slug || article.author.id}`
+                : undefined,
+            jobTitle: article.author.jobTitle,
+            worksFor: organization
+              ? { '@type': 'NewsMediaOrganization', name: organization.name }
+              : undefined,
+            // Off-site profiles that corroborate this is a real, identifiable
+            // person - a core E-E-A-T "authoritativeness" signal.
+            sameAs: article.author.sameAs?.length ? article.author.sameAs : undefined,
           }
         : undefined,
       image: article.featuredImageUrl
@@ -250,13 +282,19 @@ Return ONLY the title text, no quotes or explanation.`,
             // signal for News/Discover surfaces.
             '@type': 'NewsMediaOrganization',
             name: organization.name,
-            // Points at the About/Editorial-Policy/Corrections page - the
-            // closest this codebase has to real NewsMediaOrganization-style
-            // ownership/editorial transparency without a dedicated schema.
             url: `${rootUrl}/about`,
             logo: organization.logoUrl
               ? { '@type': 'ImageObject', url: organization.logoUrl }
               : undefined,
+            // Editorial-transparency properties Google News documents for
+            // NewsMediaOrganization - sourced from
+            // organization.settings.publisher, so they only appear once an
+            // admin has actually filled them in.
+            sameAs: organization.sameAs?.length ? organization.sameAs : undefined,
+            ethicsPolicy: organization.ethicsPolicyUrl,
+            correctionsPolicy: organization.correctionsPolicyUrl,
+            diversityPolicy: organization.diversityPolicyUrl,
+            foundingDate: organization.foundingDate,
           }
         : undefined,
     };
@@ -540,7 +578,7 @@ Return ONLY the title text, no quotes or explanation.`,
       const article = await this.prisma.article.findUnique({
         where: { id: event.articleId },
         include: {
-          primaryAuthor: { select: { id: true, displayName: true } },
+          primaryAuthor: { select: { id: true, slug: true, displayName: true, metadata: true } },
           primaryCategory: {
             select: {
               name: true,
@@ -591,6 +629,15 @@ Return ONLY the title text, no quotes or explanation.`,
       const keptRobots =
         manual?.robots && manual.robots !== 'index,follow' ? manual.robots : undefined;
 
+      // Per-author E-E-A-T signals live in user.metadata.authorProfile;
+      // publisher-level ones in organization.settings.publisher. Both are
+      // free-form JSON bags, so read defensively.
+      const authorProfile =
+        ((article.primaryAuthor?.metadata as any) ?? {}).authorProfile ?? {};
+      const publisher = ((org?.settings as any) ?? {}).publisher ?? {};
+      const strArray = (v: unknown): string[] | undefined =>
+        Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.length > 0) : undefined;
+
       const seoData = await this.generateSeoData(
         event.articleId,
         {
@@ -608,7 +655,10 @@ Return ONLY the title text, no quotes or explanation.`,
           featuredImageHeight: article.featuredImage?.height ?? undefined,
           author: {
             id: article.primaryAuthor.id,
+            slug: article.primaryAuthor.slug,
             displayName: article.primaryAuthor.displayName ?? 'Staff',
+            jobTitle: typeof authorProfile.jobTitle === 'string' ? authorProfile.jobTitle : undefined,
+            sameAs: strArray(authorProfile.sameAs),
           },
           publishedAt: article.publishedAt ?? undefined,
           updatedAt: article.updatedAt,
@@ -618,7 +668,25 @@ Return ONLY the title text, no quotes or explanation.`,
         },
         siteUrl,
         keptFocusKeyword,
-        org ? { name: org.name, logoUrl: org.logoUrl } : undefined,
+        org
+          ? {
+              name: org.name,
+              logoUrl: org.logoUrl,
+              sameAs: strArray(publisher.sameAs),
+              ethicsPolicyUrl:
+                typeof publisher.ethicsPolicyUrl === 'string' ? publisher.ethicsPolicyUrl : undefined,
+              correctionsPolicyUrl:
+                typeof publisher.correctionsPolicyUrl === 'string'
+                  ? publisher.correctionsPolicyUrl
+                  : undefined,
+              diversityPolicyUrl:
+                typeof publisher.diversityPolicyUrl === 'string'
+                  ? publisher.diversityPolicyUrl
+                  : undefined,
+              foundingDate:
+                typeof publisher.foundingDate === 'string' ? publisher.foundingDate : undefined,
+            }
+          : undefined,
       );
 
       const merged = {

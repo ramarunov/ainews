@@ -8,8 +8,36 @@ import {
   MinLength,
   MaxLength,
   IsUrl,
+  ValidateNested,
+  ArrayMaxSize,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
+
+// E-E-A-T author signals, rendered on the /author page and into every
+// article's Person JSON-LD. Stored on user.metadata.authorProfile.
+export class AuthorProfileDto {
+  @ApiProperty({ required: false, example: 'Editor Redaksi', maxLength: 120 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  jobTitle?: string;
+
+  @ApiProperty({ required: false, type: [String], description: 'Off-site profile URLs (LinkedIn, X, ...)' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(10)
+  @IsUrl({}, { each: true })
+  sameAs?: string[];
+
+  @ApiProperty({ required: false, type: [String], description: 'Areas of expertise / topics covered' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @MaxLength(80, { each: true })
+  knowsAbout?: string[];
+}
 
 export class CreateUserDto {
   @ApiProperty({ example: 'jane@example.com' })
@@ -81,6 +109,12 @@ export class UpdateUserDto {
   @IsString()
   @MaxLength(20)
   locale?: string;
+
+  @ApiProperty({ required: false, type: AuthorProfileDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AuthorProfileDto)
+  authorProfile?: AuthorProfileDto;
 }
 
 export class UpdateOwnProfileDto extends UpdateUserDto {}

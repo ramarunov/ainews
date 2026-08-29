@@ -51,8 +51,18 @@ const profileSchema = z.object({
   bio: z.string().max(2000).optional().or(z.literal("")),
   timezone: z.string().max(100).optional().or(z.literal("")),
   locale: z.string().max(20).optional().or(z.literal("")),
+  jobTitle: z.string().max(120).optional().or(z.literal("")),
+  // Free text in the form (one per line); split into arrays on submit.
+  sameAs: z.string().optional().or(z.literal("")),
+  knowsAbout: z.string().optional().or(z.literal("")),
 });
 type ProfileFormValues = z.infer<typeof profileSchema>;
+
+const linesToArray = (v: string | undefined) =>
+  (v ?? "")
+    .split(/[\n,]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
 
 const passwordSchema = z
   .object({
@@ -86,12 +96,23 @@ function ProfileCard() {
       bio: profile?.bio ?? "",
       timezone: profile?.timezone ?? "",
       locale: profile?.locale ?? "",
+      jobTitle: profile?.metadata?.authorProfile?.jobTitle ?? "",
+      sameAs: (profile?.metadata?.authorProfile?.sameAs ?? []).join("\n"),
+      knowsAbout: (profile?.metadata?.authorProfile?.knowsAbout ?? []).join("\n"),
     },
   });
 
   const onSubmit = async (values: ProfileFormValues) => {
     try {
-      await updateProfile.mutateAsync(values);
+      const { jobTitle, sameAs, knowsAbout, ...rest } = values;
+      await updateProfile.mutateAsync({
+        ...rest,
+        authorProfile: {
+          jobTitle: jobTitle || undefined,
+          sameAs: linesToArray(sameAs),
+          knowsAbout: linesToArray(knowsAbout),
+        },
+      });
       toast.success("Profile updated");
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed to update profile");
@@ -200,6 +221,42 @@ function ProfileCard() {
               <Input id="profile-locale" placeholder="id" {...register("locale")} />
             </div>
           </div>
+
+          <div className="flex flex-col gap-4 border-t pt-4">
+            <p className="text-sm font-medium">
+              Author profile
+              <span className="ml-2 font-normal text-muted-foreground">
+                shown on your public /author page and in every article&apos;s structured data (E-E-A-T)
+              </span>
+            </p>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="profile-job-title">Job title</Label>
+              <Input
+                id="profile-job-title"
+                placeholder="Redaktur Pelaksana"
+                {...register("jobTitle")}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="profile-same-as">Profile links</Label>
+              <Textarea
+                id="profile-same-as"
+                rows={3}
+                placeholder={"One URL per line\nhttps://www.linkedin.com/in/…\nhttps://x.com/…"}
+                {...register("sameAs")}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="profile-knows-about">Areas of expertise</Label>
+              <Textarea
+                id="profile-knows-about"
+                rows={2}
+                placeholder="One topic per line (or comma-separated): Politik, Ekonomi, Olahraga"
+                {...register("knowsAbout")}
+              />
+            </div>
+          </div>
+
           <Button type="submit" disabled={!isDirty || updateProfile.isPending} className="self-start">
             {updateProfile.isPending ? "Saving…" : "Save changes"}
           </Button>

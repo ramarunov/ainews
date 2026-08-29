@@ -193,8 +193,28 @@ export class UsersService {
 
   // ─── Update ────────────────────────────────────────────────────────────────
 
+  // Merges the optional authorProfile patch into user.metadata without
+  // disturbing any other keys the bag holds.
+  private mergeAuthorProfile(
+    currentMetadata: unknown,
+    dto: UpdateUserDto,
+  ): Prisma.InputJsonValue | undefined {
+    if (dto.authorProfile === undefined) return undefined;
+    const meta = (currentMetadata as Record<string, unknown>) ?? {};
+    const current = (meta.authorProfile as Record<string, unknown>) ?? {};
+    return {
+      ...meta,
+      authorProfile: { ...current, ...dto.authorProfile },
+    } as Prisma.InputJsonValue;
+  }
+
   async update(id: string, dto: UpdateUserDto, organizationId: string) {
     await this.findOne(id, organizationId);
+    const existing = await this.prisma.user.findUnique({
+      where: { id },
+      select: { metadata: true },
+    });
+    const metadata = this.mergeAuthorProfile(existing?.metadata, dto);
 
     const updated = await this.prisma.user.update({
       where: { id },
@@ -206,6 +226,7 @@ export class UsersService {
         ...(dto.avatarUrl !== undefined && { avatarUrl: dto.avatarUrl }),
         ...(dto.timezone !== undefined && { timezone: dto.timezone }),
         ...(dto.locale !== undefined && { locale: dto.locale }),
+        ...(metadata !== undefined && { metadata }),
       },
       select: SAFE_SELECT,
     });
@@ -227,6 +248,8 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
 
+    const metadata = this.mergeAuthorProfile(existing.metadata, dto);
+
     const updated = await this.prisma.user.update({
       where: { id: userId },
       data: {
@@ -237,6 +260,7 @@ export class UsersService {
         ...(dto.avatarUrl !== undefined && { avatarUrl: dto.avatarUrl }),
         ...(dto.timezone !== undefined && { timezone: dto.timezone }),
         ...(dto.locale !== undefined && { locale: dto.locale }),
+        ...(metadata !== undefined && { metadata }),
       },
       select: SAFE_SELECT,
     });

@@ -327,7 +327,8 @@ describe('PublicSiteService', () => {
           }),
         }),
       );
-      expect(result).toBe(author);
+      expect(result).toMatchObject({ id: author.id, displayName: 'Jane Doe' });
+      expect(result).toMatchObject({ jobTitle: null, sameAs: [], knowsAbout: [] });
     });
 
     it('falls back to id (not just slug) when the param looks like a UUID - for pre-slug links', async () => {
@@ -346,7 +347,8 @@ describe('PublicSiteService', () => {
           }),
         }),
       );
-      expect(result).toBe(author);
+      expect(result).toMatchObject({ id: author.id, displayName: 'Jane Doe' });
+      expect(result).toMatchObject({ jobTitle: null, sameAs: [], knowsAbout: [] });
     });
   });
 

@@ -206,6 +206,57 @@ describe('SeoService', () => {
       });
     });
 
+    it('enriches the author Person with slug URL, jobTitle, worksFor and sameAs', async () => {
+      const schema: any = await service.generateArticleSchema(
+        {
+          title: 'E-E-A-T Story',
+          slug: 'eeat-story',
+          author: {
+            id: 'author-1',
+            slug: 'jane-doe',
+            displayName: 'Jane Doe',
+            jobTitle: 'Editor Redaksi',
+            sameAs: ['https://www.linkedin.com/in/janedoe'],
+          },
+        },
+        'https://example.com',
+        { name: 'RusdiMedia.com' },
+      );
+
+      expect(schema.author).toEqual({
+        '@type': 'Person',
+        name: 'Jane Doe',
+        url: 'https://example.com/author/jane-doe',
+        jobTitle: 'Editor Redaksi',
+        worksFor: { '@type': 'NewsMediaOrganization', name: 'RusdiMedia.com' },
+        sameAs: ['https://www.linkedin.com/in/janedoe'],
+      });
+    });
+
+    it('adds sameAs and editorial-policy URLs to the publisher when configured', async () => {
+      const schema: any = await service.generateArticleSchema(
+        { title: 'Transparent Org', slug: 'transparent-org' },
+        'https://example.com',
+        {
+          name: 'RusdiMedia.com',
+          sameAs: ['https://facebook.com/rusdimedia'],
+          ethicsPolicyUrl: 'https://example.com/pedoman-media-siber',
+          correctionsPolicyUrl: 'https://example.com/kebijakan-koreksi',
+          foundingDate: '2019-01-01',
+        },
+      );
+
+      expect(schema.publisher).toEqual({
+        '@type': 'NewsMediaOrganization',
+        name: 'RusdiMedia.com',
+        url: 'https://example.com/about',
+        sameAs: ['https://facebook.com/rusdimedia'],
+        ethicsPolicy: 'https://example.com/pedoman-media-siber',
+        correctionsPolicy: 'https://example.com/kebijakan-koreksi',
+        foundingDate: '2019-01-01',
+      });
+    });
+
     it('includes articleSection, keywords, wordCount, inLanguage, and isAccessibleForFree when provided', async () => {
       const schema: any = await service.generateArticleSchema(
         {

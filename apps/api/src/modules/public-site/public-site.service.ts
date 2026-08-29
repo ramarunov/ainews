@@ -183,14 +183,37 @@ export class PublicSiteService {
         isActive: true,
         OR: isUuid ? [{ id: idOrSlug }, { slug: idOrSlug }] : [{ slug: idOrSlug }],
       },
-      select: { id: true, slug: true, displayName: true, firstName: true, lastName: true, avatarUrl: true, bio: true },
+      select: {
+        id: true,
+        slug: true,
+        displayName: true,
+        firstName: true,
+        lastName: true,
+        avatarUrl: true,
+        bio: true,
+        metadata: true,
+      },
     });
 
     if (!author) {
       throw new NotFoundException('Author not found');
     }
 
-    return author;
+    // Flatten the E-E-A-T author fields out of the free-form metadata bag
+    // (see /account profile editor) so the public site doesn't have to know
+    // the storage shape. Nothing else from `metadata` is exposed.
+    const profile = ((author.metadata as any) ?? {}).authorProfile ?? {};
+    const { metadata: _drop, ...rest } = author;
+    return {
+      ...rest,
+      jobTitle: typeof profile.jobTitle === 'string' ? profile.jobTitle : null,
+      sameAs: Array.isArray(profile.sameAs)
+        ? profile.sameAs.filter((x: unknown) => typeof x === 'string' && x)
+        : [],
+      knowsAbout: Array.isArray(profile.knowsAbout)
+        ? profile.knowsAbout.filter((x: unknown) => typeof x === 'string' && x)
+        : [],
+    };
   }
 
   async search(q: string, page = 1, limit = 20) {

@@ -52,6 +52,8 @@ export default async function AuthorPage({ params }: Props) {
   // article's NewsArticle.author) is what Google's E-E-A-T guidance
   // actually wants - see SeoService.generateArticleSchema's author.url,
   // which links back to this same page.
+  const sameAs = author.sameAs?.filter(Boolean) ?? [];
+  const knowsAbout = author.knowsAbout?.filter(Boolean) ?? [];
   const personSchema = {
     "@context": "https://schema.org",
     "@type": "Person",
@@ -59,6 +61,10 @@ export default async function AuthorPage({ params }: Props) {
     description: author.bio || undefined,
     image: author.avatarUrl || undefined,
     url: authorUrl,
+    jobTitle: author.jobTitle || undefined,
+    worksFor: { "@type": "NewsMediaOrganization", name: SITE_NAME },
+    sameAs: sameAs.length > 0 ? sameAs : undefined,
+    knowsAbout: knowsAbout.length > 0 ? knowsAbout : undefined,
   };
 
   return (
@@ -81,7 +87,37 @@ export default async function AuthorPage({ params }: Props) {
           <div>
             <p className="text-xs font-bold tracking-wide text-muted-foreground uppercase">Penulis</p>
             <h1 className="text-2xl font-black tracking-tight md:text-3xl">{author.displayName}</h1>
+            {author.jobTitle && (
+              <p className="mt-0.5 text-sm font-semibold text-primary">{author.jobTitle}</p>
+            )}
             {author.bio && <p className="mt-1 max-w-2xl text-muted-foreground">{author.bio}</p>}
+            {sameAs.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                {sameAs.map((url) => (
+                  <a
+                    key={url}
+                    href={url}
+                    target="_blank"
+                    rel="me noopener noreferrer"
+                    className="text-muted-foreground underline hover:text-primary"
+                  >
+                    {new URL(url).hostname.replace(/^www\./, "")}
+                  </a>
+                ))}
+              </div>
+            )}
+            {knowsAbout.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {knowsAbout.map((topic) => (
+                  <span
+                    key={topic}
+                    className="rounded-full border bg-background px-2.5 py-0.5 text-xs font-medium text-muted-foreground"
+                  >
+                    {topic}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>

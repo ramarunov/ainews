@@ -11,6 +11,11 @@ export interface UpdateProfileInput {
   avatarUrl?: string;
   timezone?: string;
   locale?: string;
+  authorProfile?: {
+    jobTitle?: string;
+    sameAs?: string[];
+    knowsAbout?: string[];
+  };
 }
 
 // The login response (AuthUser, kept in the auth store) is deliberately

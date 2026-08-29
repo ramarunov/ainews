@@ -29,6 +29,12 @@ export interface AuthUser {
   permissions: string[];
 }
 
+export interface AuthorProfile {
+  jobTitle?: string | null;
+  sameAs?: string[];
+  knowsAbout?: string[];
+}
+
 export interface MyProfile {
   id: string;
   email: string;
@@ -41,6 +47,7 @@ export interface MyProfile {
   locale?: string | null;
   mfaEnabled: boolean;
   isSuperadmin: boolean;
+  metadata?: { authorProfile?: AuthorProfile } & Record<string, unknown>;
 }
 
 export interface AiProviderStatus {
@@ -396,6 +403,12 @@ export interface PublicAuthor {
   lastName?: string;
   avatarUrl?: string | null;
   bio?: string | null;
+  // E-E-A-T author signals (user.metadata.authorProfile), flattened by
+  // PublicSiteService.getAuthorProfile. Only present on the author-profile
+  // endpoint, not on article.primaryAuthor.
+  jobTitle?: string | null;
+  sameAs?: string[];
+  knowsAbout?: string[];
 }
 
 export interface PublicArticle {
