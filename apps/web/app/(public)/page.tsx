@@ -88,16 +88,34 @@ export default async function HomePage() {
   const rootDomain = getRootDomain();
   const apexUrl = `https://${rootDomain}`;
   const branding = findPublicSetting<SiteBrandingSetting>(settings, "site.branding");
+  const publisher = findPublicSetting<{
+    sameAs?: string[];
+    foundingDate?: string;
+    ethicsPolicyUrl?: string;
+    correctionsPolicyUrl?: string;
+    diversityPolicyUrl?: string;
+  }>(settings, "site.publisher");
   // Organization/WebSite (with a sitelinks-search-box SearchAction) — the
   // homepage-level schema.org types; NewsArticle lives on the article page
-  // itself, CollectionPage/BreadcrumbList on category pages.
+  // itself, CollectionPage/BreadcrumbList on category pages. The
+  // NewsMediaOrganization here is the canonical publisher entity and
+  // mirrors the `publisher` node every article carries (same source:
+  // organization.settings.publisher, exposed as the "site.publisher"
+  // public setting).
   const homeSchema = [
     {
       "@context": "https://schema.org",
-      "@type": "Organization",
+      "@type": "NewsMediaOrganization",
       name: SITE_NAME,
       url: apexUrl,
-      ...(branding?.logoUrl && { logo: branding.logoUrl }),
+      ...(branding?.logoUrl && {
+        logo: { "@type": "ImageObject", url: branding.logoUrl },
+      }),
+      ...(publisher?.sameAs?.length && { sameAs: publisher.sameAs }),
+      ...(publisher?.foundingDate && { foundingDate: publisher.foundingDate }),
+      ...(publisher?.ethicsPolicyUrl && { ethicsPolicy: publisher.ethicsPolicyUrl }),
+      ...(publisher?.correctionsPolicyUrl && { correctionsPolicy: publisher.correctionsPolicyUrl }),
+      ...(publisher?.diversityPolicyUrl && { diversityPolicy: publisher.diversityPolicyUrl }),
     },
     {
       "@context": "https://schema.org",
@@ -116,10 +134,13 @@ export default async function HomePage() {
     <div className="flex flex-col gap-10 pb-16">
       <script
         type="application/ld+json"
-        // Static, app-defined values only (SITE_NAME/URLs) - no
-        // user-authored content flows through here, unlike the article
-        // page's schema, so no "</script>"-breakout escaping is needed.
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(homeSchema) }}
+        // Mostly app-defined (SITE_NAME/URLs), but the NewsMediaOrganization
+        // node now also carries admin-configured publisher fields (sameAs,
+        // policy URLs) - escape "<" the same way the article page does so a
+        // stray "</script>" in one of those can't break out of the tag.
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(homeSchema).replace(/</g, "\\u003c"),
+        }}
       />
       <BreakingNewsBanner articles={breaking.data} />
 
