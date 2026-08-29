@@ -35,10 +35,15 @@ export class GeoService {
     content: string,
     title: string,
     articleId?: string,
+    language?: string,
   ): Promise<GeoScore> {
     const result = await this.aiGateway.jsonPrompt<GeoScore>(
       `You are a Generative Engine Optimization (GEO) specialist.
-GEO optimizes content to be cited by AI search engines (Perplexity, ChatGPT, Google SGE, etc.).
+GEO optimizes content to be cited by AI search engines (Perplexity, ChatGPT, Google SGE, etc.).${
+        language
+          ? `\n\nWrite structuredSummary, keyClaims, entitiesCovered, questionsAnswered and recommendations in this language (ISO 639-1 code): ${language}. The numeric scores are language-independent.`
+          : ''
+      }
 
 Score the article on these dimensions (each 0-20 except where noted, total max 100):
 
@@ -149,6 +154,7 @@ Analyze the article and return E-E-A-T signals and scores (each dimension 0-25, 
         article.content,
         article.title,
         event.articleId,
+        article.language ?? undefined,
       );
 
       await this.prisma.articleGeo.upsert({
