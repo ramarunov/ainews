@@ -339,6 +339,7 @@ export interface Article {
   articleCategories?: { category: Category }[];
   seriesId?: string | null;
   seriesOrder?: number | null;
+  seoData?: PublicArticleSeo | null;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string | null;
@@ -377,6 +378,7 @@ export interface ArticleAiAnalysis {
 export interface PublicArticleSeo {
   metaTitle?: string | null;
   metaDescription?: string | null;
+  focusKeyword?: string | null;
   canonicalUrl?: string | null;
   robots?: string | null;
   ogTitle?: string | null;

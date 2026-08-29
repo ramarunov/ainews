@@ -60,6 +60,9 @@ describe('ArticlesService', () => {
         deleteMany: jest.fn().mockResolvedValue({}),
         createMany: jest.fn().mockResolvedValue({}),
       },
+      articleSeo: {
+        upsert: jest.fn().mockResolvedValue({}),
+      },
       articleView: { create: jest.fn(), deleteMany: jest.fn() },
       mediaFile: { findUnique: jest.fn() },
       $transaction: jest.fn().mockResolvedValue([]),
@@ -464,6 +467,27 @@ describe('ArticlesService', () => {
 
       expect(prisma.articleCategory.deleteMany).toHaveBeenCalled();
       expect(prisma.articleCategory.createMany).not.toHaveBeenCalled();
+    });
+
+    it('upserts ArticleSeo from dto.seo, mapping blank strings to null and skipping blank robots', async () => {
+      await service.update(
+        'article-1',
+        { seo: { metaTitle: 'Judul SEO', metaDescription: '', focusKeyword: 'kata kunci', robots: '' } } as any,
+        'user-1',
+        'org-1',
+      );
+
+      expect(prisma.articleSeo.upsert).toHaveBeenCalledTimes(1);
+      const args = prisma.articleSeo.upsert.mock.calls[0][0];
+      expect(args.where).toEqual({ articleId: 'article-1' });
+      expect(args.update).toEqual({ metaTitle: 'Judul SEO', metaDescription: null, focusKeyword: 'kata kunci' });
+      expect(args.update).not.toHaveProperty('robots');
+      expect(args.create).toEqual({ articleId: 'article-1', metaTitle: 'Judul SEO', metaDescription: null, focusKeyword: 'kata kunci' });
+    });
+
+    it('does not touch ArticleSeo when dto.seo is absent', async () => {
+      await service.update('article-1', { title: 'Just a retitle please' } as any, 'user-1', 'org-1');
+      expect(prisma.articleSeo.upsert).not.toHaveBeenCalled();
     });
 
     it('does not touch categories at all when categoryIds is not provided', async () => {

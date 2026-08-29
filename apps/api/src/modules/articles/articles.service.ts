@@ -432,6 +432,32 @@ export class ArticlesService {
       }
     }
 
+    // Editor-set SEO overrides. Written before the article.published event
+    // below so SeoService.onArticlePublished sees these values and keeps
+    // them instead of overwriting with auto-generated ones. An empty string
+    // clears a field back to "auto" (same convention as subtitle/excerpt);
+    // robots has a NOT NULL default, so a blank value just leaves it alone.
+    if (dto.seo) {
+      const { metaTitle, metaDescription, focusKeyword, robots } = dto.seo;
+      const seoFields: {
+        metaTitle?: string | null;
+        metaDescription?: string | null;
+        focusKeyword?: string | null;
+        robots?: string;
+      } = {};
+      if (metaTitle !== undefined) seoFields.metaTitle = metaTitle || null;
+      if (metaDescription !== undefined) seoFields.metaDescription = metaDescription || null;
+      if (focusKeyword !== undefined) seoFields.focusKeyword = focusKeyword || null;
+      if (robots) seoFields.robots = robots;
+      if (Object.keys(seoFields).length > 0) {
+        await this.prisma.articleSeo.upsert({
+          where: { articleId: id },
+          create: { articleId: id, ...seoFields },
+          update: seoFields,
+        });
+      }
+    }
+
     // Create revision
     const revisionNumber = (existing.revisionCount ?? 0) + 1;
     await this.createRevision(

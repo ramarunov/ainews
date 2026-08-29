@@ -301,5 +301,69 @@ describe('SeoService', () => {
       expect(result.metaTitle).toBe(longTitle.substring(0, 43));
       expect(result.metaDescription).toBe('A short excerpt.');
     });
+
+    it('passes the article language through to the meta-description generator', async () => {
+      const aiWriter = { generateMetaDescription: jest.fn().mockResolvedValue('Deskripsi.') };
+      const svc = new SeoService(undefined as any, { prompt: jest.fn() } as any, aiWriter as any, undefined as any);
+
+      await svc.generateSeoData(
+        'article-1',
+        { title: 'Judul pendek', content: '<p>Isi artikel.</p>', slug: 'judul-pendek', language: 'id' },
+        'https://example.com',
+      );
+
+      expect(aiWriter.generateMetaDescription).toHaveBeenCalledWith(
+        expect.any(String),
+        undefined,
+        'id',
+      );
+    });
+  });
+
+  describe('onArticlePublished', () => {
+    it('keeps editor-set meta fields and robots, but still regenerates schema JSON-LD', async () => {
+      const upsert = jest.fn().mockResolvedValue({});
+      const prisma = {
+        article: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: 'article-1',
+            title: 'Auto Headline',
+            content: '<p>Body.</p>',
+            excerpt: null,
+            slug: 'auto-headline',
+            language: 'id',
+            publishedAt: new Date('2026-08-29T00:00:00Z'),
+            updatedAt: new Date('2026-08-29T01:00:00Z'),
+            featuredImageUrl: null,
+            primaryAuthor: { id: 'u1', displayName: 'Redaksi' },
+            primaryCategory: null,
+            featuredImage: null,
+            articleTags: [],
+            seoData: {
+              metaTitle: 'Judul Pilihan Editor',
+              metaDescription: 'Deskripsi meta yang ditulis editor.',
+              focusKeyword: 'kata kunci',
+              robots: 'noindex,follow',
+            },
+          }),
+        },
+        organization: { findUnique: jest.fn().mockResolvedValue(null) },
+        articleSeo: { upsert },
+      };
+      const aiWriter = { generateMetaDescription: jest.fn().mockResolvedValue('Deskripsi otomatis.') };
+      const config = { get: jest.fn().mockReturnValue('rusdimedia.com') };
+      const svc = new SeoService(prisma as any, { prompt: jest.fn() } as any, aiWriter as any, config as any);
+
+      await svc.onArticlePublished({ articleId: 'article-1', organizationId: 'org-1', slug: 'auto-headline' });
+
+      expect(upsert).toHaveBeenCalledTimes(1);
+      const { update } = upsert.mock.calls[0][0];
+      expect(update.metaTitle).toBe('Judul Pilihan Editor');
+      expect(update.metaDescription).toBe('Deskripsi meta yang ditulis editor.');
+      expect(update.ogDescription).toBe('Deskripsi meta yang ditulis editor.');
+      expect(update.focusKeyword).toBe('kata kunci');
+      expect(update.robots).toBe('noindex,follow');
+      expect((update.schemaJsonld as any)['@type']).toBe('NewsArticle');
+    });
   });
 });

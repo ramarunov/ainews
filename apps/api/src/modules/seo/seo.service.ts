@@ -98,7 +98,7 @@ export class SeoService {
         article.title.substring(0, SeoService.META_TITLE_MAX),
       ),
       this.aiWriter
-        .generateMetaDescription(article.content, focusKeyword)
+        .generateMetaDescription(article.content, focusKeyword, article.language)
         .catch(() => (article.excerpt ?? article.content.replace(/<[^>]+>/g, ' ')).trim().substring(0, 160)),
       this.generateArticleSchema(article, siteUrl, organization),
     ]);
@@ -555,6 +555,18 @@ Return ONLY the title text, no quotes or explanation.`,
         (org?.settings as any)?.siteUrl ??
         (this.config ? `https://${getRootDomain(this.config)}` : 'https://example.com');
 
+      // Values the editor set by hand in the article's SEO panel win over
+      // anything this handler would generate, and survive every later
+      // re-publish. Everything else (schema JSON-LD with a fresh
+      // dateModified, canonical URL, OG image, scores) is still regenerated
+      // each time so it tracks real edits.
+      const manual = article.seoData ?? null;
+      const keptMetaTitle = manual?.metaTitle?.trim() || undefined;
+      const keptMetaDescription = manual?.metaDescription?.trim() || undefined;
+      const keptFocusKeyword = manual?.focusKeyword?.trim() || undefined;
+      const keptRobots =
+        manual?.robots && manual.robots !== 'index,follow' ? manual.robots : undefined;
+
       const seoData = await this.generateSeoData(
         event.articleId,
         {
@@ -577,20 +589,31 @@ Return ONLY the title text, no quotes or explanation.`,
           language: article.language ?? undefined,
         },
         siteUrl,
-        undefined,
+        keptFocusKeyword,
         org ? { name: org.name, logoUrl: org.logoUrl } : undefined,
       );
+
+      const merged = {
+        ...seoData,
+        ...(keptMetaTitle && { metaTitle: keptMetaTitle, ogTitle: keptMetaTitle }),
+        ...(keptMetaDescription && {
+          metaDescription: keptMetaDescription,
+          ogDescription: keptMetaDescription,
+        }),
+        ...(keptFocusKeyword && { focusKeyword: keptFocusKeyword }),
+        ...(keptRobots && { robots: keptRobots }),
+      };
 
       await this.prisma.articleSeo.upsert({
         where: { articleId: event.articleId },
         create: {
           articleId: event.articleId,
-          ...seoData,
-          schemaJsonld: seoData.schemaJsonld as any,
+          ...merged,
+          schemaJsonld: merged.schemaJsonld as any,
         },
         update: {
-          ...seoData,
-          schemaJsonld: seoData.schemaJsonld as any,
+          ...merged,
+          schemaJsonld: merged.schemaJsonld as any,
         },
       });
     } catch (err) {

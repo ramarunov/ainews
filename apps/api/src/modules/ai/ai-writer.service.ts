@@ -186,9 +186,15 @@ Generate ${count} title variants. Mix styles: news, analysis, listicle, question
     return result.titles ?? [];
   }
 
-  async generateMetaDescription(content: string, focusKeyword?: string): Promise<string> {
+  async generateMetaDescription(
+    content: string,
+    focusKeyword?: string,
+    language?: string,
+  ): Promise<string> {
     const systemPrompt = `You are an SEO specialist. Write a compelling meta description.
-Rules: 150-160 characters. Include the focus keyword naturally. Action-oriented. No clickbait.`;
+Rules: 150-160 characters. Include the focus keyword naturally. Action-oriented. No clickbait.${
+      language ? `\nWrite it in this language (ISO 639-1 code): ${language}.` : ''
+    }`;
 
     const userPrompt = `Article content:
 ${content.substring(0, 3000)}

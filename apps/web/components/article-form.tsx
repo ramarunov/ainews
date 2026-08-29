@@ -63,6 +63,13 @@ import { MediaPickerDialog } from "@/components/media-picker-dialog";
 import { StockPhotoDialog } from "@/components/stock-photo-dialog";
 import { getArticleUrl } from "@/lib/site-url";
 
+export const ROBOTS_OPTIONS = [
+  { value: "index,follow", label: "Index, follow (default)" },
+  { value: "noindex,follow", label: "No index, follow" },
+  { value: "index,nofollow", label: "Index, no follow" },
+  { value: "noindex,nofollow", label: "No index, no follow" },
+] as const;
+
 const articleSchema = z.object({
   title: z.string().min(10, "Title must be at least 10 characters").max(500),
   subtitle: z.string().max(500).optional().or(z.literal("")),
@@ -73,9 +80,13 @@ const articleSchema = z.object({
   isBreaking: z.boolean(),
   isFeatured: z.boolean(),
   commentsEnabled: z.boolean(),
+  metaTitle: z.string().max(255).optional().or(z.literal("")),
+  metaDescription: z.string().max(500).optional().or(z.literal("")),
+  focusKeyword: z.string().max(255).optional().or(z.literal("")),
+  robots: z.enum(["index,follow", "noindex,follow", "index,nofollow", "noindex,nofollow"]),
 });
 
-type ArticleFormValues = z.infer<typeof articleSchema>;
+export type ArticleFormValues = z.infer<typeof articleSchema>;
 
 export function ArticleForm({ article }: { article?: Article }) {
   const router = useRouter();
@@ -131,6 +142,11 @@ export function ArticleForm({ article }: { article?: Article }) {
       isBreaking: article?.isBreaking ?? false,
       isFeatured: article?.isFeatured ?? false,
       commentsEnabled: article?.commentsEnabled ?? true,
+      metaTitle: article?.seoData?.metaTitle ?? "",
+      metaDescription: article?.seoData?.metaDescription ?? "",
+      focusKeyword: article?.seoData?.focusKeyword ?? "",
+      robots:
+        (article?.seoData?.robots as ArticleFormValues["robots"] | undefined) ?? "index,follow",
     },
   });
 
@@ -314,6 +330,15 @@ export function ArticleForm({ article }: { article?: Article }) {
     isBreaking: values.isBreaking,
     isFeatured: values.isFeatured,
     commentsEnabled: values.commentsEnabled,
+    // Sent as-is (empty string clears an override back to auto-generated),
+    // same convention as subtitle/excerpt above. The backend upserts
+    // ArticleSeo and preserves these across later re-publishes.
+    seo: {
+      metaTitle: values.metaTitle,
+      metaDescription: values.metaDescription,
+      focusKeyword: values.focusKeyword,
+      robots: values.robots,
+    },
   });
 
   const onSave = async (values: ArticleFormValues) => {
@@ -717,6 +742,10 @@ export function ArticleForm({ article }: { article?: Article }) {
                       title={liveTitle}
                       content={liveContent ?? ""}
                       slug={liveSlug ?? ""}
+                      register={register}
+                      metaTitle={watch("metaTitle") ?? ""}
+                      metaDescription={watch("metaDescription") ?? ""}
+                      focusKeyword={watch("focusKeyword") ?? ""}
                     />
                   ) : (
                     <p className="text-sm text-muted-foreground">

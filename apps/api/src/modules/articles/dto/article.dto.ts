@@ -7,15 +7,52 @@ import {
   IsArray,
   IsDateString,
   IsInt,
+  IsIn,
   Min,
   Max,
   MaxLength,
   MinLength,
   IsUrl,
+  ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, PartialType } from '@nestjs/swagger';
 import { ArticleStatus } from '@prisma/client';
+
+// Editor-settable SEO overrides. Anything left blank is filled in
+// automatically when the article is published (SeoService.onArticlePublished);
+// anything set here wins and is preserved across later re-publishes.
+export const ROBOTS_DIRECTIVES = [
+  'index,follow',
+  'noindex,follow',
+  'index,nofollow',
+  'noindex,nofollow',
+] as const;
+
+export class ArticleSeoInputDto {
+  @ApiProperty({ required: false, maxLength: 255 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  metaTitle?: string;
+
+  @ApiProperty({ required: false, maxLength: 500 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  metaDescription?: string;
+
+  @ApiProperty({ required: false, maxLength: 255 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  focusKeyword?: string;
+
+  @ApiProperty({ required: false, enum: ROBOTS_DIRECTIVES })
+  @IsOptional()
+  @IsIn(ROBOTS_DIRECTIVES as unknown as string[])
+  robots?: string;
+}
 
 export class CreateArticleDto {
   @ApiProperty({ example: 'Breaking: AI Regulation Bill Passes Senate' })
@@ -123,6 +160,12 @@ export class CreateArticleDto {
   @IsOptional()
   @IsString()
   sourceName?: string;
+
+  @ApiProperty({ required: false, type: ArticleSeoInputDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ArticleSeoInputDto)
+  seo?: ArticleSeoInputDto;
 }
 
 export class UpdateArticleDto extends PartialType(CreateArticleDto) {
