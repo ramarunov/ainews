@@ -303,7 +303,23 @@ export class ArticlesService {
   async findBySlug(slug: string, organizationId: string) {
     const article = await this.prisma.article.findFirst({
       where: { slug, organizationId, deletedAt: null },
-      include: { ...this.defaultIncludes(), seoData: true },
+      include: {
+        ...this.defaultIncludes(),
+        seoData: true,
+        // GEO engine output surfaced to the public site (the "Poin Penting"
+        // box + NewsArticle abstract/about). contentEmbedding is
+        // deliberately excluded - it's a 1536-float vector, useless to a
+        // page and ~15KB of JSON per response.
+        geoData: {
+          select: {
+            structuredSummary: true,
+            keyClaims: true,
+            entitiesCovered: true,
+            questionsAnswered: true,
+            geoTotalScore: true,
+          },
+        },
+      },
     });
 
     if (!article) {

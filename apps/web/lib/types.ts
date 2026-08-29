@@ -419,7 +419,18 @@ export interface PublicArticle {
   primaryCategory?: Category | null;
   articleTags?: { tag: Tag }[];
   seoData?: PublicArticleSeo | null;
+  geoData?: PublicArticleGeo | null;
   sourceUrl?: string | null;
+}
+
+// GEO engine output surfaced to readers - the "Poin Penting" box and the
+// NewsArticle abstract/about. See apps/api GeoService.calculateGeoScore.
+export interface PublicArticleGeo {
+  structuredSummary?: string | null;
+  keyClaims?: string[];
+  entitiesCovered?: string[];
+  questionsAnswered?: string[];
+  geoTotalScore?: number | null;
 }
 
 export interface PublicSetting {

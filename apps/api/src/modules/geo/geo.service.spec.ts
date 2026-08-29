@@ -4,6 +4,7 @@ describe('GeoService', () => {
   let service: GeoService;
   let prisma: any;
   let aiGateway: any;
+  let eventEmitter: any;
 
   beforeEach(() => {
     prisma = {
@@ -12,7 +13,8 @@ describe('GeoService', () => {
       $executeRaw: jest.fn().mockResolvedValue(undefined),
     };
     aiGateway = { jsonPrompt: jest.fn(), embed: jest.fn() };
-    service = new GeoService(prisma, aiGateway);
+    eventEmitter = { emit: jest.fn() };
+    service = new GeoService(prisma, aiGateway, eventEmitter);
     jest.spyOn(console, 'error').mockImplementation(() => undefined);
   });
 

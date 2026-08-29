@@ -144,6 +144,38 @@ describe('SeoService', () => {
       expect(schema).not.toHaveProperty('publisher');
     });
 
+    it('uses the GEO summary for description + abstract and maps entities to about[]', async () => {
+      const schema: any = await service.generateArticleSchema(
+        {
+          title: 'Gempa NTT',
+          excerpt: 'A short excerpt.',
+          slug: 'gempa-ntt',
+          geoSummary: 'Gempa NTT merusak 84 ribu rumah; bantuan 2 ribu ton dikerahkan.',
+          geoEntities: ['Nusa Tenggara Timur', 'BNPB', 'Kabupaten Alor'],
+        },
+        'https://example.com',
+      );
+
+      expect(schema.description).toBe('Gempa NTT merusak 84 ribu rumah; bantuan 2 ribu ton dikerahkan.');
+      expect(schema.abstract).toBe('Gempa NTT merusak 84 ribu rumah; bantuan 2 ribu ton dikerahkan.');
+      expect(schema.about).toEqual([
+        { '@type': 'Thing', name: 'Nusa Tenggara Timur' },
+        { '@type': 'Thing', name: 'BNPB' },
+        { '@type': 'Thing', name: 'Kabupaten Alor' },
+      ]);
+    });
+
+    it('omits abstract/about and falls back to the excerpt when there is no GEO data', async () => {
+      const schema: any = await service.generateArticleSchema(
+        { title: 'Plain', excerpt: 'Just an excerpt.', slug: 'plain' },
+        'https://example.com',
+      );
+
+      expect(schema.description).toBe('Just an excerpt.');
+      expect(schema).not.toHaveProperty('abstract');
+      expect(schema).not.toHaveProperty('about');
+    });
+
     it('includes the author name when an author is provided', async () => {
       const schema: any = await service.generateArticleSchema(
         {
@@ -327,6 +359,7 @@ describe('SeoService', () => {
         article: {
           findUnique: jest.fn().mockResolvedValue({
             id: 'article-1',
+            organizationId: 'org-1',
             title: 'Auto Headline',
             content: '<p>Body.</p>',
             excerpt: null,
@@ -339,6 +372,7 @@ describe('SeoService', () => {
             primaryCategory: null,
             featuredImage: null,
             articleTags: [],
+            geoData: null,
             seoData: {
               metaTitle: 'Judul Pilihan Editor',
               metaDescription: 'Deskripsi meta yang ditulis editor.',
@@ -354,7 +388,7 @@ describe('SeoService', () => {
       const config = { get: jest.fn().mockReturnValue('rusdimedia.com') };
       const svc = new SeoService(prisma as any, { prompt: jest.fn() } as any, aiWriter as any, config as any);
 
-      await svc.onArticlePublished({ articleId: 'article-1', organizationId: 'org-1', slug: 'auto-headline' });
+      await svc.onArticlePublished({ articleId: 'article-1' });
 
       expect(upsert).toHaveBeenCalledTimes(1);
       const { update } = upsert.mock.calls[0][0];

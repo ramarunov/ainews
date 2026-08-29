@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { OnEvent } from '@nestjs/event-emitter';
+import { OnEvent, EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AIGatewayService } from '../ai/ai-gateway.service';
 
@@ -25,6 +25,7 @@ export class GeoService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aiGateway: AIGatewayService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -182,6 +183,14 @@ Analyze the article and return E-E-A-T signals and scores (each dimension 0-25, 
       });
 
       await this.generateAndStoreEmbedding(event.articleId, article.title, article.content);
+
+      // GEO runs alongside SeoService.onArticlePublished on the same
+      // 'article.published' event, so on a first publish the SEO handler
+      // has almost certainly already built the NewsArticle JSON-LD before
+      // structuredSummary/entitiesCovered existed. Let it rebuild now that
+      // they do. Emitted once (this whole handler is skipped once geoData
+      // exists), so no risk of a rebuild loop.
+      this.eventEmitter.emit('article.geoReady', { articleId: event.articleId });
     } catch (err) {
       console.error('[GEO] Failed to auto-calculate GEO score:', err);
     }

@@ -242,6 +242,38 @@ export function ArticleContent({
             )}
           </div>
 
+          {/* "Poin Penting" — the GEO engine's machine-readable summary +
+              key claims (article_geo, populated a beat after first publish).
+              Doubles as a reader-facing TL;DR and as the exact
+              directly-answerable content AI Overviews / featured snippets
+              lift. Rendered only when the GEO pass has produced something. */}
+          {(article.geoData?.structuredSummary ||
+            (article.geoData?.keyClaims?.length ?? 0) > 0) && (
+            <aside
+              className="mt-4 rounded-xl border border-primary/25 bg-primary/5 p-4 sm:p-5"
+              aria-label="Poin penting"
+            >
+              <h2 className="mb-2 text-xs font-black tracking-widest text-primary uppercase">
+                Poin Penting
+              </h2>
+              {article.geoData?.structuredSummary && (
+                <p
+                  data-speakable="summary"
+                  className="text-base leading-relaxed text-foreground/90"
+                >
+                  {article.geoData.structuredSummary}
+                </p>
+              )}
+              {(article.geoData?.keyClaims?.length ?? 0) > 0 && (
+                <ul className="mt-3 flex list-disc flex-col gap-1.5 pl-5 text-base text-foreground/80 marker:text-primary">
+                  {article.geoData!.keyClaims!.slice(0, 5).map((claim, i) => (
+                    <li key={i}>{claim}</li>
+                  ))}
+                </ul>
+              )}
+            </aside>
+          )}
+
           <AdSlot
             value={findSetting(settings, "ads.article_after_image")}
             className="my-3 flex min-h-[250px] items-center justify-center sm:min-h-[280px]"

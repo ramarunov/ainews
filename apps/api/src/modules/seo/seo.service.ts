@@ -44,6 +44,10 @@ export interface ArticleSchemaInput {
   tags?: string[];
   wordCount?: number;
   language?: string;
+  // GEO engine output (article_geo), when available - see
+  // GeoService.calculateGeoScore.
+  geoSummary?: string;
+  geoEntities?: string[];
 }
 
 export interface SeoScoreBreakdown {
@@ -179,8 +183,21 @@ Return ONLY the title text, no quotes or explanation.`,
       // strip-tags-and-truncate fallback already used for metaDescription
       // above when the AI call fails, applied here unconditionally rather
       // than only on failure, since this function never calls the AI at all.
+      // The GEO engine's machine-readable summary is written specifically
+      // to be extracted and cited by AI search - a strictly better
+      // NewsArticle description than a truncated excerpt when it exists.
       description:
-        article.excerpt ?? article.content?.replace(/<[^>]+>/g, ' ').trim().substring(0, 160) ?? '',
+        article.geoSummary ||
+        article.excerpt ||
+        article.content?.replace(/<[^>]+>/g, ' ').trim().substring(0, 160) ||
+        '',
+      ...(article.geoSummary && { abstract: article.geoSummary }),
+      // Entities the article actually covers (people, orgs, places,
+      // events), from the GEO analysis - `about` is what tells an AI/search
+      // engine what this article IS about, distinct from `keywords`.
+      ...(article.geoEntities?.length && {
+        about: article.geoEntities.slice(0, 12).map((name) => ({ '@type': 'Thing', name })),
+      }),
       datePublished: article.publishedAt?.toISOString(),
       // Falls back to publishedAt when updatedAt isn't available (e.g. the
       // manual schema/article endpoint, which has no article record) -
@@ -511,8 +528,14 @@ Return ONLY the title text, no quotes or explanation.`,
 
   // ─── Event Handlers ────────────────────────────────────────────────────────
 
+  // Also runs on 'article.geoReady' (emitted by GeoService once its
+  // structuredSummary/entitiesCovered land, a beat after the first
+  // publish) so the NewsArticle JSON-LD picks those up on a fresh article
+  // without waiting for a manual re-save. Only articleId is guaranteed on
+  // that payload, so organizationId is read off the article record.
   @OnEvent('article.published')
-  async onArticlePublished(event: { articleId: string; organizationId: string; slug: string }) {
+  @OnEvent('article.geoReady')
+  async onArticlePublished(event: { articleId: string }) {
     try {
       const article = await this.prisma.article.findUnique({
         where: { id: event.articleId },
@@ -529,6 +552,7 @@ Return ONLY the title text, no quotes or explanation.`,
           featuredImage: { select: { width: true, height: true } },
           articleTags: { include: { tag: { select: { name: true } } } },
           seoData: true,
+          geoData: { select: { structuredSummary: true, entitiesCovered: true } },
         },
       });
 
@@ -541,7 +565,7 @@ Return ONLY the title text, no quotes or explanation.`,
       if (!article) return;
 
       const org = await this.prisma.organization.findUnique({
-        where: { id: event.organizationId },
+        where: { id: article.organizationId },
         select: { name: true, logoUrl: true, settings: true },
       });
 
@@ -574,6 +598,10 @@ Return ONLY the title text, no quotes or explanation.`,
           content: article.content,
           excerpt: article.excerpt ?? undefined,
           slug: article.slug,
+          geoSummary: article.geoData?.structuredSummary ?? undefined,
+          geoEntities: Array.isArray(article.geoData?.entitiesCovered)
+            ? (article.geoData!.entitiesCovered as string[]).filter((e) => typeof e === 'string')
+            : undefined,
           primaryCategory: article.primaryCategory,
           featuredImageUrl: article.featuredImageUrl ?? undefined,
           featuredImageWidth: article.featuredImage?.width ?? undefined,
