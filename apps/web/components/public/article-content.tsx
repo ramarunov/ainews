@@ -37,6 +37,15 @@ function findSetting(settings: PublicSetting[], key: string) {
 // "middle", so that ad slot is skipped rather than forced in awkwardly.
 const MID_CONTENT_SPLIT_TAGS = ["</p>", "</h2>", "</h3>", "</h4>", "</blockquote>", "</ul>", "</ol>"];
 
+// The API drops up to 3 inline "Baca juga: <headline>" paragraphs into
+// published article bodies (ArticleInternalLinkingService.insertReadAlso).
+// The stored markup is a plain <p> — the content sanitizer's attribute
+// allowlist has no `class` — so tag those paragraphs here for the callout
+// styling defined in contentProseClassName below.
+function styleReadAlso(html: string): string {
+  return html.replace(/<p>(\s*Baca juga:)/gi, '<p class="baca-juga">$1');
+}
+
 function splitContentAtMidpoint(html: string): { before: string; after: string } | null {
   const positions: number[] = [];
   for (const tag of MID_CONTENT_SPLIT_TAGS) {
@@ -82,7 +91,8 @@ export function ArticleContent({
   // exact same 4 articles in both places.
   const sidebarRelated = related.data.slice(4, 8);
   const bandRelated = related.data.slice(0, 4);
-  const contentSplit = splitContentAtMidpoint(article.content ?? "");
+  const articleHtml = styleReadAlso(article.content ?? "");
+  const contentSplit = splitContentAtMidpoint(articleHtml);
   // Not `flex flex-col` - AI-drafted articles often come back as bare text
   // nodes with no <p> wrapping at all (see splitContentAtMidpoint's comment
   // above), separated only by a blank line. A flex column container treats
@@ -93,7 +103,7 @@ export function ArticleContent({
   // paragraph break for that untagged text) fixes both properly-<p>-tagged
   // and bare-text content the same way.
   const contentProseClassName =
-    "whitespace-pre-line text-lg leading-relaxed break-words [&_p]:mb-5 [&_a]:text-primary [&_a]:underline [&_blockquote]:my-5 [&_blockquote]:border-l-4 [&_blockquote]:border-primary [&_blockquote]:pl-4 [&_blockquote]:text-xl [&_blockquote]:font-medium [&_blockquote]:text-foreground/80 [&_blockquote]:italic [&_h2]:mt-8 [&_h2]:mb-3 [&_h2]:text-2xl [&_h2]:font-black [&_h3]:mt-6 [&_h3]:mb-2 [&_h3]:text-xl [&_h3]:font-bold [&_img]:my-5 [&_img]:rounded-lg [&_ul]:mb-5 [&_ol]:mb-5 [&_li]:ml-5 [&_ol]:list-decimal [&_ul]:list-disc";
+    "whitespace-pre-line text-lg leading-relaxed break-words [&_p]:mb-5 [&_a]:text-primary [&_a]:underline [&_blockquote]:my-5 [&_blockquote]:border-l-4 [&_blockquote]:border-primary [&_blockquote]:pl-4 [&_blockquote]:text-xl [&_blockquote]:font-medium [&_blockquote]:text-foreground/80 [&_blockquote]:italic [&_h2]:mt-8 [&_h2]:mb-3 [&_h2]:text-2xl [&_h2]:font-black [&_h3]:mt-6 [&_h3]:mb-2 [&_h3]:text-xl [&_h3]:font-bold [&_img]:my-5 [&_img]:rounded-lg [&_ul]:mb-5 [&_ol]:mb-5 [&_li]:ml-5 [&_ol]:list-decimal [&_ul]:list-disc [&_.baca-juga]:my-6 [&_.baca-juga]:border-l-4 [&_.baca-juga]:border-primary [&_.baca-juga]:bg-primary/5 [&_.baca-juga]:py-2 [&_.baca-juga]:pr-3 [&_.baca-juga]:pl-4 [&_.baca-juga]:text-base [&_.baca-juga]:font-semibold [&_.baca-juga]:not-italic [&_.baca-juga_a]:font-bold [&_.baca-juga_a]:no-underline hover:[&_.baca-juga_a]:underline";
   const rootDomain = getRootDomain();
   const canonicalArticleUrl = getArticleUrl(article, rootDomain);
   const breadcrumbItems = [
@@ -259,7 +269,7 @@ export function ArticleContent({
           ) : (
             <div
               className={`mt-3 ${contentProseClassName}`}
-              dangerouslySetInnerHTML={{ __html: article.content ?? "" }}
+              dangerouslySetInnerHTML={{ __html: articleHtml }}
             />
           )}
 

@@ -172,6 +172,70 @@ describe('ArticleInternalLinkingService', () => {
     expect(anchorCount).toBe(1);
   });
 
+  describe('insertReadAlso', () => {
+    const sixParas =
+      '<p>Para one.</p><p>Para two.</p><p>Para three.</p><p>Para four.</p><p>Para five.</p><p>Para six.</p>';
+
+    it('inserts up to 3 "Baca juga" callouts spread between the paragraphs', async () => {
+      prisma.article.findFirst.mockResolvedValue({ ...baseArticle, content: sixParas });
+
+      await service.insertReadAlso('article-1', 'org-1');
+
+      const html = prisma.article.update.mock.calls[0][0].data.content as string;
+      const matches = html.match(/Baca juga:/g) ?? [];
+      expect(matches).toHaveLength(3);
+      expect(html).toContain('<a href="/fusion-basics">Fusion Basics</a>');
+      // never before the first paragraph or after the last
+      expect(html.startsWith('<p class="baca-juga"')).toBe(false);
+      expect(html.endsWith('</p>')).toBe(true);
+      expect(html).not.toMatch(/Baca juga:[\s\S]*Baca juga:[\s\S]*Baca juga:[\s\S]*<\/a><\/p>$/);
+    });
+
+    it('caps at one callout per ~two paragraphs for a short body', async () => {
+      prisma.article.findFirst.mockResolvedValue({
+        ...baseArticle,
+        content: '<p>Only para one.</p><p>Only para two.</p><p>Only para three.</p>',
+      });
+
+      await service.insertReadAlso('article-1', 'org-1');
+
+      const html = prisma.article.update.mock.calls[0][0].data.content as string;
+      expect((html.match(/Baca juga:/g) ?? []).length).toBe(1);
+    });
+
+    it('is a no-op when the content already has a "Baca juga:" block', async () => {
+      prisma.article.findFirst.mockResolvedValue({
+        ...baseArticle,
+        content: `${sixParas}<p>Baca juga: <a href="/x">X</a></p>`,
+      });
+
+      await service.insertReadAlso('article-1', 'org-1');
+
+      expect(prisma.article.findMany).not.toHaveBeenCalled();
+      expect(prisma.article.update).not.toHaveBeenCalled();
+    });
+
+    it('is a no-op when there are no related articles', async () => {
+      prisma.article.findFirst.mockResolvedValue({ ...baseArticle, content: sixParas });
+      prisma.article.findMany.mockResolvedValue([]);
+
+      await service.insertReadAlso('article-1', 'org-1');
+
+      expect(prisma.article.update).not.toHaveBeenCalled();
+    });
+
+    it('is a no-op when the body has fewer than two paragraphs', async () => {
+      prisma.article.findFirst.mockResolvedValue({
+        ...baseArticle,
+        content: '<p>The one and only paragraph.</p>',
+      });
+
+      await service.insertReadAlso('article-1', 'org-1');
+
+      expect(prisma.article.update).not.toHaveBeenCalled();
+    });
+  });
+
   it('re-sanitizes the final content, stripping anything outside the allowlist', async () => {
     prisma.article.findFirst.mockResolvedValue({
       ...baseArticle,

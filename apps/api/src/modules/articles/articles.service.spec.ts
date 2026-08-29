@@ -68,7 +68,10 @@ describe('ArticlesService', () => {
       $transaction: jest.fn().mockResolvedValue([]),
     };
     eventEmitter = { emit: jest.fn() };
-    internalLinkingService = { insertLinks: jest.fn().mockResolvedValue(undefined) };
+    internalLinkingService = {
+      insertLinks: jest.fn().mockResolvedValue(undefined),
+      insertReadAlso: jest.fn().mockResolvedValue(undefined),
+    };
     service = new ArticlesService(prisma, eventEmitter, internalLinkingService);
   });
 

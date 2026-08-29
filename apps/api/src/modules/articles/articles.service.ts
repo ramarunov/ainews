@@ -486,9 +486,12 @@ export class ArticlesService {
     }
 
     if (isFirstPublish) {
+      // Sequential, not parallel: both read-modify-write article.content,
+      // so running them at once would let one clobber the other's changes.
       this.internalLinkingService
         .insertLinks(id, organizationId)
-        .catch((err) => this.logger.error(`Internal linking failed for article ${id}`, err));
+        .then(() => this.internalLinkingService.insertReadAlso(id, organizationId))
+        .catch((err) => this.logger.error(`Content enrichment failed for article ${id}`, err));
     }
 
     return updated;
