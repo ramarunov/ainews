@@ -4,6 +4,7 @@ describe('GeoService', () => {
   let service: GeoService;
   let prisma: any;
   let aiGateway: any;
+  let aiWriter: any;
   let eventEmitter: any;
 
   beforeEach(() => {
@@ -13,8 +14,9 @@ describe('GeoService', () => {
       $executeRaw: jest.fn().mockResolvedValue(undefined),
     };
     aiGateway = { jsonPrompt: jest.fn(), embed: jest.fn() };
+    aiWriter = { generateFAQs: jest.fn().mockResolvedValue([]) };
     eventEmitter = { emit: jest.fn() };
-    service = new GeoService(prisma, aiGateway, eventEmitter);
+    service = new GeoService(prisma, aiGateway, aiWriter, eventEmitter);
     jest.spyOn(console, 'error').mockImplementation(() => undefined);
   });
 
@@ -98,6 +100,39 @@ describe('GeoService', () => {
         'AI Regulation News\n\nSome real content about AI regulation.',
       );
       expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+    });
+
+    it('generates FAQs in the article language and stores them on article_geo', async () => {
+      prisma.article.findUnique.mockResolvedValue({
+        id: 'article-1',
+        title: 'Gempa NTT',
+        content: '<p>Isi artikel.</p>',
+        language: 'id',
+        geoData: null,
+      });
+      aiGateway.jsonPrompt.mockResolvedValue({ breakdown: {}, structuredSummary: 'ringkasan' });
+      aiGateway.embed.mockResolvedValue({ embedding: [0.1], model: 'x', usage: {} });
+      const faqs = [{ question: 'Apa yang terjadi?', answer: 'Gempa merusak fasilitas.' }];
+      aiWriter.generateFAQs.mockResolvedValue(faqs);
+
+      await service.onArticlePublished({ articleId: 'article-1' });
+
+      expect(aiWriter.generateFAQs).toHaveBeenCalledWith('<p>Isi artikel.</p>', 5, 'id', 'article-1');
+      const arg = prisma.articleGeo.upsert.mock.calls[0][0];
+      expect(arg.create.faqItems).toEqual(faqs);
+      expect(arg.update.faqItems).toEqual(faqs);
+    });
+
+    it('a failed FAQ pass leaves faqItems empty without losing the GEO upsert', async () => {
+      prisma.article.findUnique.mockResolvedValue({ id: 'article-1', title: 'T', content: 'C', geoData: null });
+      aiGateway.jsonPrompt.mockResolvedValue({ breakdown: {} });
+      aiGateway.embed.mockResolvedValue({ embedding: [0.1], model: 'x', usage: {} });
+      aiWriter.generateFAQs.mockRejectedValue(new Error('AI down'));
+
+      await service.onArticlePublished({ articleId: 'article-1' });
+
+      expect(prisma.articleGeo.upsert).toHaveBeenCalledTimes(1);
+      expect(prisma.articleGeo.upsert.mock.calls[0][0].create.faqItems).toEqual([]);
     });
 
     it('a failed embedding does not undo an already-successful GEO score upsert', async () => {

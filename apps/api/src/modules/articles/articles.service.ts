@@ -316,6 +316,7 @@ export class ArticlesService {
             keyClaims: true,
             entitiesCovered: true,
             questionsAnswered: true,
+            faqItems: true,
             geoTotalScore: true,
           },
         },

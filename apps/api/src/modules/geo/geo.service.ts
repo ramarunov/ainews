@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { OnEvent, EventEmitter2 } from '@nestjs/event-emitter';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AIGatewayService } from '../ai/ai-gateway.service';
+import { AIWriterService } from '../ai/ai-writer.service';
 
 export interface GeoScore {
   total: number;
@@ -25,6 +27,7 @@ export class GeoService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly aiGateway: AIGatewayService,
+    private readonly aiWriter: AIWriterService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -150,42 +153,43 @@ Analyze the article and return E-E-A-T signals and scores (each dimension 0-25, 
 
       if (!article || article.geoData) return;
 
-      const geoScore = await this.calculateGeoScore(
-        article.content,
-        article.title,
-        event.articleId,
-        article.language ?? undefined,
-      );
+      // FAQ generation runs in parallel with the GEO score - independent
+      // AI calls, and one failing must not lose the other (Promise.all
+      // would). A failed FAQ pass just leaves faqItems empty.
+      const [geoScore, faqItems] = await Promise.all([
+        this.calculateGeoScore(
+          article.content,
+          article.title,
+          event.articleId,
+          article.language ?? undefined,
+        ),
+        this.aiWriter
+          .generateFAQs(article.content, 5, article.language ?? undefined, event.articleId)
+          .catch((err) => {
+            console.error(`[GEO] FAQ generation failed for article ${event.articleId}:`, err);
+            return [] as Array<{ question: string; answer: string }>;
+          }),
+      ]);
+
+      const geoFields = {
+        llmReadabilityScore: geoScore.breakdown.llmReadability,
+        semanticRichnessScore: geoScore.breakdown.semanticRichness,
+        entityCoverageScore: geoScore.breakdown.entityCoverage,
+        evidenceScore: geoScore.breakdown.evidence,
+        qaCoverageScore: geoScore.breakdown.qaCoverage,
+        citationFriendliness: geoScore.breakdown.citationFriendliness,
+        geoTotalScore: geoScore.total,
+        structuredSummary: geoScore.structuredSummary,
+        keyClaims: geoScore.keyClaims,
+        entitiesCovered: geoScore.entitiesCovered,
+        questionsAnswered: geoScore.questionsAnswered,
+        faqItems: faqItems as unknown as Prisma.InputJsonValue,
+      };
 
       await this.prisma.articleGeo.upsert({
         where: { articleId: event.articleId },
-        create: {
-          articleId: event.articleId,
-          llmReadabilityScore: geoScore.breakdown.llmReadability,
-          semanticRichnessScore: geoScore.breakdown.semanticRichness,
-          entityCoverageScore: geoScore.breakdown.entityCoverage,
-          evidenceScore: geoScore.breakdown.evidence,
-          qaCoverageScore: geoScore.breakdown.qaCoverage,
-          citationFriendliness: geoScore.breakdown.citationFriendliness,
-          geoTotalScore: geoScore.total,
-          structuredSummary: geoScore.structuredSummary,
-          keyClaims: geoScore.keyClaims,
-          entitiesCovered: geoScore.entitiesCovered,
-          questionsAnswered: geoScore.questionsAnswered,
-        },
-        update: {
-          llmReadabilityScore: geoScore.breakdown.llmReadability,
-          semanticRichnessScore: geoScore.breakdown.semanticRichness,
-          entityCoverageScore: geoScore.breakdown.entityCoverage,
-          evidenceScore: geoScore.breakdown.evidence,
-          qaCoverageScore: geoScore.breakdown.qaCoverage,
-          citationFriendliness: geoScore.breakdown.citationFriendliness,
-          geoTotalScore: geoScore.total,
-          structuredSummary: geoScore.structuredSummary,
-          keyClaims: geoScore.keyClaims,
-          entitiesCovered: geoScore.entitiesCovered,
-          questionsAnswered: geoScore.questionsAnswered,
-        },
+        create: { articleId: event.articleId, ...geoFields },
+        update: geoFields,
       });
 
       await this.generateAndStoreEmbedding(event.articleId, article.title, article.content);

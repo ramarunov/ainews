@@ -210,16 +210,24 @@ Write a single meta description (150-160 characters):`;
     });
   }
 
-  async generateFAQs(content: string, count = 5): Promise<Array<{ question: string; answer: string }>> {
+  async generateFAQs(
+    content: string,
+    count = 5,
+    language?: string,
+    articleId?: string,
+  ): Promise<Array<{ question: string; answer: string }>> {
     return this.gateway.jsonPrompt<{ faqs: Array<{ question: string; answer: string }> }>(
       `You are an SEO expert creating FAQ sections for articles.
 Generate ${count} frequently asked questions and detailed answers based on the article content.
 Questions should be natural language questions a reader might ask.
-Answers should be 2-4 sentences, factual, and based on the article content.
+Answers should be 2-4 sentences, factual, and based on the article content.${
+        language ? `\nWrite every question and answer in this language (ISO 639-1 code): ${language}.` : ''
+      }
 Return JSON: {"faqs": [{"question": "...", "answer": "..."}, ...]}`,
       `Article content:\n${content.substring(0, 4000)}`,
       {
         temperature: 0.4,
+        articleId,
         analysisType: 'faq_generation',
       },
     ).then((r) => r.faqs ?? []);

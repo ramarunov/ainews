@@ -93,6 +93,11 @@ export function ArticleContent({
   const bandRelated = related.data.slice(0, 4);
   const articleHtml = styleReadAlso(article.content ?? "");
   const contentSplit = splitContentAtMidpoint(articleHtml);
+  // GEO-generated Q&A (article_geo.faqItems) - a reader-facing FAQ block
+  // plus FAQPage JSON-LD, both fed by the same list.
+  const faqItems = (article.geoData?.faqItems ?? []).filter(
+    (f) => f?.question?.trim() && f?.answer?.trim(),
+  );
   // Not `flex flex-col` - AI-drafted articles often come back as bare text
   // nodes with no <p> wrapping at all (see splitContentAtMidpoint's comment
   // above), separated only by a blank line. A flex column container treats
@@ -150,6 +155,22 @@ export function ArticleContent({
           __html: JSON.stringify(breadcrumbSchema).replace(/</g, "\\u003c"),
         }}
       />
+      {faqItems.length > 0 && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "FAQPage",
+              mainEntity: faqItems.map((f) => ({
+                "@type": "Question",
+                name: f.question,
+                acceptedAnswer: { "@type": "Answer", text: f.answer },
+              })),
+            }).replace(/</g, "\\u003c"),
+          }}
+        />
+      )}
       <div className="mx-auto w-full max-w-6xl px-4 pt-6">
         <Breadcrumb items={breadcrumbItems} />
       </div>
@@ -303,6 +324,29 @@ export function ArticleContent({
               className={`mt-3 ${contentProseClassName}`}
               dangerouslySetInnerHTML={{ __html: articleHtml }}
             />
+          )}
+
+          {faqItems.length > 0 && (
+            <section className="mt-8 border-t pt-6" aria-label="Pertanyaan yang sering diajukan">
+              <h2 className="mb-4 text-xl font-black tracking-tight">
+                Pertanyaan yang Sering Diajukan
+              </h2>
+              <div className="flex flex-col divide-y rounded-xl border">
+                {faqItems.map((faq, i) => (
+                  <details key={i} className="group px-4 py-3 [&_summary]:list-none">
+                    <summary className="flex cursor-pointer items-center justify-between gap-3 font-bold">
+                      {faq.question}
+                      <span className="text-primary transition-transform group-open:rotate-45">
+                        +
+                      </span>
+                    </summary>
+                    <p className="mt-2 text-base leading-relaxed text-foreground/80">
+                      {faq.answer}
+                    </p>
+                  </details>
+                ))}
+              </div>
+            </section>
           )}
 
           {tags.length > 0 && (

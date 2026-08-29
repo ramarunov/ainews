@@ -430,6 +430,7 @@ export interface PublicArticleGeo {
   keyClaims?: string[];
   entitiesCovered?: string[];
   questionsAnswered?: string[];
+  faqItems?: { question: string; answer: string }[];
   geoTotalScore?: number | null;
 }
 
