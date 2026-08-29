@@ -92,7 +92,7 @@ Write in ${options.tone ?? 'authoritative'} tone.
 Always write factually. Never hallucinate facts, statistics, or quotes.
 Format the article with proper HTML headings (h2, h3), paragraphs, and where appropriate, lists.
 Never begin the article with a heading - start directly with the lead paragraph. Headings are only used to break up later sections, never before the first paragraph.
-Target length: ${options.targetLength ?? 1000}-${(options.targetLength ?? 1000) + 300} words. Develop each section with specific detail, figures, named actors and context - do not pad, but do not stop short either. A thin ~600-word summary is not acceptable.
+LENGTH IS A HARD REQUIREMENT: the finished article must be AT LEAST ${options.targetLength ?? 1000} words (ideally ${options.targetLength ?? 1000}-${(options.targetLength ?? 1000) + 400}). A draft shorter than ${options.targetLength ?? 1000} words is incomplete and will be rejected. Reach the length by going deeper - more specific facts, figures, dates, named actors, quotes, context and consequences from the sources - never by padding or repetition.
 Target audience: ${options.targetAudience ?? 'general news readers'}.${
       languageName
         ? ` Write the entire article in ${languageName}, regardless of what language the title or source material below is written in - translate and localize naturally, don't just transliterate.`
@@ -110,18 +110,21 @@ Requirements:
 ${
       options.outline?.length
         ? '- Follow the outline above'
-        : `- Break the body into clearly-labelled sections with <h2> subheadings, covering at least: the chronology / details of what happened; wider background and context; impact or analysis (who is affected and how); and a forward-looking closing section (what happens next, unresolved questions)`
+        : `- Organise the body into 5-6 <h2> sections. Suggested sections: (1) what happened in detail; (2) the key numbers, dates and named actors; (3) background - how the situation got here and prior related events; (4) who is affected and the concrete impact; (5) reactions, official statements or analysis from the sources; (6) what happens next and the open questions
+- Every <h2> section must contain at least 3 full paragraphs of 3-5 sentences each - a section that is one short paragraph means the article is too thin`
     }
 - Include relevant context and background - explain named people, organisations, places and prior events a reader may not know
 - If focus keyword is provided, use it naturally in the first paragraph, headings, and throughout
 - End with a strong forward-looking statement, not a summary
 - Do NOT use phrases like "In conclusion" or "To summarize"
 - Do NOT start the article with a heading (h2/h3) - the very first element must be a paragraph
-- Length: ${options.targetLength ?? 1000}-${(options.targetLength ?? 1000) + 300} words`;
+- The finished article MUST be at least ${options.targetLength ?? 1000} words. Count as you write; if you are near the end and below ${options.targetLength ?? 1000}, add more depth to the weakest sections before finishing.`;
 
     const draft = await this.gateway.prompt(systemPrompt, userPrompt, {
       temperature: 0.7,
-      maxTokens: 4096,
+      // Headroom for a 1000-1400-word Indonesian article in HTML - the old
+      // 4096 was close enough to the target to make the model wrap up early.
+      maxTokens: 8000,
       organizationId: options.organizationId,
       articleId: options.articleId,
       analysisType: 'draft_generation',
