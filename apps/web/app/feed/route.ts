@@ -60,6 +60,10 @@ export async function GET() {
     <description>${escapeXml(channelDescription)}</description>
     <language>id</language>
     <atom:link href="${selfUrl}" rel="self" type="application/rss+xml" />
+    <!-- WebSub: the API pings this same hub on every first publish (see
+         apps/api WebSubService) so subscribers get updates within seconds
+         instead of on their next poll. -->
+    <atom:link href="https://pubsubhubbub.appspot.com/" rel="hub" />
 ${items}
   </channel>
 </rss>`;

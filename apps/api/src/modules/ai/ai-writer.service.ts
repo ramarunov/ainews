@@ -92,7 +92,7 @@ Write in ${options.tone ?? 'authoritative'} tone.
 Always write factually. Never hallucinate facts, statistics, or quotes.
 Format the article with proper HTML headings (h2, h3), paragraphs, and where appropriate, lists.
 Never begin the article with a heading - start directly with the lead paragraph. Headings are only used to break up later sections, never before the first paragraph.
-Target length: approximately ${options.targetLength ?? 1000} words.
+Target length: ${options.targetLength ?? 1000}-${(options.targetLength ?? 1000) + 300} words. Develop each section with specific detail, figures, named actors and context - do not pad, but do not stop short either. A thin ~600-word summary is not acceptable.
 Target audience: ${options.targetAudience ?? 'general news readers'}.${
       languageName
         ? ` Write the entire article in ${languageName}, regardless of what language the title or source material below is written in - translate and localize naturally, don't just transliterate.`
@@ -107,12 +107,17 @@ ${sourcesText}
 Requirements:
 - Include a compelling lead paragraph that answers who, what, when, where, why
 - Use proper journalistic structure (inverted pyramid)
-- Include relevant context and background
+${
+      options.outline?.length
+        ? '- Follow the outline above'
+        : `- Break the body into clearly-labelled sections with <h2> subheadings, covering at least: the chronology / details of what happened; wider background and context; impact or analysis (who is affected and how); and a forward-looking closing section (what happens next, unresolved questions)`
+    }
+- Include relevant context and background - explain named people, organisations, places and prior events a reader may not know
 - If focus keyword is provided, use it naturally in the first paragraph, headings, and throughout
-- End with a strong conclusion or forward-looking statement
+- End with a strong forward-looking statement, not a summary
 - Do NOT use phrases like "In conclusion" or "To summarize"
 - Do NOT start the article with a heading (h2/h3) - the very first element must be a paragraph
-- Write ${options.targetLength ?? 1000} words approximately`;
+- Length: ${options.targetLength ?? 1000}-${(options.targetLength ?? 1000) + 300} words`;
 
     const draft = await this.gateway.prompt(systemPrompt, userPrompt, {
       temperature: 0.7,

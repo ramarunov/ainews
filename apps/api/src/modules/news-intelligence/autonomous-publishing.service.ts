@@ -271,7 +271,9 @@ export class AutonomousPublishingService {
     const sources = items.map((item) => ({
       title: item.title,
       url: item.url,
-      excerpt: (item.content ?? item.excerpt ?? '').slice(0, 800),
+      // Give the writer enough raw material per source to produce a
+      // 900-1300-word article with real detail rather than a thin summary.
+      excerpt: (item.content ?? item.excerpt ?? '').slice(0, 1800),
     }));
 
     const categoryId = await this.resolveCategory(primary.source?.categoryHint ?? null, organizationId);

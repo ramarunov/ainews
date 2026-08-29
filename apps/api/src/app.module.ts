@@ -51,6 +51,7 @@ import { BackupModule } from './modules/backup/backup.module';
 import { ApiKeysModule } from './modules/api-keys/api-keys.module';
 import { TelegramModule } from './modules/telegram/telegram.module';
 import { GoogleIndexingModule } from './modules/google-indexing/google-indexing.module';
+import { WebSubModule } from './modules/websub/websub.module';
 
 import { configValidationSchema } from './config/config.validation';
 import { AuditLogService } from './common/audit/audit-log.service';
@@ -190,6 +191,7 @@ import { MetricsInterceptor } from './modules/metrics/metrics.interceptor';
     ApiKeysModule,
     TelegramModule,
     GoogleIndexingModule,
+    WebSubModule,
     CommentsModule,
 
     // ─── AI & Intelligence ───────────────────────────────────────────────────
