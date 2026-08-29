@@ -165,6 +165,23 @@ describe('SeoService', () => {
       ]);
     });
 
+    it('adds a Wikidata sameAs to about[] entries that resolved', async () => {
+      const schema: any = await service.generateArticleSchema(
+        {
+          title: 'Gempa NTT',
+          slug: 'gempa-ntt',
+          geoEntities: ['Nusa Tenggara Timur', 'BNPB'],
+          geoEntityLinks: { 'Nusa Tenggara Timur': 'https://www.wikidata.org/wiki/Q3899' },
+        },
+        'https://example.com',
+      );
+
+      expect(schema.about).toEqual([
+        { '@type': 'Thing', name: 'Nusa Tenggara Timur', sameAs: 'https://www.wikidata.org/wiki/Q3899' },
+        { '@type': 'Thing', name: 'BNPB' },
+      ]);
+    });
+
     it('omits abstract/about and falls back to the excerpt when there is no GEO data', async () => {
       const schema: any = await service.generateArticleSchema(
         { title: 'Plain', excerpt: 'Just an excerpt.', slug: 'plain' },

@@ -4,6 +4,7 @@ import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { AIGatewayService } from '../ai/ai-gateway.service';
 import { AIWriterService } from '../ai/ai-writer.service';
+import { WikidataService } from './wikidata.service';
 import { getArticleUrl, getRootDomain } from '../../common/url/site-url.util';
 
 export interface SeoData {
@@ -55,6 +56,9 @@ export interface ArticleSchemaInput {
   // GeoService.calculateGeoScore.
   geoSummary?: string;
   geoEntities?: string[];
+  // entity name -> Wikidata URL, for schema about[].sameAs (see
+  // WikidataService).
+  geoEntityLinks?: Record<string, string>;
 }
 
 // Publisher-level E-E-A-T / editorial-transparency signals Google News and
@@ -96,9 +100,11 @@ export class SeoService {
     private readonly aiWriter: AIWriterService,
     private readonly eventEmitter: EventEmitter2,
     // Optional (tests instantiate this service with only the four
-    // collaborators above) - only needed to resolve ROOT_DOMAIN for the
-    // category-subdomain canonical-URL branch in buildCanonicalUrl().
+    // collaborators above). config resolves ROOT_DOMAIN for the
+    // category-subdomain canonical-URL branch in buildCanonicalUrl();
+    // wikidata adds sameAs Q-ids to the schema's about[] when present.
     private readonly config?: ConfigService,
+    private readonly wikidata?: WikidataService,
   ) {}
 
   // ─── Generate Full SEO Package ─────────────────────────────────────────────
@@ -214,9 +220,14 @@ Return ONLY the title text, no quotes or explanation.`,
       ...(article.geoSummary && { abstract: article.geoSummary }),
       // Entities the article actually covers (people, orgs, places,
       // events), from the GEO analysis - `about` is what tells an AI/search
-      // engine what this article IS about, distinct from `keywords`.
+      // engine what this article IS about, distinct from `keywords`. When
+      // WikidataService resolved a name, `sameAs` points at its Wikidata
+      // item so the entity is unambiguous.
       ...(article.geoEntities?.length && {
-        about: article.geoEntities.slice(0, 12).map((name) => ({ '@type': 'Thing', name })),
+        about: article.geoEntities.slice(0, 12).map((name) => {
+          const link = article.geoEntityLinks?.[name];
+          return { '@type': 'Thing', name, ...(link && { sameAs: link }) };
+        }),
       }),
       datePublished: article.publishedAt?.toISOString(),
       // Falls back to publishedAt when updatedAt isn't available (e.g. the
@@ -638,6 +649,18 @@ Return ONLY the title text, no quotes or explanation.`,
       const strArray = (v: unknown): string[] | undefined =>
         Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.length > 0) : undefined;
 
+      const geoEntities = strArray(article.geoData?.entitiesCovered);
+      // Wikidata Q-id per entity name (cached, fail-soft). Skipped entirely
+      // when the service isn't wired (tests) or there are no entities.
+      const geoEntityLinks =
+        this.wikidata && geoEntities?.length
+          ? Object.fromEntries(
+              await this.wikidata
+                .resolveEntities(geoEntities, article.language ?? 'id')
+                .catch(() => new Map<string, string>()),
+            )
+          : undefined;
+
       const seoData = await this.generateSeoData(
         event.articleId,
         {
@@ -646,9 +669,8 @@ Return ONLY the title text, no quotes or explanation.`,
           excerpt: article.excerpt ?? undefined,
           slug: article.slug,
           geoSummary: article.geoData?.structuredSummary ?? undefined,
-          geoEntities: Array.isArray(article.geoData?.entitiesCovered)
-            ? (article.geoData!.entitiesCovered as string[]).filter((e) => typeof e === 'string')
-            : undefined,
+          geoEntities,
+          geoEntityLinks,
           primaryCategory: article.primaryCategory,
           featuredImageUrl: article.featuredImageUrl ?? undefined,
           featuredImageWidth: article.featuredImage?.width ?? undefined,
