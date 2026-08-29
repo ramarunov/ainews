@@ -158,3 +158,32 @@ export class UpdateCustomScriptsDto {
   @Type(() => ScriptSlotDto)
   footer: ScriptSlotDto;
 }
+
+export class UpdatePublisherSettingDto {
+  @ApiProperty({ required: false, type: [String], description: 'Official off-site profile URLs (Facebook page, WhatsApp channel, X, ...)' })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(15)
+  @IsUrl({}, { each: true })
+  sameAs?: string[];
+
+  @ApiProperty({ required: false, example: '2022-05-11', description: 'ISO date the publication was founded' })
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'foundingDate must be YYYY-MM-DD' })
+  foundingDate?: string;
+
+  @ApiProperty({ required: false, description: 'URL of the editorial standards / methodology page' })
+  @IsOptional()
+  @IsUrl({ require_tld: false })
+  ethicsPolicyUrl?: string;
+
+  @ApiProperty({ required: false, description: 'URL of the corrections policy page' })
+  @IsOptional()
+  @IsUrl({ require_tld: false })
+  correctionsPolicyUrl?: string;
+
+  @ApiProperty({ required: false, description: 'URL of the diversity policy page' })
+  @IsOptional()
+  @IsUrl({ require_tld: false })
+  diversityPolicyUrl?: string;
+}

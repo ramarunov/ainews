@@ -4,6 +4,7 @@ import type {
   CustomScriptsSetting,
   HomepageSeoSetting,
   HomepageWidgetsSetting,
+  PublisherSetting,
   SiteBrandingSetting,
   SiteFooterSetting,
 } from "@/lib/types";
@@ -91,6 +92,23 @@ export function useUpdateSiteBranding() {
     mutationFn: (input: SiteBrandingSetting) =>
       apiClient.put<SiteBrandingSetting>("/site-settings/branding", input),
     onSuccess: (data) => queryClient.setQueryData(["site-settings", "branding"], data),
+  });
+}
+
+export function usePublisherSetting(enabled = true) {
+  return useQuery({
+    queryKey: ["site-settings", "publisher"],
+    queryFn: () => apiClient.get<PublisherSetting | null>("/site-settings/publisher"),
+    enabled,
+  });
+}
+
+export function useUpdatePublisherSetting() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: PublisherSetting) =>
+      apiClient.put<PublisherSetting>("/site-settings/publisher", input),
+    onSuccess: (data) => queryClient.setQueryData(["site-settings", "publisher"], data),
   });
 }
 

@@ -37,6 +37,8 @@ import {
   useUpdateCustomScripts,
   useSiteBranding,
   useUpdateSiteBranding,
+  usePublisherSetting,
+  useUpdatePublisherSetting,
 } from "@/hooks/use-site-settings";
 import { useUploadBrandingAsset } from "@/hooks/use-media";
 import { useAuthStore } from "@/lib/auth-store";
@@ -497,6 +499,113 @@ function BrandingCard({ isSuperadmin }: { isSuperadmin: boolean }) {
   return <BrandingForm initial={data ?? {}} />;
 }
 
+function PublisherCard({ isSuperadmin }: { isSuperadmin: boolean }) {
+  const { data, isLoading } = usePublisherSetting(isSuperadmin);
+  if (isLoading) return <CardSkeleton />;
+  return <PublisherForm initial={data ?? {}} />;
+}
+
+function PublisherForm({
+  initial,
+}: {
+  initial: {
+    sameAs?: string[];
+    foundingDate?: string;
+    ethicsPolicyUrl?: string;
+    correctionsPolicyUrl?: string;
+    diversityPolicyUrl?: string;
+  };
+}) {
+  const update = useUpdatePublisherSetting();
+  const [sameAs, setSameAs] = useState((initial.sameAs ?? []).join("\n"));
+  const [foundingDate, setFoundingDate] = useState(initial.foundingDate ?? "");
+  const [ethicsPolicyUrl, setEthicsPolicyUrl] = useState(initial.ethicsPolicyUrl ?? "");
+  const [correctionsPolicyUrl, setCorrectionsPolicyUrl] = useState(
+    initial.correctionsPolicyUrl ?? "",
+  );
+  const [diversityPolicyUrl, setDiversityPolicyUrl] = useState(initial.diversityPolicyUrl ?? "");
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await update.mutateAsync({
+        sameAs: sameAs
+          .split(/[\n,]/)
+          .map((s) => s.trim())
+          .filter(Boolean),
+        foundingDate: foundingDate.trim() || undefined,
+        ethicsPolicyUrl: ethicsPolicyUrl.trim() || undefined,
+        correctionsPolicyUrl: correctionsPolicyUrl.trim() || undefined,
+        diversityPolicyUrl: diversityPolicyUrl.trim() || undefined,
+      });
+      toast.success("Publisher details saved");
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="pub-same-as">Official profile URLs</Label>
+        <Textarea
+          id="pub-same-as"
+          rows={3}
+          placeholder={"One URL per line\nhttps://www.facebook.com/…\nhttps://whatsapp.com/channel/…"}
+          value={sameAs}
+          onChange={(e) => setSameAs(e.target.value)}
+        />
+        <p className="text-xs text-muted-foreground">
+          Feeds <code>sameAs</code> on the NewsMediaOrganization — helps Google confirm this is a
+          real publisher.
+        </p>
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="pub-founding">Founding date</Label>
+        <Input
+          id="pub-founding"
+          placeholder="2022-05-11"
+          value={foundingDate}
+          onChange={(e) => setFoundingDate(e.target.value)}
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="pub-ethics">Editorial standards / methodology page URL</Label>
+        <Input
+          id="pub-ethics"
+          placeholder="https://rusdimedia.com/metodologi-redaksi"
+          value={ethicsPolicyUrl}
+          onChange={(e) => setEthicsPolicyUrl(e.target.value)}
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="pub-corrections">Corrections policy page URL</Label>
+        <Input
+          id="pub-corrections"
+          placeholder="https://rusdimedia.com/kebijakan-koreksi"
+          value={correctionsPolicyUrl}
+          onChange={(e) => setCorrectionsPolicyUrl(e.target.value)}
+        />
+      </div>
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="pub-diversity">Diversity policy page URL (optional)</Label>
+        <Input
+          id="pub-diversity"
+          placeholder="https://…"
+          value={diversityPolicyUrl}
+          onChange={(e) => setDiversityPolicyUrl(e.target.value)}
+        />
+      </div>
+      <Button size="sm" className="self-end" disabled={saving} onClick={handleSave}>
+        {saving ? "Saving…" : "Save"}
+      </Button>
+    </div>
+  );
+}
+
 function BrandingAssetSlot({
   label,
   description,
@@ -686,6 +795,21 @@ export default function SiteSettingsPage() {
         </CardHeader>
         <CardContent>
           <BrandingCard isSuperadmin={isSuperadmin} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Editorial transparency</CardTitle>
+          <CardDescription>
+            Publisher signals for Google News &amp; Discover — official social
+            profiles, founding date, and links to your methodology and
+            corrections pages. These fill the NewsMediaOrganization data on
+            every article and the homepage.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PublisherCard isSuperadmin={isSuperadmin} />
         </CardContent>
       </Card>
 

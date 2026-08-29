@@ -139,6 +139,23 @@ export function PublicFooter({
   // shaped right - pads with empty columns, ignores anything past the 4th.
   const columns = Array.from({ length: 4 }, (_, i) => footerSetting?.columns?.[i] ?? DEFAULT_FOOTER_COLUMNS[i]);
 
+  // A stable editorial/legal strip in the footer, independent of the
+  // configurable widget columns above - E-E-A-T guidance wants the
+  // methodology and corrections policy one click from any page. Renders
+  // only the pages that actually exist, in this order.
+  const EDITORIAL_SLUGS = [
+    "tentang-kami",
+    "metodologi-redaksi",
+    "kebijakan-koreksi",
+    "pedoman-media-siber",
+    "kebijakan-privasi",
+    "disclaimer-2",
+    "hubungi-kami",
+  ];
+  const editorialLinks = EDITORIAL_SLUGS.map((slug) => pages.find((p) => p.slug === slug)).filter(
+    (p): p is Page => Boolean(p),
+  );
+
   return (
     <footer className="mt-12 border-t bg-foreground text-background/80">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 py-12">
@@ -174,6 +191,22 @@ export function PublicFooter({
           ))}
         </div>
       </div>
+
+      {editorialLinks.length > 0 && (
+        <div className="border-t border-background/10">
+          <div className="mx-auto flex max-w-6xl flex-wrap gap-x-5 gap-y-2 px-4 py-4 text-xs">
+            {editorialLinks.map((p) => (
+              <Link
+                key={p.slug}
+                href={`https://${rootDomain}/${p.slug}`}
+                className="hover:text-background"
+              >
+                {p.title}
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="border-t border-background/10">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-5 text-xs sm:flex-row sm:items-center sm:justify-between">

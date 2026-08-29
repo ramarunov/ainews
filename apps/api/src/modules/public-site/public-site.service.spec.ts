@@ -398,28 +398,5 @@ describe('PublicSiteService', () => {
       expect(settingsService.list).toHaveBeenCalledWith('org-1', true);
     });
 
-    it('appends organization.settings.publisher as a site.publisher entry when present', async () => {
-      settingsService.list.mockResolvedValue([{ key: 'ads.header', isPublic: true }]);
-      prisma.organization.findUnique.mockResolvedValue({
-        settings: { publisher: { sameAs: ['https://x.example/rusdi'], foundingDate: '2022-05-11' } },
-      });
-
-      const result = await service.getPublicSettings();
-
-      expect(result).toContainEqual({
-        key: 'site.publisher',
-        value: { sameAs: ['https://x.example/rusdi'], foundingDate: '2022-05-11' },
-        isPublic: true,
-      });
-    });
-
-    it('does not append site.publisher when the org has no publisher block', async () => {
-      settingsService.list.mockResolvedValue([{ key: 'ads.header', isPublic: true }]);
-      prisma.organization.findUnique.mockResolvedValue({ settings: {} });
-
-      const result = await service.getPublicSettings();
-
-      expect(result.some((s: any) => s.key === 'site.publisher')).toBe(false);
-    });
   });
 });

@@ -10,6 +10,7 @@ import {
   UpdateFooterSettingDto,
   UpdateHomepageSeoDto,
   UpdateHomepageWidgetsDto,
+  UpdatePublisherSettingDto,
 } from './dto/site-settings.dto';
 
 @Injectable()
@@ -73,5 +74,13 @@ export class SiteSettingsService {
 
   updateBranding(dto: UpdateBrandingDto, updatedBy: string) {
     return this.settingsService.set(this.orgId, SITE_SETTING_KEYS.branding, dto, updatedBy, true);
+  }
+
+  getPublisher() {
+    return this.settingsService.get(this.orgId, SITE_SETTING_KEYS.publisher);
+  }
+
+  updatePublisher(dto: UpdatePublisherSettingDto, updatedBy: string) {
+    return this.settingsService.set(this.orgId, SITE_SETTING_KEYS.publisher, dto, updatedBy, true);
   }
 }

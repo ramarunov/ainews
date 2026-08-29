@@ -136,6 +136,16 @@ export interface SiteBrandingSetting {
   faviconUrl?: string;
 }
 
+// site.publisher - editorial-transparency data for the
+// NewsMediaOrganization JSON-LD (articles + homepage).
+export interface PublisherSetting {
+  sameAs?: string[];
+  foundingDate?: string;
+  ethicsPolicyUrl?: string;
+  correctionsPolicyUrl?: string;
+  diversityPolicyUrl?: string;
+}
+
 export interface StockPhotoResult {
   id: string;
   thumbnailUrl: string;

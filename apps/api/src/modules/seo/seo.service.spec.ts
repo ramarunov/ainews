@@ -450,6 +450,7 @@ describe('SeoService', () => {
           }),
         },
         organization: { findUnique: jest.fn().mockResolvedValue(null) },
+        setting: { findUnique: jest.fn().mockResolvedValue(null) },
         articleSeo: { upsert },
       };
       const aiWriter = { generateMetaDescription: jest.fn().mockResolvedValue('Deskripsi otomatis.') };

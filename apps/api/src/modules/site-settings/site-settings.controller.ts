@@ -11,6 +11,7 @@ import {
   UpdateFooterSettingDto,
   UpdateHomepageSeoDto,
   UpdateHomepageWidgetsDto,
+  UpdatePublisherSettingDto,
 } from './dto/site-settings.dto';
 
 @ApiTags('Site Settings')
@@ -78,5 +79,17 @@ export class SiteSettingsController {
   @ApiOperation({ summary: 'Set the logo and favicon URLs (superadmin only)' })
   updateBranding(@Body() dto: UpdateBrandingDto, @CurrentUser() user: any) {
     return this.siteSettingsService.updateBranding(dto, user.id);
+  }
+
+  @Get('publisher')
+  @ApiOperation({ summary: 'Publisher / editorial-transparency data (superadmin only)' })
+  getPublisher() {
+    return this.siteSettingsService.getPublisher();
+  }
+
+  @Put('publisher')
+  @ApiOperation({ summary: 'Set publisher / editorial-transparency data (superadmin only)' })
+  updatePublisher(@Body() dto: UpdatePublisherSettingDto, @CurrentUser() user: any) {
+    return this.siteSettingsService.updatePublisher(dto, user.id);
   }
 }

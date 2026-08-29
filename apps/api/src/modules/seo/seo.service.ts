@@ -641,11 +641,17 @@ Return ONLY the title text, no quotes or explanation.`,
         manual?.robots && manual.robots !== 'index,follow' ? manual.robots : undefined;
 
       // Per-author E-E-A-T signals live in user.metadata.authorProfile;
-      // publisher-level ones in organization.settings.publisher. Both are
+      // publisher-level ones in the `site.publisher` Setting (superadmin-
+      // editable, Site Settings -> Editorial transparency). Both are
       // free-form JSON bags, so read defensively.
       const authorProfile =
         ((article.primaryAuthor?.metadata as any) ?? {}).authorProfile ?? {};
-      const publisher = ((org?.settings as any) ?? {}).publisher ?? {};
+      const publisherRow = await this.prisma.setting.findUnique({
+        where: {
+          organizationId_key: { organizationId: article.organizationId, key: 'site.publisher' },
+        },
+      });
+      const publisher = (publisherRow?.value as any) ?? {};
       const strArray = (v: unknown): string[] | undefined =>
         Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && x.length > 0) : undefined;
 

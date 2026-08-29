@@ -121,6 +121,35 @@ describe('SiteSettingsService', () => {
     });
   });
 
+  describe('getPublisher / updatePublisher', () => {
+    it('writes the publisher block as a public setting', async () => {
+      settingsService.set.mockResolvedValue({});
+      const dto = {
+        sameAs: ['https://facebook.com/rusdi'],
+        foundingDate: '2022-05-11',
+        ethicsPolicyUrl: 'https://rusdimedia.com/metodologi-redaksi',
+      };
+
+      await service.updatePublisher(dto as any, 'user-1');
+
+      expect(settingsService.set).toHaveBeenCalledWith(
+        'public-org-1',
+        SITE_SETTING_KEYS.publisher,
+        dto,
+        'user-1',
+        true,
+      );
+    });
+
+    it('reads the publisher setting for the public-site org', async () => {
+      settingsService.get.mockResolvedValue({ foundingDate: '2022-05-11' });
+
+      await service.getPublisher();
+
+      expect(settingsService.get).toHaveBeenCalledWith('public-org-1', SITE_SETTING_KEYS.publisher);
+    });
+  });
+
   describe('when the public site is not configured', () => {
     it('propagates the NotFoundException from the shared org resolver', () => {
       config.get.mockReturnValue('');

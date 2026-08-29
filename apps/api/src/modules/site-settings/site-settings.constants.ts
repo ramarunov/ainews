@@ -9,6 +9,11 @@ export const SITE_SETTING_KEYS = {
   homepageSeo: 'site.homepage_seo',
   customScripts: 'site.custom_scripts',
   branding: 'site.branding',
+  // Editorial-transparency / publisher entity data (sameAs, policy URLs,
+  // foundingDate). Feeds the NewsMediaOrganization JSON-LD on every
+  // article and the homepage - see SeoService.generateArticleSchema and
+  // apps/web's homepage `homeSchema`.
+  publisher: 'site.publisher',
 } as const;
 
 export type SiteSettingKey = (typeof SITE_SETTING_KEYS)[keyof typeof SITE_SETTING_KEYS];

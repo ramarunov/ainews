@@ -237,23 +237,10 @@ export class PublicSiteService {
   }
 
   async getPublicSettings() {
-    const orgId = this.getPublicOrgId();
-    const settings = await this.settingsService.list(orgId, true);
-
-    // Surface the editorial-transparency block (organization.settings.publisher
-    // - sameAs, ethics/corrections policy URLs, foundingDate) as one more
-    // public setting so the homepage can build a NewsMediaOrganization
-    // JSON-LD that matches the one every article carries. It lives on the
-    // Organization row, not the Setting table, so it isn't in the list above.
-    const org = await this.prisma.organization.findUnique({
-      where: { id: orgId },
-      select: { settings: true },
-    });
-    const publisher = ((org?.settings as any) ?? {}).publisher;
-    if (publisher && typeof publisher === 'object') {
-      settings.push({ key: 'site.publisher', value: publisher, isPublic: true } as any);
-    }
-
-    return settings;
+    // Includes `site.publisher` (editorial-transparency data) - it's a
+    // normal public Setting, edited under Site Settings -> Editorial
+    // transparency, and consumed by the homepage's NewsMediaOrganization
+    // JSON-LD.
+    return this.settingsService.list(this.getPublicOrgId(), true);
   }
 }
