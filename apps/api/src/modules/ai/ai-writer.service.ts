@@ -432,14 +432,23 @@ The image should be appropriate for a news article, not promotional or cartoon-l
    */
   async suggestStockPhotoQuery(
     title: string,
+    context?: string,
     organizationId?: string,
     articleId?: string,
   ): Promise<string> {
+    // A headline alone ("GERD vs serangan jantung...") tends to yield vague
+    // queries ("health, worry"). A few sentences of the article body lets
+    // the model name the actual visual subject ("chest pain, ECG monitor"),
+    // which pulls a far less generic stock photo - and generic imagery is
+    // exactly what holds a news site back in Google Discover.
+    const contextText = context
+      ? `\nArticle context: ${context.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 600)}`
+      : '';
     const result = await this.gateway.prompt(
-      `You help pick a real stock photo for a news article. Given the headline, reply with 2-4 short English keywords (concrete nouns/concepts) suitable for searching a general stock-photo library like Pexels.
+      `You help pick a real stock photo for a news article. Given the headline (and any context), reply with 2-4 short English keywords (concrete, depictable nouns/scenes) suitable for searching a general stock-photo library like Pexels. Prefer the specific scene or object the story is about over a broad theme.
 Never include people's names or other identifying details of real individuals - the photo will be a generic stock image, not a picture of the actual people/event involved.
 Reply with the keywords only, comma-separated, no explanation and no trailing punctuation.`,
-      `Headline: ${title}`,
+      `Headline: ${title}${contextText}`,
       {
         temperature: 0.3,
         maxTokens: 20,

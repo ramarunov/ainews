@@ -358,7 +358,7 @@ export class AutonomousPublishingService {
       // call fails or is unavailable (same fail-gracefully convention as
       // everything else in this pipeline).
       const stockQuery = await this.aiWriter
-        .suggestStockPhotoQuery(title, organizationId, shell.id)
+        .suggestStockPhotoQuery(title, content, organizationId, shell.id)
         .then((q) => q || buildStockPhotoQuery(categoryName))
         .catch(() => buildStockPhotoQuery(categoryName));
       const attachedImage = await this.stockPhotoService.autoAttachForQuery(

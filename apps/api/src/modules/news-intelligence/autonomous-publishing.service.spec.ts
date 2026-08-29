@@ -409,7 +409,12 @@ describe('AutonomousPublishingService', () => {
 
     await service.runCycle(ORG_ID);
 
-    expect(aiWriter.suggestStockPhotoQuery).toHaveBeenCalledWith('Big Story', ORG_ID, 'article-1');
+    expect(aiWriter.suggestStockPhotoQuery).toHaveBeenCalledWith(
+      'Big Story',
+      '<p>AI written article body.</p>',
+      ORG_ID,
+      'article-1',
+    );
     expect(stockPhotoService.autoAttachForQuery).toHaveBeenCalledWith(
       'protest crowd street',
       AUTHOR_ID,
