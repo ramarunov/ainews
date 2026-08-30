@@ -93,6 +93,7 @@ describe('AutonomousPublishingService', () => {
     config = { get: jest.fn((_key: string, def: any) => def) };
     aiWriter = {
       generateDraft: jest.fn().mockResolvedValue('<p>AI written article body.</p>'),
+      assessEventRecency: jest.fn().mockResolvedValue({ isRecent: true, reason: '' }),
       generateTitles: jest.fn().mockResolvedValue(['Localized Headline']),
       checkHallucinations: jest.fn().mockResolvedValue({
         overallConfidence: 0.9,
@@ -150,7 +151,7 @@ describe('AutonomousPublishingService', () => {
 
     const result = await service.runCycle(ORG_ID);
 
-    expect(result).toEqual({ processed: 0, readyForReview: 0, flagged: 0, autoPublished: 0 });
+    expect(result).toEqual({ processed: 0, readyForReview: 0, flagged: 0, autoPublished: 0, skippedStale: 0 });
     expect(prisma.newsCluster.findMany).not.toHaveBeenCalled();
     expect(aiWriter.generateDraft).not.toHaveBeenCalled();
   });
@@ -160,7 +161,7 @@ describe('AutonomousPublishingService', () => {
 
     const result = await service.runCycle(ORG_ID);
 
-    expect(result).toEqual({ processed: 0, readyForReview: 0, flagged: 0, autoPublished: 0 });
+    expect(result).toEqual({ processed: 0, readyForReview: 0, flagged: 0, autoPublished: 0, skippedStale: 0 });
     expect(prisma.newsCluster.findMany).not.toHaveBeenCalled();
   });
 
@@ -175,7 +176,7 @@ describe('AutonomousPublishingService', () => {
 
     const result = await service.runCycle(ORG_ID);
 
-    expect(result).toEqual({ processed: 0, readyForReview: 0, flagged: 0, autoPublished: 0 });
+    expect(result).toEqual({ processed: 0, readyForReview: 0, flagged: 0, autoPublished: 0, skippedStale: 0 });
     expect(prisma.newsCluster.findMany).not.toHaveBeenCalled();
   });
 
@@ -191,7 +192,7 @@ describe('AutonomousPublishingService', () => {
 
     const result = await service.runCycle(ORG_ID);
 
-    expect(result).toEqual({ processed: 0, readyForReview: 0, flagged: 0, autoPublished: 0 });
+    expect(result).toEqual({ processed: 0, readyForReview: 0, flagged: 0, autoPublished: 0, skippedStale: 0 });
     expect(prisma.newsCluster.findMany).not.toHaveBeenCalled();
   });
 
@@ -257,7 +258,7 @@ describe('AutonomousPublishingService', () => {
   it('routes to review with a passed-gate signal, never auto-publishing, when the quality gate passes', async () => {
     const result = await service.runCycle(ORG_ID);
 
-    expect(result).toEqual({ processed: 1, readyForReview: 1, flagged: 0, autoPublished: 0 });
+    expect(result).toEqual({ processed: 1, readyForReview: 1, flagged: 0, autoPublished: 0, skippedStale: 0 });
     expect(prisma.article.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -311,7 +312,7 @@ describe('AutonomousPublishingService', () => {
 
       const result = await service.runCycle(ORG_ID);
 
-      expect(result).toEqual({ processed: 1, readyForReview: 0, flagged: 0, autoPublished: 1 });
+      expect(result).toEqual({ processed: 1, readyForReview: 0, flagged: 0, autoPublished: 1, skippedStale: 0 });
       expect(articlesService.update).toHaveBeenCalledWith(
         'article-1',
         expect.objectContaining({ status: ArticleStatus.PUBLISHED }),
@@ -339,7 +340,7 @@ describe('AutonomousPublishingService', () => {
 
       const result = await service.runCycle(ORG_ID);
 
-      expect(result).toEqual({ processed: 1, readyForReview: 1, flagged: 0, autoPublished: 0 });
+      expect(result).toEqual({ processed: 1, readyForReview: 1, flagged: 0, autoPublished: 0, skippedStale: 0 });
       expect(articlesService.update).toHaveBeenCalledWith(
         'article-1',
         expect.objectContaining({ status: ArticleStatus.IN_REVIEW }),
@@ -358,7 +359,7 @@ describe('AutonomousPublishingService', () => {
 
       const result = await service.runCycle(ORG_ID);
 
-      expect(result).toEqual({ processed: 1, readyForReview: 0, flagged: 1, autoPublished: 0 });
+      expect(result).toEqual({ processed: 1, readyForReview: 0, flagged: 1, autoPublished: 0, skippedStale: 0 });
       expect(articlesService.update).toHaveBeenCalledWith(
         'article-1',
         expect.objectContaining({ status: ArticleStatus.IN_REVIEW }),
@@ -372,7 +373,7 @@ describe('AutonomousPublishingService', () => {
 
       const result = await service.runCycle(ORG_ID);
 
-      expect(result).toEqual({ processed: 1, readyForReview: 1, flagged: 0, autoPublished: 0 });
+      expect(result).toEqual({ processed: 1, readyForReview: 1, flagged: 0, autoPublished: 0, skippedStale: 0 });
     });
   });
 
@@ -399,7 +400,7 @@ describe('AutonomousPublishingService', () => {
 
     const result = await service.runCycle(ORG_ID);
 
-    expect(result).toEqual({ processed: 1, readyForReview: 1, flagged: 0, autoPublished: 0 });
+    expect(result).toEqual({ processed: 1, readyForReview: 1, flagged: 0, autoPublished: 0, skippedStale: 0 });
     const updateCall = articlesService.update.mock.calls[0][1];
     expect(updateCall).not.toHaveProperty('featuredImageId');
   });
@@ -457,7 +458,7 @@ describe('AutonomousPublishingService', () => {
 
     const result = await service.runCycle(ORG_ID);
 
-    expect(result).toEqual({ processed: 1, readyForReview: 1, flagged: 0, autoPublished: 0 });
+    expect(result).toEqual({ processed: 1, readyForReview: 1, flagged: 0, autoPublished: 0, skippedStale: 0 });
     expect(prisma.article.delete).not.toHaveBeenCalled();
   });
 
@@ -471,7 +472,7 @@ describe('AutonomousPublishingService', () => {
 
     const result = await service.runCycle(ORG_ID);
 
-    expect(result).toEqual({ processed: 1, readyForReview: 1, flagged: 0, autoPublished: 0 });
+    expect(result).toEqual({ processed: 1, readyForReview: 1, flagged: 0, autoPublished: 0, skippedStale: 0 });
     expect(aiWriter.generateDraft).toHaveBeenCalledWith(
       expect.objectContaining({ outputLanguage: 'id' }),
     );
@@ -505,7 +506,7 @@ describe('AutonomousPublishingService', () => {
 
       const result = await service.runCycle(ORG_ID);
 
-      expect(result).toEqual({ processed: 1, readyForReview: 0, flagged: 0, autoPublished: 0 });
+      expect(result).toEqual({ processed: 1, readyForReview: 0, flagged: 0, autoPublished: 0, skippedStale: 0 });
       expect(prisma.article.create).not.toHaveBeenCalled();
       expect(aiWriter.generateDraft).not.toHaveBeenCalled();
       expect(redis.del).not.toHaveBeenCalled();
@@ -568,7 +569,7 @@ describe('AutonomousPublishingService', () => {
 
     const result = await service.runCycle(ORG_ID);
 
-    expect(result).toEqual({ processed: 1, readyForReview: 0, flagged: 1, autoPublished: 0 });
+    expect(result).toEqual({ processed: 1, readyForReview: 0, flagged: 1, autoPublished: 0, skippedStale: 0 });
     expect(articlesService.update).toHaveBeenCalledWith(
       'article-1',
       expect.objectContaining({ status: ArticleStatus.IN_REVIEW }),
@@ -592,7 +593,7 @@ describe('AutonomousPublishingService', () => {
 
     const result = await service.runCycle(ORG_ID);
 
-    expect(result).toEqual({ processed: 1, readyForReview: 0, flagged: 1, autoPublished: 0 });
+    expect(result).toEqual({ processed: 1, readyForReview: 0, flagged: 1, autoPublished: 0, skippedStale: 0 });
   });
 
   it('does not leave an orphan article shell when generateDraft throws', async () => {
@@ -600,7 +601,7 @@ describe('AutonomousPublishingService', () => {
 
     const result = await service.runCycle(ORG_ID);
 
-    expect(result).toEqual({ processed: 1, readyForReview: 0, flagged: 0, autoPublished: 0 });
+    expect(result).toEqual({ processed: 1, readyForReview: 0, flagged: 0, autoPublished: 0, skippedStale: 0 });
     expect(prisma.article.create).not.toHaveBeenCalled();
     expect(prisma.article.delete).not.toHaveBeenCalled();
   });
@@ -610,10 +611,42 @@ describe('AutonomousPublishingService', () => {
 
     const result = await service.runCycle(ORG_ID);
 
-    expect(result).toEqual({ processed: 1, readyForReview: 0, flagged: 0, autoPublished: 0 });
+    expect(result).toEqual({ processed: 1, readyForReview: 0, flagged: 0, autoPublished: 0, skippedStale: 0 });
     expect(prisma.article.create).toHaveBeenCalled();
     expect(prisma.article.delete).toHaveBeenCalledWith({ where: { id: 'article-1' } });
     expect(articlesService.update).not.toHaveBeenCalled();
+  });
+
+  it('skips a stale cluster: no draft, all its items marked IGNORED, counted as skippedStale', async () => {
+    aiWriter.assessEventRecency.mockResolvedValue({
+      isRecent: false,
+      reason: 'Describes a festival held in 2023.',
+    });
+
+    const result = await service.runCycle(ORG_ID);
+
+    expect(result).toEqual({
+      processed: 1,
+      readyForReview: 0,
+      flagged: 0,
+      autoPublished: 0,
+      skippedStale: 1,
+    });
+    expect(aiWriter.generateDraft).not.toHaveBeenCalled();
+    expect(prisma.article.create).not.toHaveBeenCalled();
+    expect(prisma.newsItem.updateMany).toHaveBeenCalledWith({
+      where: { clusterId: 'cluster-1' },
+      data: { status: NewsItemStatus.IGNORED },
+    });
+  });
+
+  it('proceeds to draft when the recency check errors (fail-open)', async () => {
+    aiWriter.assessEventRecency.mockRejectedValue(new Error('AI down'));
+
+    const result = await service.runCycle(ORG_ID);
+
+    expect(result.skippedStale).toBe(0);
+    expect(aiWriter.generateDraft).toHaveBeenCalled();
   });
 
   it('skips a cluster that already produced an article without needing app-level filtering (query-level exclusion assumed)', async () => {
@@ -625,7 +658,10 @@ describe('AutonomousPublishingService', () => {
       expect.objectContaining({
         where: expect.objectContaining({
           organizationId: ORG_ID,
-          newsItems: { none: { articleId: { not: null } } },
+          AND: expect.arrayContaining([
+            { newsItems: { none: { articleId: { not: null } } } },
+            { newsItems: { some: { status: { not: NewsItemStatus.IGNORED } } } },
+          ]),
         }),
       }),
     );

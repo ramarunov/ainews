@@ -261,6 +261,34 @@ Be accurate. Do not add information not in the article.`,
     );
   }
 
+  /**
+   * Triage for the autonomous pipeline: is the main event/announcement in
+   * this source material actually current, or is it an old event, an
+   * anniversary/retrospective, a "this day in history", or a re-published
+   * old article (common: Indonesian outlets bump an old story's pubDate
+   * for SEO, so the feed says "today" while the content is years old)?
+   * Fail-open at the call site - a flaky check must not drop real news.
+   */
+  async assessEventRecency(
+    sourceText: string,
+    title: string,
+    organizationId?: string,
+  ): Promise<{ isRecent: boolean; reason: string }> {
+    const today = new Date().toISOString().slice(0, 10);
+    const result = await this.gateway.jsonPrompt<{ isRecent: boolean; reason: string }>(
+      `You triage incoming news for an automated pipeline that only covers CURRENT events.
+Today's date is ${today}. Given the source material, decide whether the MAIN event, announcement
+or development it reports is current - happening now or within roughly the last 2 weeks.
+Answer isRecent=false if it is: an older/past event, an anniversary or retrospective, a
+"this day in history" piece, a re-published or re-dated old article, a listicle/guide, or
+timeless evergreen content with no news hook.
+Return JSON: {"isRecent": boolean, "reason": "one short sentence"}`,
+      `Headline: ${title}\n\nSource material:\n${sourceText.substring(0, 3500)}`,
+      { temperature: 0.1, maxTokens: 200, analysisType: 'recency_triage', organizationId },
+    );
+    return { isRecent: result?.isRecent !== false, reason: result?.reason ?? '' };
+  }
+
   async checkHallucinations(
     content: string,
     sources: Array<{ title: string; excerpt: string }> = [],

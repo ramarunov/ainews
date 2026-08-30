@@ -97,7 +97,13 @@ export class AutonomousPublishingService {
 
   async runCycle(
     organizationId: string,
-  ): Promise<{ processed: number; readyForReview: number; flagged: number; autoPublished: number }> {
+  ): Promise<{
+    processed: number;
+    readyForReview: number;
+    flagged: number;
+    autoPublished: number;
+    skippedStale: number;
+  }> {
     const [enabled, authorUserId, outputLanguage, autoPublishThresholdRaw] = await Promise.all([
       this.settings.get(organizationId, AUTONOMOUS_PIPELINE_SETTINGS.enabled),
       this.settings.get(organizationId, AUTONOMOUS_PIPELINE_SETTINGS.authorUserId),
@@ -106,7 +112,7 @@ export class AutonomousPublishingService {
     ]);
 
     if (!enabled || !authorUserId) {
-      return { processed: 0, readyForReview: 0, flagged: 0, autoPublished: 0 };
+      return { processed: 0, readyForReview: 0, flagged: 0, autoPublished: 0, skippedStale: 0 };
     }
 
     // Only one of the checklist's 4 levels is a valid threshold - anything
@@ -121,7 +127,7 @@ export class AutonomousPublishingService {
       this.logger.debug(
         `Autonomous pipeline enabled for org ${organizationId} but no AI provider key is configured yet - skipping.`,
       );
-      return { processed: 0, readyForReview: 0, flagged: 0, autoPublished: 0 };
+      return { processed: 0, readyForReview: 0, flagged: 0, autoPublished: 0, skippedStale: 0 };
     }
 
     const usage = await this.getUsageStats(organizationId);
@@ -133,7 +139,7 @@ export class AutonomousPublishingService {
       this.logger.debug(
         `Autonomous pipeline for org ${organizationId} is at its drafting quota (${usage.draftedToday}/${usage.dailyLimit ?? '∞'} today, ${usage.draftedThisHour}/${usage.hourlyLimit ?? '∞'} this hour) - skipping cycle.`,
       );
-      return { processed: 0, readyForReview: 0, flagged: 0, autoPublished: 0 };
+      return { processed: 0, readyForReview: 0, flagged: 0, autoPublished: 0, skippedStale: 0 };
     }
 
     const minSources = this.config.get<number>('AUTONOMOUS_PIPELINE_MIN_SOURCES', 1);
@@ -158,7 +164,12 @@ export class AutonomousPublishingService {
         itemCount: { gte: minSources },
         lastUpdatedAt: { lte: new Date(Date.now() - stabilizationMinutes * 60_000) },
         firstSeenAt: { gte: new Date(Date.now() - maxAgeHours * 60 * 60_000) },
-        newsItems: { none: { articleId: { not: null } } },
+        AND: [
+          { newsItems: { none: { articleId: { not: null } } } },
+          // Drop clusters the recency check already marked stale (all
+          // items IGNORED) so they aren't re-triaged every cycle.
+          { newsItems: { some: { status: { not: NewsItemStatus.IGNORED } } } },
+        ],
       },
       orderBy: { trendScore: 'desc' },
       take,
@@ -168,6 +179,7 @@ export class AutonomousPublishingService {
     let readyForReview = 0;
     let flagged = 0;
     let autoPublished = 0;
+    let skippedStale = 0;
 
     for (const cluster of clusters) {
       // Claims the cluster before doing any work, so two overlapping
@@ -193,6 +205,7 @@ export class AutonomousPublishingService {
         if (outcome === 'ready_for_review') readyForReview++;
         if (outcome === 'flagged') flagged++;
         if (outcome === 'auto_published') autoPublished++;
+        if (outcome === 'skipped_stale') skippedStale++;
       } catch (err: any) {
         this.logger.error(`Autonomous pipeline failed for cluster ${cluster.id}: ${err?.message ?? err}`);
       } finally {
@@ -202,11 +215,11 @@ export class AutonomousPublishingService {
 
     if (clusters.length > 0) {
       this.logger.log(
-        `Autonomous pipeline processed ${clusters.length} cluster(s) for org ${organizationId}: ${readyForReview} ready for review, ${flagged} flagged for review, ${autoPublished} auto-published`,
+        `Autonomous pipeline processed ${clusters.length} cluster(s) for org ${organizationId}: ${readyForReview} ready for review, ${flagged} flagged for review, ${autoPublished} auto-published, ${skippedStale} skipped as stale`,
       );
     }
 
-    return { processed: clusters.length, readyForReview, flagged, autoPublished };
+    return { processed: clusters.length, readyForReview, flagged, autoPublished, skippedStale };
   }
 
   // Read-only: powers the usage readout on the Autonomous Publishing
@@ -259,7 +272,7 @@ export class AutonomousPublishingService {
     authorUserId: string,
     outputLanguage: string | undefined,
     autoPublishThreshold: (typeof AUTO_PUBLISH_CONFIDENCE_LEVELS)[number] | null,
-  ): Promise<'ready_for_review' | 'flagged' | 'auto_published'> {
+  ): Promise<'ready_for_review' | 'flagged' | 'auto_published' | 'skipped_stale'> {
     const items = [...cluster.newsItems].sort((a, b) => {
       const aTime = (a.publishedAt ?? a.fetchedAt).getTime();
       const bTime = (b.publishedAt ?? b.fetchedAt).getTime();
@@ -275,6 +288,25 @@ export class AutonomousPublishingService {
       // 900-1300-word article with real detail rather than a thin summary.
       excerpt: (item.content ?? item.excerpt ?? '').slice(0, 1800),
     }));
+
+    // The cluster-age gate above only trusts the feed's date. A search
+    // feed (or an SEO-motivated re-publish) can serve a years-old event
+    // with today's date - a content-level recency check catches that
+    // before we spend a full draft on it. Fail-open: a check that errors
+    // must not drop genuine news.
+    const recency = await this.aiWriter
+      .assessEventRecency(sources.map((s) => `${s.title}\n${s.excerpt}`).join('\n\n'), title, organizationId)
+      .catch(() => ({ isRecent: true, reason: 'recency check failed - proceeding' }));
+    if (!recency.isRecent) {
+      await this.prisma.newsItem.updateMany({
+        where: { clusterId: cluster.id },
+        data: { status: NewsItemStatus.IGNORED },
+      });
+      this.logger.log(
+        `Autonomous pipeline skipped stale cluster ${cluster.id} ("${title}"): ${recency.reason}`,
+      );
+      return 'skipped_stale';
+    }
 
     const categoryId = await this.resolveCategory(primary.source?.categoryHint ?? null, organizationId);
 
