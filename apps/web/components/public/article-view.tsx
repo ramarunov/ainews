@@ -33,7 +33,11 @@ export async function buildArticleMetadata(slug: string): Promise<Metadata> {
     : `https://${rootDomain}/feed`;
 
   return {
-    title,
+    // Article <title> is the headline itself, not run through the root
+    // layout's "%s — RusdiMedia.com" template - the headline is the SEO
+    // asset and appending the brand only eats into Google's title budget.
+    // The brand still travels via og:site_name and the publisher schema.
+    title: { absolute: title },
     description,
     // Spread conditionally, not `robots: seo?.robots ?? undefined` - Next's
     // metadata inheritance checks whether the `robots` KEY is present on

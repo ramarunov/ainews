@@ -398,7 +398,7 @@ describe('SeoService', () => {
 
       expect((result.schemaJsonld as any)['@type']).toBe('NewsArticle');
       expect((result.schemaJsonld as any).headline).toBe(longTitle);
-      expect(result.metaTitle).toBe(longTitle.substring(0, 43));
+      expect(result.metaTitle).toBe(longTitle.substring(0, 60));
       expect(result.metaDescription).toBe('A short excerpt.');
     });
 
@@ -417,6 +417,25 @@ describe('SeoService', () => {
         undefined,
         'id',
       );
+    });
+
+    it('returns a long headline verbatim up to 60 chars, and only shortens (in-language) past that', async () => {
+      const prompt = jest.fn().mockResolvedValue('Judul lebih pendek dalam Bahasa Indonesia');
+      const svc = new SeoService(
+        undefined as any,
+        { prompt } as any,
+        { generateMetaDescription: jest.fn().mockResolvedValue('x') } as any,
+        undefined as any,
+      );
+
+      const short = 'A'.repeat(55);
+      expect(await svc.generateMetaTitle(short, undefined, 'id')).toBe(short);
+      expect(prompt).not.toHaveBeenCalled();
+
+      await svc.generateMetaTitle('B'.repeat(90), 'kata kunci', 'id');
+      const [systemPrompt] = prompt.mock.calls[0];
+      expect(systemPrompt).toMatch(/do NOT translate it/i);
+      expect(systemPrompt).toContain('ISO 639-1: id');
     });
   });
 

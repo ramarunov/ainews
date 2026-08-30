@@ -124,7 +124,7 @@ export class SeoService {
     // fresh install with AI services off would never get structured data
     // on any article, ever - not just a degraded meta title.
     const [metaTitle, metaDescription, schema] = await Promise.all([
-      this.generateMetaTitle(article.title, focusKeyword).catch(() =>
+      this.generateMetaTitle(article.title, focusKeyword, article.language).catch(() =>
         article.title.substring(0, SeoService.META_TITLE_MAX),
       ),
       this.aiWriter
@@ -159,27 +159,28 @@ export class SeoService {
 
   // ─── Meta Title Generation ─────────────────────────────────────────────────
 
-  // The public site's <title> tag always gets " — RusdiMedia.com" (17 chars)
-  // appended by the frontend's sitewide title template (apps/web's
-  // app/(public)/layout.tsx) - a metaTitle generated all the way up to
-  // Google's ~60-char display budget left no room for that suffix, so it
-  // routinely got truncated in search results, losing the branding it was
-  // meant to add. Reserving that width here keeps the *rendered* title
-  // (this value + the suffix) inside the real budget.
-  private static readonly SITE_SUFFIX_RESERVE = 17;
-  private static readonly META_TITLE_MAX =
-    60 - SeoService.SITE_SUFFIX_RESERVE;
+  // Article pages render this value verbatim as their <title> (no
+  // " — RusdiMedia.com" suffix - see apps/web article-view.tsx, which sets
+  // title.absolute), so a news headline up to ~60 chars is used as-is and
+  // only genuinely long ones get shortened (faithfully, same language).
+  private static readonly META_TITLE_MAX = 60;
 
-  async generateMetaTitle(title: string, focusKeyword?: string): Promise<string> {
+  async generateMetaTitle(
+    title: string,
+    focusKeyword?: string,
+    language?: string,
+  ): Promise<string> {
     if (title.length <= SeoService.META_TITLE_MAX) {
       return title;
     }
 
     const result = await this.aiGateway.prompt(
-      `You are an SEO specialist. Create an SEO-optimized meta title.
-Rules: ${SeoService.META_TITLE_MAX} characters max. Include focus keyword if provided.
+      `You are an SEO specialist. Shorten this news headline into a meta title.
+Rules: ${SeoService.META_TITLE_MAX} characters max. Keep it faithful to the original headline - same meaning, same tone, do NOT translate it.${
+        language ? ` The headline is in this language (ISO 639-1: ${language}); keep the meta title in that same language.` : ''
+      } Include the focus keyword if one is given.
 Return ONLY the title text, no quotes or explanation.`,
-      `Original title: ${title}${focusKeyword ? `\nFocus keyword: ${focusKeyword}` : ''}`,
+      `Original headline: ${title}${focusKeyword ? `\nFocus keyword: ${focusKeyword}` : ''}`,
       { temperature: 0.3, maxTokens: 100 },
     );
 
