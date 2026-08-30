@@ -145,12 +145,19 @@ export class AutonomousPublishingService {
     const minSources = this.config.get<number>('AUTONOMOUS_PIPELINE_MIN_SOURCES', 1);
     const stabilizationMinutes = this.config.get<number>('AUTONOMOUS_PIPELINE_STABILIZATION_MINUTES', 20);
     const maxPerCycle = this.config.get<number>('AUTONOMOUS_PIPELINE_MAX_PER_CYCLE', 3);
-    // Same 48h freshness window the public news sitemap already uses - a
-    // cluster otherwise has no upper bound on age, so a story that broke
-    // days ago but only just became eligible again (e.g. its previous
-    // draft was deleted) would get drafted and published-review'd as if it
-    // were breaking news today.
-    const maxAgeHours = this.config.get<number>('AUTONOMOUS_PIPELINE_MAX_AGE_HOURS', 48);
+    // How long after we first saw a cluster it stays eligible - bounds
+    // retries on a story whose draft was deleted, etc.
+    const maxAgeHours = this.config.get<number>('AUTONOMOUS_PIPELINE_MAX_AGE_HOURS', 24);
+    // Hard freshness gate: the cluster must contain at least one source
+    // article actually *published* within this window (feed <pubDate>).
+    // "Only cover genuinely fresh news" - a long-tail feed item or an old
+    // cluster still collecting stragglers won't pass. Re-dated old
+    // articles (pubDate bumped for SEO) still get through here but are
+    // caught by the AI recency check in processCluster().
+    const maxPublishedAgeHours = this.config.get<number>(
+      'AUTONOMOUS_PIPELINE_MAX_PUBLISHED_AGE_HOURS',
+      24,
+    );
     // Cap the batch by remaining drafting budget too, so a cycle never pulls
     // more candidate clusters than it could actually draft before the next
     // quota check - overflow would just sit as extra IN_REVIEW load for no
@@ -169,6 +176,14 @@ export class AutonomousPublishingService {
           // Drop clusters the recency check already marked stale (all
           // items IGNORED) so they aren't re-triaged every cycle.
           { newsItems: { some: { status: { not: NewsItemStatus.IGNORED } } } },
+          // At least one source published within the freshness window.
+          {
+            newsItems: {
+              some: {
+                publishedAt: { gte: new Date(Date.now() - maxPublishedAgeHours * 60 * 60_000) },
+              },
+            },
+          },
         ],
       },
       orderBy: { trendScore: 'desc' },

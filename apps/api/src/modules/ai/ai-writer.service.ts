@@ -276,12 +276,12 @@ Be accurate. Do not add information not in the article.`,
   ): Promise<{ isRecent: boolean; reason: string }> {
     const today = new Date().toISOString().slice(0, 10);
     const result = await this.gateway.jsonPrompt<{ isRecent: boolean; reason: string }>(
-      `You triage incoming news for an automated pipeline that only covers CURRENT events.
+      `You triage incoming news for an automated pipeline that only covers BREAKING/CURRENT events.
 Today's date is ${today}. Given the source material, decide whether the MAIN event, announcement
-or development it reports is current - happening now or within roughly the last 2 weeks.
-Answer isRecent=false if it is: an older/past event, an anniversary or retrospective, a
-"this day in history" piece, a re-published or re-dated old article, a listicle/guide, or
-timeless evergreen content with no news hook.
+or development it reports happened or was announced in the last day or two.
+Answer isRecent=false if it is: an older/past event (weeks or months ago), an anniversary or
+retrospective, a "this day in history" piece, a re-published or re-dated old article, a
+listicle/guide/explainer, or timeless evergreen content with no fresh news hook.
 Return JSON: {"isRecent": boolean, "reason": "one short sentence"}`,
       `Headline: ${title}\n\nSource material:\n${sourceText.substring(0, 3500)}`,
       { temperature: 0.1, maxTokens: 200, analysisType: 'recency_triage', organizationId },

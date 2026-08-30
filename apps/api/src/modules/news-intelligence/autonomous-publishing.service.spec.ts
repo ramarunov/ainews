@@ -649,21 +649,26 @@ describe('AutonomousPublishingService', () => {
     expect(aiWriter.generateDraft).toHaveBeenCalled();
   });
 
-  it('skips a cluster that already produced an article without needing app-level filtering (query-level exclusion assumed)', async () => {
-    // The eligibility query itself excludes already-drafted clusters (asserted via the
-    // findMany where-clause), so this test just confirms runCycle passes the right shape.
+  it('scopes the eligibility query: not-drafted, not-all-ignored, and a source published within 24h', async () => {
+    const before = Date.now();
     await service.runCycle(ORG_ID);
+    const after = Date.now();
 
-    expect(prisma.newsCluster.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          organizationId: ORG_ID,
-          AND: expect.arrayContaining([
-            { newsItems: { none: { articleId: { not: null } } } },
-            { newsItems: { some: { status: { not: NewsItemStatus.IGNORED } } } },
-          ]),
-        }),
-      }),
+    const where = prisma.newsCluster.findMany.mock.calls[0][0].where;
+    expect(where.organizationId).toBe(ORG_ID);
+    expect(where.AND).toEqual(
+      expect.arrayContaining([
+        { newsItems: { none: { articleId: { not: null } } } },
+        { newsItems: { some: { status: { not: NewsItemStatus.IGNORED } } } },
+      ]),
     );
+
+    const freshClause = where.AND.find(
+      (c: any) => c.newsItems?.some?.publishedAt?.gte instanceof Date,
+    );
+    expect(freshClause).toBeDefined();
+    const cutoff = freshClause.newsItems.some.publishedAt.gte.getTime();
+    expect(cutoff).toBeGreaterThanOrEqual(before - 24 * 3600_000 - 1000);
+    expect(cutoff).toBeLessThanOrEqual(after - 24 * 3600_000 + 1000);
   });
 });
