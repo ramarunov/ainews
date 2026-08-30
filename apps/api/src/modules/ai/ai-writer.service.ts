@@ -8,7 +8,7 @@ export interface WriterOptions {
   targetLength?: number;
   focusKeyword?: string;
   targetAudience?: string;
-  sources?: Array<{ title: string; url: string; excerpt?: string }>;
+  sources?: Array<{ title: string; url: string; excerpt?: string; publishedAt?: Date | string | null }>;
   organizationId?: string;
   articleId?: string;
   brandVoice?: string;
@@ -75,9 +75,15 @@ export class AIWriterService {
   constructor(private readonly gateway: AIGatewayService) {}
 
   async generateDraft(options: WriterOptions): Promise<string> {
+    const today = new Date().toISOString().slice(0, 10);
     const sourcesText = options.sources?.length
       ? `\n\nAvailable sources for reference:\n${options.sources
-          .map((s) => `- ${s.title}: ${s.excerpt ?? ''}`)
+          .map((s) => {
+            const date = s.publishedAt
+              ? new Date(s.publishedAt).toISOString().slice(0, 10)
+              : null;
+            return `- [${date ? `published ${date}` : 'no date given'}] ${s.title}: ${s.excerpt ?? ''}`;
+          })
           .join('\n')}`
       : '';
 
@@ -89,6 +95,7 @@ export class AIWriterService {
 
     const systemPrompt = `You are a professional news journalist and content writer. ${options.brandVoice ? `Brand voice: ${options.brandVoice}.` : ''}
 Write in ${options.tone ?? 'authoritative'} tone.
+Today's date is ${today}. DATES: use only dates that appear in the source material. Never invent or assume a date, month or year, and never fall back to a date from your training data. If the sources do not state when something happened, write it without a specific date ("baru-baru ini", "pekan ini", "menurut laporan terbaru", etc.) - do NOT guess. Treat each source's publication date (shown in brackets below) as roughly when the events are taking place.
 Always write factually. Never hallucinate facts, statistics, or quotes.
 Format the article with proper HTML headings (h2, h3), paragraphs, and where appropriate, lists.
 Never begin the article with a heading - start directly with the lead paragraph. Headings are only used to break up later sections, never before the first paragraph.
@@ -302,6 +309,10 @@ Return JSON: {"isRecent": boolean, "reason": "one short sentence"}`,
     return this.gateway.jsonPrompt<HallucinationResult>(
       `You are a fact-checking AI. Analyze the article for potential hallucinations,
 unverifiable claims, suspicious statistics, and invented quotes.
+
+Pay special attention to DATES: flag any specific date, month or year in the article
+that does not appear in the provided sources - a fabricated date (especially one that
+looks like an AI's default guess, e.g. "October 2023") is a DISPUTED claim.
 
 For each factual claim:
 1. Extract the specific claim

@@ -302,6 +302,9 @@ export class AutonomousPublishingService {
       // Give the writer enough raw material per source to produce a
       // 900-1300-word article with real detail rather than a thin summary.
       excerpt: (item.content ?? item.excerpt ?? '').slice(0, 1800),
+      // The writer anchors event dates to this - without it gpt-4o fills
+      // undated events with a date from its training cutoff (Oct 2023).
+      publishedAt: item.publishedAt ?? item.fetchedAt,
     }));
 
     // The cluster-age gate above only trusts the feed's date. A search
@@ -367,7 +370,10 @@ export class AutonomousPublishingService {
       const [hallucination, qualityScore] = await Promise.all([
         this.aiWriter.checkHallucinations(
           content,
-          sources.map((s) => ({ title: s.title, excerpt: s.excerpt })),
+          sources.map((s) => ({
+            title: s.title,
+            excerpt: `[published ${new Date(s.publishedAt).toISOString().slice(0, 10)}] ${s.excerpt}`,
+          })),
           organizationId,
           shell.id,
         ),
