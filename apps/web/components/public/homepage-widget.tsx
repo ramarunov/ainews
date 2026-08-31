@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Category, HomepageWidget as HomepageWidgetConfig, PublicArticle } from "@/lib/types";
 import { getCategoryColors } from "@/lib/category-colors";
 import { getCategoryUrl } from "@/lib/site-url";
+import { getT, type Locale } from "@/lib/i18n";
 import { TrendingList } from "./trending-list";
 import { AdSlot } from "./ad-slot";
 
@@ -12,29 +13,33 @@ export function HomepageWidget({
   widget,
   trendingArticles,
   categories,
+  locale = "id",
 }: {
   widget: HomepageWidgetConfig;
   trendingArticles: PublicArticle[];
   categories: Category[];
+  locale?: Locale;
 }) {
   if (!widget.enabled) return null;
 
   if (widget.type === "trending") {
-    return <TrendingList articles={trendingArticles} />;
+    return <TrendingList articles={trendingArticles} locale={locale} />;
   }
 
   if (widget.type === "categories") {
     if (categories.length === 0) return null;
     return (
       <div className="rounded-lg border bg-card p-4">
-        <h3 className="mb-3 text-xs font-bold tracking-wide uppercase">Kategori Populer</h3>
+        <h3 className="mb-3 text-xs font-bold tracking-wide uppercase">
+          {getT(locale)("widget.popularCategories")}
+        </h3>
         <nav className="flex flex-col gap-2">
           {categories.map((category) => {
             const colors = getCategoryColors(category.slug ?? category.name);
             return (
               <Link
                 key={category.id}
-                href={getCategoryUrl(category)}
+                href={locale === "en" ? `/en/category/${category.slug}` : getCategoryUrl(category)}
                 className="flex items-center gap-1.5 text-sm hover:underline"
               >
                 <span className={`h-2 w-2 rounded-full ${colors.badge}`} />

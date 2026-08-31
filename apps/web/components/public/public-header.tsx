@@ -10,6 +10,7 @@ import { getCategoryColors } from "@/lib/category-colors";
 import { getCategoryUrl, getRootDomain } from "@/lib/site-url";
 import { getPublishedArticles } from "@/lib/public-api";
 import { SITE_NAME } from "@/lib/brand";
+import { getT, localizePath, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { CategoryMegaPanel } from "./category-mega-panel";
 import { LoginLink } from "./login-link";
@@ -29,6 +30,7 @@ export function PublicHeader({
   activeCategory,
   today,
   logoUrl,
+  locale = "id",
 }: {
   // The nav strip's items - either the site's top-level categories (apex),
   // or the current category's subcategories when browsing its subdomain
@@ -40,9 +42,16 @@ export function PublicHeader({
   activeCategory?: Category;
   today: string;
   logoUrl?: string;
+  // "en" renders the English-edition header: localized labels, /en/*
+  // hrefs, and category previews scoped to the English catalogue.
+  locale?: Locale;
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const t = getT(locale);
+  const homeHref = locale === "en" ? "/en" : "/";
+  const catHref = (c: Category) =>
+    locale === "en" ? `/en/category/${c.slug}` : getCategoryUrl(c);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
 
@@ -135,7 +144,7 @@ export function PublicHeader({
       if (previewsCacheRef.current[slug]) return;
       previewsCacheRef.current[slug] = []; // placeholder marks it as "in flight"
       setLoadingSlug(slug);
-      getPublishedArticles({ categorySlug: slug, limit: 3 }).then((res) => {
+      getPublishedArticles({ categorySlug: slug, limit: 3, language: locale }).then((res) => {
         previewsCacheRef.current = { ...previewsCacheRef.current, [slug]: res.data };
         setPreviewsBySlug(previewsCacheRef.current);
         setLoadingSlug((cur) => (cur === slug ? null : cur));
@@ -159,7 +168,7 @@ export function PublicHeader({
     const q = searchValue.trim();
     if (!q) return;
     setSearchOpen(false);
-    router.push(`/search?q=${encodeURIComponent(q)}`);
+    router.push(`${localizePath("/search", locale)}?q=${encodeURIComponent(q)}`);
   };
 
   return (
@@ -184,14 +193,14 @@ export function PublicHeader({
                   {activeCategory.name}
                 </span>
                 <a href={`https://${getRootDomain()}`} className="opacity-70 hover:text-background hover:opacity-100">
-                  Semua Kanal &rarr;
+                  {t("nav.allChannels")} &rarr;
                 </a>
               </>
             )}
           </div>
           <div className="flex items-center gap-4">
-            <Link href="/search" className="hover:text-background">
-              Bantuan
+            <Link href={localizePath("/search", locale)} className="hover:text-background">
+              {t("nav.help")}
             </Link>
             <LoginLink className="hover:text-background" />
           </div>
@@ -207,7 +216,7 @@ export function PublicHeader({
               (1606x433) here stretched/distorted every differently-shaped
               logo uploaded since, confirmed live once a real replacement
               logo (2038x771, a different ratio) was uploaded. */}
-          <Link href="/" className="relative flex h-9 w-36 items-center">
+          <Link href={homeHref} className="relative flex h-9 w-36 items-center">
             <Image
               src={logoUrl || "/brand/logo.png"}
               alt={SITE_NAME}
@@ -236,14 +245,14 @@ export function PublicHeader({
               autoFocus
               value={searchValue}
               onChange={(e) => setSearchValue(e.target.value)}
-              placeholder="Yang sedang ramai dicari…"
+              placeholder={t("search.placeholder")}
               className="flex-1 rounded-md border bg-background px-4 py-2 text-base focus:border-primary focus:outline-none"
             />
             <button
               type="submit"
               className="rounded-md bg-primary px-6 py-2 font-bold text-primary-foreground"
             >
-              Cari
+              {t("search.button")}
             </button>
           </form>
         </div>
@@ -279,11 +288,12 @@ export function PublicHeader({
           >
             {categories.map((category) => {
               const colors = getCategoryColors(category.slug ?? category.name);
-              const isActive = pathname === `/category/${category.slug}`;
+              const isActive =
+                pathname === `${locale === "en" ? "/en" : ""}/category/${category.slug}`;
               return (
                 <Link
                   key={category.id}
-                  href={getCategoryUrl(category)}
+                  href={catHref(category)}
                   onMouseEnter={() => scheduleOpen(category.slug)}
                   className={cn(
                     "shrink-0 border-b-2 px-3 py-3 text-sm font-bold tracking-wide uppercase transition-colors hover:border-current",
@@ -305,7 +315,7 @@ export function PublicHeader({
               />
               <button
                 type="button"
-                aria-label="Gulir kategori ke kiri"
+                aria-label={t("nav.scrollLeft")}
                 onClick={() => scrollNavBy(-240)}
                 className="absolute top-1/2 left-1 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border bg-background shadow-sm hover:bg-muted"
               >
@@ -322,7 +332,7 @@ export function PublicHeader({
               />
               <button
                 type="button"
-                aria-label="Gulir kategori ke kanan"
+                aria-label={t("nav.scrollRight")}
                 onClick={() => scrollNavBy(240)}
                 className="absolute top-1/2 right-1 z-10 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full border bg-background shadow-sm hover:bg-muted"
               >
@@ -337,6 +347,7 @@ export function PublicHeader({
             category={openCategory}
             articles={previewsBySlug[openCategory.slug]}
             loading={loadingSlug === openCategory.slug}
+            locale={locale}
           />
         )}
       </div>

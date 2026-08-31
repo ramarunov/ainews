@@ -115,17 +115,23 @@ export function ArticleContent({
   const contentProseClassName =
     "whitespace-pre-line text-lg leading-relaxed break-words [&_p]:mb-5 [&_a]:text-primary [&_a]:underline [&_blockquote]:my-5 [&_blockquote]:border-l-4 [&_blockquote]:border-primary [&_blockquote]:pl-4 [&_blockquote]:text-xl [&_blockquote]:font-medium [&_blockquote]:text-foreground/80 [&_blockquote]:italic [&_h2]:mt-8 [&_h2]:mb-3 [&_h2]:text-2xl [&_h2]:font-black [&_h3]:mt-6 [&_h3]:mb-2 [&_h3]:text-xl [&_h3]:font-bold [&_img]:my-5 [&_img]:rounded-lg [&_ul]:mb-5 [&_ol]:mb-5 [&_li]:ml-5 [&_ol]:list-decimal [&_ul]:list-disc [&_.baca-juga]:my-6 [&_.baca-juga]:border-l-4 [&_.baca-juga]:border-primary [&_.baca-juga]:bg-primary/5 [&_.baca-juga]:py-2 [&_.baca-juga]:pr-3 [&_.baca-juga]:pl-4 [&_.baca-juga]:text-base [&_.baca-juga]:font-semibold [&_.baca-juga]:not-italic [&_.baca-juga_a]:font-bold [&_.baca-juga_a]:no-underline hover:[&_.baca-juga_a]:underline";
   const rootDomain = getRootDomain();
+  const isEn = locale === "en";
   // The English edition is apex-only at /en/{slug}; its Indonesian
-  // counterpart keeps the flat /{slug} permalink getArticleUrl builds.
-  const canonicalArticleUrl =
-    locale === "en" ? `https://${rootDomain}/en/${article.slug}` : getArticleUrl(article, rootDomain);
+  // counterpart keeps the flat /{slug} permalink getArticleUrl builds. The
+  // /en/ edition also keeps its category/tag/author links inside the
+  // edition rather than jumping the reader back to the Indonesian site.
+  const canonicalArticleUrl = isEn
+    ? `https://${rootDomain}/en/${article.slug}`
+    : getArticleUrl(article, rootDomain);
+  const catHref = (c: NonNullable<PublicArticle["primaryCategory"]>) =>
+    isEn ? `https://${rootDomain}/en/category/${c.slug}` : getCategoryUrl(c, rootDomain);
   const breadcrumbItems = [
-    { label: t("nav.home"), href: locale === "en" ? `https://${rootDomain}/en` : `https://${rootDomain}` },
+    { label: t("nav.home"), href: isEn ? `https://${rootDomain}/en` : `https://${rootDomain}` },
     ...(article.primaryCategory?.parent
-      ? [{ label: article.primaryCategory.parent.name, href: getCategoryUrl(article.primaryCategory.parent, rootDomain) }]
+      ? [{ label: article.primaryCategory.parent.name, href: catHref(article.primaryCategory.parent) }]
       : []),
     ...(article.primaryCategory
-      ? [{ label: article.primaryCategory.name, href: getCategoryUrl(article.primaryCategory, rootDomain) }]
+      ? [{ label: article.primaryCategory.name, href: catHref(article.primaryCategory) }]
       : []),
     { label: article.title },
   ];
@@ -199,7 +205,11 @@ export function ArticleContent({
         <div className="flex min-w-0 flex-col gap-5">
           {article.primaryCategory && (
             <Link
-              href={getCategoryUrl(article.primaryCategory)}
+              href={
+                isEn
+                  ? `/en/category/${article.primaryCategory.slug}`
+                  : getCategoryUrl(article.primaryCategory)
+              }
               className={`w-fit rounded px-2.5 py-1 text-xs font-black tracking-wide text-white uppercase ${colors.badge}`}
             >
               {article.primaryCategory.name}
@@ -221,7 +231,7 @@ export function ArticleContent({
               <div className="flex flex-col text-sm">
                 {article.primaryAuthor?.displayName && (
                   <Link
-                    href={`/author/${article.primaryAuthor.slug ?? article.primaryAuthor.id}`}
+                    href={`${isEn ? "/en/author" : "/author"}/${article.primaryAuthor.slug ?? article.primaryAuthor.id}`}
                     className="font-bold hover:text-primary hover:underline"
                   >
                     {article.primaryAuthor.displayName}
@@ -367,7 +377,7 @@ export function ArticleContent({
               {tags.map(({ tag }) => (
                 <Link
                   key={tag.id}
-                  href={`/tag/${tag.slug}`}
+                  href={`${isEn ? "/en/tag" : "/tag"}/${tag.slug}`}
                   className="rounded-full border bg-muted px-3 py-1 text-sm font-medium text-muted-foreground hover:border-primary hover:text-primary"
                 >
                   #{tag.name}
@@ -382,7 +392,7 @@ export function ArticleContent({
           />
 
           {article.primaryAuthor && article.primaryAuthor.displayName && (
-            <AuthorBox author={article.primaryAuthor} />
+            <AuthorBox author={article.primaryAuthor} locale={locale} />
           )}
         </div>
 
@@ -399,12 +409,12 @@ export function ArticleContent({
               </h2>
               <div className="flex flex-col divide-y">
                 {sidebarRelated.map((item) => (
-                  <ArticleCard key={item.id} article={item} variant="list" className="py-3 first:pt-0 last:pb-0" />
+                  <ArticleCard key={item.id} article={item} variant="list" locale={locale} className="py-3 first:pt-0 last:pb-0" />
                 ))}
               </div>
             </div>
           )}
-          <TrendingList articles={trending.data} />
+          <TrendingList articles={trending.data} locale={locale} />
         </aside>
       </div>
 
@@ -417,7 +427,7 @@ export function ArticleContent({
             </div>
             <div className="grid gap-6 sm:grid-cols-2">
               {bandRelated.map((item) => (
-                <ArticleCard key={item.id} article={item} variant="horizontal" />
+                <ArticleCard key={item.id} article={item} variant="horizontal" locale={locale} />
               ))}
             </div>
           </div>

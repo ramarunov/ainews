@@ -7,10 +7,10 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  return buildAuthorMetadata({ idOrSlug: slug, locale: "id" });
+  return buildAuthorMetadata({ idOrSlug: slug, locale: "en" });
 }
 
 export default async function Page({ params }: Props) {
   const { slug } = await params;
-  return <AuthorPage idOrSlug={slug} locale="id" />;
+  return <AuthorPage idOrSlug={slug} locale="en" />;
 }

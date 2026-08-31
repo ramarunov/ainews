@@ -1,4 +1,5 @@
 import { getUpcomingLiga1Matches } from "@/lib/football-api";
+import { getT, type Locale } from "@/lib/i18n";
 import { FootballScheduleCarousel } from "./football-schedule-carousel";
 
 // Homepage-only widget (see app/(public)/page.tsx) - not part of the
@@ -8,7 +9,7 @@ import { FootballScheduleCarousel } from "./football-schedule-carousel";
 // not this org's own content. Data fetching stays server-side (async
 // Server Component); the actual scroll/carousel interactivity needs client
 // state, so that part lives in FootballScheduleCarousel.
-export async function FootballScheduleWidget() {
+export async function FootballScheduleWidget({ locale = "id" }: { locale?: Locale }) {
   // 9 (not the default 6) so there's a second and third "page" to scroll
   // to in the carousel, not just one screenful.
   const matches = await getUpcomingLiga1Matches(9);
@@ -20,7 +21,7 @@ export async function FootballScheduleWidget() {
         <div className="flex items-center gap-2">
           <span className="h-4 w-1 rounded-full bg-primary" />
           <h2 className="text-base font-black tracking-tight uppercase">
-            Jadwal Pertandingan Liga 1
+            {getT(locale)("football.title")}
           </h2>
         </div>
         <FootballScheduleCarousel matches={matches} />

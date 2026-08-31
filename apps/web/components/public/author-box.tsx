@@ -1,9 +1,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { PublicAuthor } from "@/lib/types";
+import { getT, type Locale } from "@/lib/i18n";
 
-export function AuthorBox({ author }: { author: PublicAuthor }) {
+export function AuthorBox({ author, locale = "id" }: { author: PublicAuthor; locale?: Locale }) {
   const initial = (author.displayName ?? "?").charAt(0).toUpperCase();
+  const t = getT(locale);
+  const href = `${locale === "en" ? "/en/author" : "/author"}/${author.slug ?? author.id}`;
 
   return (
     <div className="mt-10 flex flex-col gap-4 rounded-xl border bg-[var(--zone)] p-6 sm:flex-row sm:items-start">
@@ -17,16 +20,15 @@ export function AuthorBox({ author }: { author: PublicAuthor }) {
         </div>
       )}
       <div className="flex flex-col gap-1.5">
-        <p className="text-xs font-bold tracking-wide text-muted-foreground uppercase">Ditulis oleh</p>
-        <Link href={`/author/${author.slug ?? author.id}`} className="w-fit text-lg font-black hover:text-primary hover:underline">
+        <p className="text-xs font-bold tracking-wide text-muted-foreground uppercase">
+          {t("article.writtenBy")}
+        </p>
+        <Link href={href} className="w-fit text-lg font-black hover:text-primary hover:underline">
           {author.displayName}
         </Link>
         {author.bio && <p className="text-sm leading-relaxed text-muted-foreground">{author.bio}</p>}
-        <Link
-          href={`/author/${author.slug ?? author.id}`}
-          className="mt-1 w-fit text-sm font-bold text-primary hover:underline"
-        >
-          Lihat semua artikel oleh {author.displayName} &rarr;
+        <Link href={href} className="mt-1 w-fit text-sm font-bold text-primary hover:underline">
+          {t("article.moreByAuthor")} {author.displayName} &rarr;
         </Link>
       </div>
     </div>

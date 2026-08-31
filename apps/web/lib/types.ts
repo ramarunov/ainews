@@ -484,6 +484,7 @@ export interface PublicSearchResult {
   content?: string | null;
   publishedAt?: string | null;
   featuredImageUrl?: string | null;
+  language?: string;
   // Hydrated server-side from categoryId (OpenSearch results only index the
   // id) so result links can resolve to the article's category subdomain —
   // see SearchService.fetchCategoryMap in the API.

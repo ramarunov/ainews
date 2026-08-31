@@ -4,6 +4,7 @@ import type { Category, FooterWidget, Page, SiteFooterSetting } from "@/lib/type
 import { getCategoryColors } from "@/lib/category-colors";
 import { getCategoryUrl, getRootDomain } from "@/lib/site-url";
 import { SITE_NAME, SITE_TAGLINE } from "@/lib/brand";
+import { getT, localizePath, type Locale } from "@/lib/i18n";
 import { LoginLink } from "./login-link";
 
 // Shown until an admin ever saves a footer configuration - matches the
@@ -27,16 +28,45 @@ const DEFAULT_FOOTER_COLUMNS: { widgets: FooterWidget[] }[] = [
   { widgets: [{ id: "default-pages", type: "pages", title: "Halaman" }] },
 ];
 
+// The English edition ignores the admin's (Indonesian) footer config and
+// uses this fixed English set instead.
+const EN_FOOTER_COLUMNS: { widgets: FooterWidget[] }[] = [
+  {
+    widgets: [
+      {
+        id: "en-text",
+        type: "text",
+        title: "",
+        content: "English translations of the latest Indonesian news.",
+      },
+    ],
+  },
+  { widgets: [{ id: "en-categories", type: "categories", title: "Categories" }] },
+  {
+    widgets: [
+      {
+        id: "en-links",
+        type: "links",
+        title: "Links",
+        links: [{ label: "Search News", url: "/en/search" }],
+      },
+    ],
+  },
+  { widgets: [{ id: "en-pages", type: "pages", title: "Pages" }] },
+];
+
 function FooterWidgetView({
   widget,
   categories,
   pages,
   rootDomain,
+  locale,
 }: {
   widget: FooterWidget;
   categories: Category[];
   pages: Page[];
   rootDomain: string;
+  locale: Locale;
 }) {
   const heading = widget.title && (
     <h3 className="text-xs font-bold tracking-wide text-background uppercase">{widget.title}</h3>
@@ -61,7 +91,11 @@ function FooterWidgetView({
         {heading}
         <nav className="flex flex-col gap-2">
           {widget.links.map((link, idx) => (
-            <Link key={idx} href={link.url} className="w-fit text-sm hover:text-background">
+            <Link
+              key={idx}
+              href={link.url.startsWith("/") ? localizePath(link.url, locale) : link.url}
+              className="w-fit text-sm hover:text-background"
+            >
               {link.label}
             </Link>
           ))}
@@ -86,7 +120,7 @@ function FooterWidgetView({
             return (
               <Link
                 key={category.id}
-                href={getCategoryUrl(category)}
+                href={locale === "en" ? `/en/category/${category.slug}` : getCategoryUrl(category)}
                 className="w-fit text-sm hover:text-background"
               >
                 <span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${colors.badge}`} />
@@ -127,17 +161,25 @@ export function PublicFooter({
   pages,
   footerSetting,
   logoUrl,
+  locale = "id",
 }: {
   categories: Category[];
   pages: Page[];
   footerSetting?: SiteFooterSetting;
   logoUrl?: string;
+  locale?: Locale;
 }) {
   const rootDomain = getRootDomain();
+  const t = getT(locale);
+  // The English edition uses a fixed English column set; the Indonesian
+  // edition uses the admin's config, falling back to the ID defaults.
   // Defensive against a partially-saved or stale value (fewer/more than 4
   // columns) rather than assuming the admin-managed JSON is always exactly
   // shaped right - pads with empty columns, ignores anything past the 4th.
-  const columns = Array.from({ length: 4 }, (_, i) => footerSetting?.columns?.[i] ?? DEFAULT_FOOTER_COLUMNS[i]);
+  const columns =
+    locale === "en"
+      ? EN_FOOTER_COLUMNS
+      : Array.from({ length: 4 }, (_, i) => footerSetting?.columns?.[i] ?? DEFAULT_FOOTER_COLUMNS[i]);
 
   // A stable editorial/legal strip in the footer, independent of the
   // configurable widget columns above - E-E-A-T guidance wants the
@@ -185,6 +227,7 @@ export function PublicFooter({
                   categories={categories}
                   pages={pages}
                   rootDomain={rootDomain}
+                  locale={locale}
                 />
               ))}
             </div>
@@ -210,9 +253,9 @@ export function PublicFooter({
 
       <div className="border-t border-background/10">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-5 text-xs sm:flex-row sm:items-center sm:justify-between">
-          <p>&copy; {new Date().getFullYear()} {SITE_NAME}. Seluruh hak cipta dilindungi.</p>
+          <p>&copy; {new Date().getFullYear()} {SITE_NAME}. {t("footer.rights")}</p>
           <div className="flex items-center gap-4">
-            <p>Didukung oleh AI Native News CMS</p>
+            <p>{t("footer.poweredBy")}</p>
             <LoginLink className="hover:text-background" />
           </div>
         </div>

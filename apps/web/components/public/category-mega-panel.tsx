@@ -2,13 +2,14 @@ import Link from "next/link";
 import type { Category, PublicArticle } from "@/lib/types";
 import { getCategoryColors } from "@/lib/category-colors";
 import { getArticleUrl, getCategoryUrl } from "@/lib/site-url";
+import { getT, type Locale } from "@/lib/i18n";
 import { SmartArticleImage, CategoryPlaceholder } from "./smart-article-image";
 
-function PreviewCard({ article }: { article: PublicArticle }) {
+function PreviewCard({ article, locale }: { article: PublicArticle; locale: Locale }) {
   const url = article.featuredImageUrl;
   return (
     <Link
-      href={getArticleUrl(article)}
+      href={locale === "en" ? `/en/${article.slug}` : getArticleUrl(article)}
       className="group flex flex-col gap-2"
     >
       {url ? (
@@ -54,12 +55,17 @@ export function CategoryMegaPanel({
   category,
   articles,
   loading,
+  locale = "id",
 }: {
   category: Category;
   articles: PublicArticle[] | undefined;
   loading: boolean;
+  locale?: Locale;
 }) {
   const colors = getCategoryColors(category.slug ?? category.name);
+  const t = getT(locale);
+  const categoryHref =
+    locale === "en" ? `/en/category/${category.slug}` : getCategoryUrl(category);
 
   return (
     <div className={`absolute top-full left-0 z-50 w-full border-t-2 bg-background shadow-lg ${colors.border}`}>
@@ -69,10 +75,10 @@ export function CategoryMegaPanel({
             {category.name}
           </span>
           <Link
-            href={getCategoryUrl(category)}
+            href={categoryHref}
             className={`text-xs font-semibold hover:underline ${colors.text}`}
           >
-            Lihat semua &rarr;
+            {t("megapanel.viewAll")} &rarr;
           </Link>
         </div>
 
@@ -87,15 +93,13 @@ export function CategoryMegaPanel({
         {!loading && articles && articles.length > 0 && (
           <div className="grid grid-cols-3 gap-6">
             {articles.map((article) => (
-              <PreviewCard key={article.id} article={article} />
+              <PreviewCard key={article.id} article={article} locale={locale} />
             ))}
           </div>
         )}
 
         {!loading && articles && articles.length === 0 && (
-          <p className="py-4 text-sm text-muted-foreground">
-            Belum ada berita di kategori ini.
-          </p>
+          <p className="py-4 text-sm text-muted-foreground">{t("megapanel.empty")}</p>
         )}
       </div>
     </div>
