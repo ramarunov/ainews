@@ -272,8 +272,14 @@ export async function resolveRedirect(
   if (referrer) params.set("referrer", referrer);
 
   try {
+    // Cached briefly, not no-store: this runs only in the article route's
+    // not-found branch, and a no-store fetch there would opt the whole
+    // route out of ISR/CDN caching (see article-view.tsx). 30s is short
+    // enough that a redirect added in the CMS takes effect quickly, and it
+    // also de-dupes the 404-monitor write for a path being hammered by a
+    // crawler.
     const res = await fetch(`${API_URL}/public/resolve?${params.toString()}`, {
-      cache: "no-store",
+      next: { revalidate: 30 },
     });
     if (!res.ok) return null;
     // A miss returns an empty body (Nest sends no content for a `null`

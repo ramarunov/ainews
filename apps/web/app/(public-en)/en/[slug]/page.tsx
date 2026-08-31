@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { ArticleView, buildArticleMetadata } from "@/components/public/article-view";
 
+// ISR: cache the rendered page at the edge, revalidate in the background.
+export const revalidate = 60;
+
 interface Props {
   params: Promise<{ slug: string }>;
 }

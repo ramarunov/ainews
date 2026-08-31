@@ -4,6 +4,11 @@ import { getRootDomain } from "@/lib/site-url";
 import { SITE_NAME } from "@/lib/brand";
 import { ArticleView, buildArticleMetadata } from "@/components/public/article-view";
 
+// ISR: cache the rendered page at the edge, revalidate in the background.
+// Covers both the flat article route and the static-Page route this file
+// also serves.
+export const revalidate = 60;
+
 interface Props {
   params: Promise<{ slug: string }>;
 }

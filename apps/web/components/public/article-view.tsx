@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
 import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { ArticleContent } from "@/components/public/article-content";
 import { InfiniteArticleFeed } from "@/components/public/infinite-article-feed";
@@ -12,7 +11,7 @@ import {
 } from "@/lib/public-api";
 import { SITE_NAME } from "@/lib/brand";
 import type { Locale } from "@/lib/i18n";
-import { getArticleUrl, getCategoryUrl, getRootDomain, isCategorySubdomainsEnabled } from "@/lib/site-url";
+import { getArticleUrl, getCategoryUrl, getRootDomain } from "@/lib/site-url";
 
 // Shared between apps/web/app/(public)/news/[slug]/page.tsx (this app's
 // default article URL) and apps/web/app/(public)/[slug]/page.tsx (the flat
@@ -108,10 +107,11 @@ export async function ArticleView({
     // The path actually requested for this article - rusdimedia.com's
     // articles live at this bare `/{slug}` (see lib/site-url.ts), which is
     // what a migrated site's Redirect rows (e.g. WordPress URLs that
-    // changed/were removed) are keyed on.
-    const requestedPath = `/${slug}`;
-    const referrer = (await headers()).get("referer") ?? undefined;
-    const match = await resolveRedirect(requestedPath, referrer);
+    // changed/were removed) are keyed on. No headers() here (the referer is
+    // just context for the 404 monitor, not worth making every article page
+    // render on-demand with no CDN cache); resolveRedirect's own fetch is
+    // cached (30s) so this branch doesn't taint the route either.
+    const match = await resolveRedirect(`/${slug}`);
     // Defence in depth against a stored open redirect: the API DTO now
     // rejects a non-root-relative toUrl, but never hand an absolute /
     // scheme-relative URL to Next's redirect() regardless of what the row
@@ -133,28 +133,12 @@ export async function ArticleView({
     notFound();
   }
 
-  // The article exists, but this host isn't its category's own subdomain
-  // (or is the apex/an unassigned category) - send the visitor to the one
-  // canonical URL for this article instead of rendering it twice under two
-  // hostnames. Categories without a subdomain assigned yet resolve to the
-  // apex via getArticleUrl's fallback, so this is a no-op for them.
-  //
-  // Only worth the headers() call (a Dynamic API - see the layout.tsx
-  // comment on why this matters) when the subdomain feature can actually
-  // produce a mismatch: with it off, getArticleUrl always resolves to the
-  // apex and proxy.ts already guarantees every request reaching this
-  // component is on the apex (it 404s any other host, and redirects the
-  // dashboard host's own public-path hits there before this ever renders),
-  // so the check below would be comparing the apex to itself on every
-  // single article view for nothing.
-  if (locale !== "en" && isCategorySubdomainsEnabled()) {
-    const requestHostname = (await headers()).get("host")?.split(":")[0] ?? "";
-    const canonicalArticleUrl = getArticleUrl(article, getRootDomain());
-    const canonicalHostname = new URL(canonicalArticleUrl).hostname;
-    if (requestHostname && requestHostname !== canonicalHostname) {
-      permanentRedirect(canonicalArticleUrl);
-    }
-  }
+  // (The per-host canonical redirect for the category-subdomain feature
+  // used to live here and read the Host header via headers() - removed
+  // because it's a Dynamic API that made every article page uncacheable,
+  // and the feature is off so getArticleUrl always resolves to the apex
+  // and proxy.ts already guarantees only the apex reaches this component.
+  // If subdomains are ever enabled, do that redirect in proxy.ts.)
 
   const emptyRelated = { data: [], meta: { total: 0, page: 1, limit: 8, totalPages: 0 } };
 

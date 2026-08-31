@@ -1,12 +1,10 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { headers } from "next/headers";
 import { PublicHeader } from "@/components/public/public-header";
 import { PublicFooter } from "@/components/public/public-footer";
 import { AdSlot } from "@/components/public/ad-slot";
 import { TopBannerAd } from "@/components/public/top-banner-ad";
 import { findPublicSetting, getCategories, getPages, getPublicSettings } from "@/lib/public-api";
-import { getRootDomain, isCategorySubdomainsEnabled, resolveHostCategory } from "@/lib/site-url";
 import { SITE_NAME, SITE_TAGLINE } from "@/lib/brand";
 import type { CustomScriptsSetting, SiteBrandingSetting, SiteFooterSetting } from "@/lib/types";
 import "../globals.css";
@@ -70,30 +68,17 @@ export default async function PublicLayout({
   const customScripts = findPublicSetting<CustomScriptsSetting>(settings, "site.custom_scripts");
   const branding = findPublicSetting<SiteBrandingSetting>(settings, "site.branding");
 
-  // On a category's own subdomain, the header nav swaps from the full
-  // top-level category list to that category's subcategories (topical
-  // authority: each subdomain's nav stays scoped to its own topic) - see
-  // PublicHeader's activeCategory prop. Falls back to the top-level list
-  // when the category has no subcategories yet, so the nav is never empty.
-  //
-  // headers() is a Dynamic API - calling it unconditionally here forced
-  // EVERY page under this layout (i.e. nearly the entire public site) to
-  // opt out of static rendering/ISR, even though this lookup is a no-op
-  // whenever the subdomain feature itself is off (resolveHostCategory can
-  // only ever match a real subdomain, and no request reaches this app on
-  // one while the feature is disabled - see proxy.ts's kill switch).
-  // Skipping the call entirely in that case is what let the homepage,
-  // articles, categories, tags, etc. become cacheable again - confirmed via
-  // `next build`'s route table (○/ISR vs ƒ Dynamic) before/after this.
-  const rootDomain = getRootDomain();
-  const hostname = isCategorySubdomainsEnabled()
-    ? ((await headers()).get("host")?.split(":")[0] ?? "")
-    : rootDomain;
-  const activeCategory = resolveHostCategory(hostname, rootDomain, categories);
-  const children_ = activeCategory
-    ? categories.filter((c) => c.parentId === activeCategory.id && c.isActive !== false)
-    : [];
-  const navCategories = children_.length > 0 ? children_ : categories.filter((c) => !c.parentId);
+  // Apex-only in this deployment: the category-subdomain feature is off
+  // (ENABLE_CATEGORY_SUBDOMAINS) and proxy.ts 404s every non-apex host, so
+  // the header nav is always the site's top-level categories. This used to
+  // read the Host header (`headers()`, a Dynamic API) to swap the nav to a
+  // subdomain's subcategories - which forced every dynamic-segment page
+  // under this layout (articles, /category/[slug], /tag/[slug],
+  // /author/[slug]) to render on-demand with Cache-Control: no-store.
+  // Dropping the call is what makes those pages CDN/ISR-cacheable. If
+  // subdomains are ever enabled, the per-host nav + canonical redirect
+  // move to proxy.ts (middleware doesn't taint page caching).
+  const navCategories = categories.filter((c) => !c.parentId);
 
   return (
     <html
@@ -113,7 +98,6 @@ export default async function PublicLayout({
           <TopBannerAd value={findPublicSetting(settings, "ads.top_banner")} />
           <PublicHeader
             categories={navCategories}
-            activeCategory={children_.length > 0 ? activeCategory : undefined}
             today={today}
             logoUrl={branding?.logoUrl}
           />

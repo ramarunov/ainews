@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { headers } from "next/headers";
-import { notFound, permanentRedirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { ArticleCard } from "@/components/public/article-card";
 import { TrendingList } from "@/components/public/trending-list";
 import { Breadcrumb } from "@/components/public/breadcrumb";
 import { Pagination } from "@/components/public/pagination";
 import { getCategoryColors } from "@/lib/category-colors";
 import { getCategoryBySlug, getPublishedArticles } from "@/lib/public-api";
-import { getCategoryUrl, getRootDomain, isCategorySubdomainsEnabled } from "@/lib/site-url";
+import { getCategoryUrl, getRootDomain } from "@/lib/site-url";
 import { SITE_NAME } from "@/lib/brand";
 import { getT, categoryLabel, type Locale } from "@/lib/i18n";
 
@@ -68,18 +67,10 @@ export async function CategoryPage({ slug, page, locale }: Args) {
   const category = await getCategoryBySlug(slug);
   if (!category) notFound();
 
-  // Wrong-host canonical redirect only applies to the Indonesian edition
-  // (category subdomains); the English edition is apex-only.
-  if (locale !== "en" && isCategorySubdomainsEnabled()) {
-    const requestHostname = (await headers()).get("host")?.split(":")[0] ?? "";
-    const canonicalCategoryUrl = getCategoryUrl(category, getRootDomain());
-    const canonicalHostname = new URL(canonicalCategoryUrl).hostname;
-    if (requestHostname && requestHostname !== canonicalHostname) {
-      const redirectUrl = new URL(canonicalCategoryUrl);
-      if (page > 1) redirectUrl.searchParams.set("page", String(page));
-      permanentRedirect(redirectUrl.toString());
-    }
-  }
+  // (The per-host canonical redirect for the category-subdomain feature
+  // used to live here and read the Host header - removed because it's a
+  // Dynamic API that made every category page uncacheable, and the feature
+  // is off. If subdomains are ever enabled, do that redirect in proxy.ts.)
 
   const [{ data: articles, meta }, trending] = await Promise.all([
     getPublishedArticles({ categorySlug: slug, page, limit: 13, language: lang }),

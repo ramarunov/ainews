@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { TagPage, buildTagMetadata } from "@/components/public/pages/tag-page";
 
+// ISR: cache the rendered page at the edge, revalidate in the background.
+export const revalidate = 60;
+
 interface Props {
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ page?: string }>;
