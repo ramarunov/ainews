@@ -1,6 +1,8 @@
-import { headers } from "next/headers";
-import { getAllPublishedArticles, getCategories } from "@/lib/public-api";
-import { getArticleUrl, getRootDomain, resolveHostCategory } from "@/lib/site-url";
+import { getAllPublishedArticles } from "@/lib/public-api";
+import { getArticleUrl, getRootDomain } from "@/lib/site-url";
+
+// Regenerated at most hourly (see news-sitemap.xml/route.ts for why).
+export const revalidate = 3600;
 
 function escapeXml(value: string): string {
   return value
@@ -14,13 +16,11 @@ function escapeXml(value: string): string {
 // Unlike news-sitemap.xml, this isn't time-limited - Google's image
 // sitemap extension is for image discovery generally, not a "recent news"
 // signal. Only articles that actually have a featured image are listed.
+// Apex-only: the category-subdomain feature is off and proxy.ts guarantees
+// only the apex host reaches this route.
 export async function GET() {
-  const hostname = (await headers()).get("host")?.split(":")[0] ?? "";
   const rootDomain = getRootDomain();
-  const categories = await getCategories();
-  const activeCategory = resolveHostCategory(hostname, rootDomain, categories);
-
-  const articles = await getAllPublishedArticles({ categorySlug: activeCategory?.slug });
+  const articles = await getAllPublishedArticles();
   const articlesWithImages = articles.filter((article) => article.featuredImageUrl);
 
   const urls = articlesWithImages

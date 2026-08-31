@@ -1,49 +1,21 @@
 import type { MetadataRoute } from "next";
-import { headers } from "next/headers";
 import { getAllPublishedArticles, getCategories, getPages } from "@/lib/public-api";
-import { getArticleUrl, getCategoryUrl, getRootDomain, resolveHostCategory } from "@/lib/site-url";
+import { getArticleUrl, getCategoryUrl, getRootDomain } from "@/lib/site-url";
 
-// Per-host: the apex sitemap lists apex-only pages plus a cross-category
-// pointer to each category's own homepage (its full article list now lives
-// under that category's own sitemap, not here) - a category subdomain's
-// sitemap lists only that category's own articles. See proxy.ts for how
-// `Host` maps to "apex" vs. a specific category.
+// Regenerated at most hourly - the full-catalogue fan-out below (paging the
+// public API ~25x) is far too heavy to run per crawler request, and a
+// sitemap doesn't need to be request-fresh.
+export const revalidate = 3600;
+
+// Apex-only. The category-subdomain feature is off (ENABLE_CATEGORY_SUBDOMAINS)
+// and proxy.ts 404s any non-apex host, so this route only ever serves the
+// apex today - the previous per-host `headers()` branch was dead code (and
+// a Dynamic API that blocked this route from ever being cached). If
+// subdomains are ever enabled, per-subdomain sitemaps need their own
+// mechanism (a dynamic `[host]` route or the feature shipping its own).
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const hostname = (await headers()).get("host")?.split(":")[0] ?? "";
   const rootDomain = getRootDomain();
   const categories = await getCategories();
-  const activeCategory = resolveHostCategory(hostname, rootDomain, categories);
-
-  if (activeCategory) {
-    // getPublishedArticles already rolls subcategory articles up onto their
-    // parent's listing (see PublicSiteService.listPublished) - the
-    // subcategories themselves also need their own <url> entries here,
-    // since each one is a real indexable page at this same host.
-    const children = categories.filter(
-      (c) => c.parentId === activeCategory.id && c.isActive !== false,
-    );
-    const articles = await getAllPublishedArticles({ categorySlug: activeCategory.slug });
-    return [
-      {
-        url: getCategoryUrl(activeCategory, rootDomain),
-        lastModified: new Date(),
-        changeFrequency: "hourly",
-        priority: 1.0,
-      },
-      ...children.map((child) => ({
-        url: getCategoryUrl(child, rootDomain),
-        lastModified: new Date(),
-        changeFrequency: "daily" as const,
-        priority: 0.7,
-      })),
-      ...articles.map((article) => ({
-        url: getArticleUrl(article, rootDomain),
-        lastModified: article.publishedAt ? new Date(article.publishedAt) : new Date(),
-        changeFrequency: "weekly" as const,
-        priority: 0.6,
-      })),
-    ];
-  }
 
   // Apex: aggregator homepage + a pointer to every category's own site,
   // plus every published article site-wide (see getAllPublishedArticles -

@@ -1,8 +1,13 @@
 import { getPublishedArticles } from "@/lib/public-api";
 import { getRootDomain } from "@/lib/site-url";
 import { SITE_NAME } from "@/lib/brand";
+import type { PublicArticle } from "@/lib/types";
+
+export const revalidate = 3600;
 
 const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000;
+const PAGE_SIZE = 100;
+const MAX_PAGES = 10;
 
 function escapeXml(value: string): string {
   return value
@@ -13,18 +18,32 @@ function escapeXml(value: string): string {
     .replace(/'/g, "&apos;");
 }
 
-// Google News sitemap for the English edition - same 48-hour window rule as
-// app/news-sitemap.xml/route.ts, scoped to language=en and /en/{slug} URLs.
+// Pages newest-first until it passes the 48h cutoff (or runs out) - same
+// non-truncating logic as the Indonesian news sitemap.
+async function recentEnglishArticles(cutoff: number): Promise<PublicArticle[]> {
+  const out: PublicArticle[] = [];
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const { data } = await getPublishedArticles({
+      page,
+      limit: PAGE_SIZE,
+      sortBy: "publishedAt",
+      language: "en",
+    });
+    const inWindow = data.filter(
+      (a) => a.publishedAt && new Date(a.publishedAt).getTime() >= cutoff,
+    );
+    out.push(...inWindow);
+    if (inWindow.length < data.length || data.length < PAGE_SIZE) break;
+  }
+  return out;
+}
+
+// Google News sitemap for the English edition (/en/{slug}), 48-hour window.
 export async function GET() {
   const rootDomain = getRootDomain();
-  const { data: articles } = await getPublishedArticles({ language: "en", limit: 50 });
-  const cutoff = Date.now() - TWO_DAYS_MS;
+  const articles = await recentEnglishArticles(Date.now() - TWO_DAYS_MS);
 
-  const recentArticles = articles.filter(
-    (article) => article.publishedAt && new Date(article.publishedAt).getTime() >= cutoff,
-  );
-
-  const urls = recentArticles
+  const urls = articles
     .map(
       (article) => `  <url>
     <loc>https://${rootDomain}/en/${article.slug}</loc>

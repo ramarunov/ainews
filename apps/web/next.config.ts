@@ -71,6 +71,8 @@ const nextConfig: NextConfig = {
   // node_modules actually traced as used) so the Docker runtime image
   // doesn't need the full pnpm workspace install.
   output: "standalone",
+  // Don't advertise the framework in an X-Powered-By response header.
+  poweredByHeader: false,
   // This is a pnpm workspace monorepo — trace from the repo root so hoisted
   // dependencies outside apps/web are included in the standalone bundle.
   outputFileTracingRoot: path.join(__dirname, "../.."),
@@ -100,6 +102,19 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          // The API already sends HSTS via helmet; the Next reader site
+          // sent none. 2-year max-age + preload, matching the API.
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains; preload",
+          },
+          // Reader site needs none of these powerful features; deny them
+          // all so a future XSS / rogue embed can't ask for them.
+          {
+            key: "Permissions-Policy",
+            value:
+              "camera=(), microphone=(), geolocation=(), browsing-topics=(), interest-cohort=()",
+          },
         ],
       },
     ];

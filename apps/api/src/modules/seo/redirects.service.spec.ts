@@ -1,5 +1,29 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
+import { validateSync } from 'class-validator';
+import { plainToInstance } from 'class-transformer';
 import { RedirectsService } from './redirects.service';
+import { CreateRedirectDto, UpdateRedirectDto } from './dto/redirect.dto';
+
+describe('redirect DTO toUrl validation (open-redirect guard)', () => {
+  const check = (cls: any, toUrl: string) =>
+    validateSync(plainToInstance(cls, { fromPath: '/x', toUrl }));
+
+  it.each(['/new-slug', '/', '/a/b/c?x=1', '/x#frag'])('accepts root-relative %s', (v) => {
+    expect(check(CreateRedirectDto, v)).toHaveLength(0);
+  });
+
+  it.each([
+    'https://evil.example/phish',
+    'http://evil.example',
+    '//evil.example',
+    '/\\evil.example',
+    'javascript:alert(1)',
+    'evil.example/x',
+  ])('rejects non-root-relative %s', (v) => {
+    expect(check(CreateRedirectDto, v).length).toBeGreaterThan(0);
+    expect(check(UpdateRedirectDto, v).length).toBeGreaterThan(0);
+  });
+});
 
 describe('RedirectsService', () => {
   let service: RedirectsService;

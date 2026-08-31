@@ -112,7 +112,11 @@ export async function ArticleView({
     const requestedPath = `/${slug}`;
     const referrer = (await headers()).get("referer") ?? undefined;
     const match = await resolveRedirect(requestedPath, referrer);
-    if (match) {
+    // Defence in depth against a stored open redirect: the API DTO now
+    // rejects a non-root-relative toUrl, but never hand an absolute /
+    // scheme-relative URL to Next's redirect() regardless of what the row
+    // holds. Only "/..." (single leading slash) is followed.
+    if (match && /^\/(?!\/|\\)/.test(match.toUrl)) {
       // Google (and browsers) only treat 301/308 as "permanently moved,
       // transfer ranking signals" - next/navigation's plain redirect()
       // always sends a 307 regardless of what's asked for, which silently

@@ -92,7 +92,7 @@ export async function getPublishedArticleBySlug(
   locale: "id" | "en" = "id",
 ): Promise<PublicArticle | null> {
   try {
-    const res = await fetch(`${API_URL}/public/articles/${slug}?lang=${locale}`, {
+    const res = await fetch(`${API_URL}/public/articles/${encodeURIComponent(slug)}?lang=${locale}`, {
       next: { revalidate: 60 },
     });
     if (!res.ok) return null;
@@ -138,7 +138,7 @@ export async function getCategoryBySlug(slug: string): Promise<Category | null> 
 // slug/title) are fine to fetch upfront the same way categories are.
 export async function getTagBySlug(slug: string): Promise<Tag | null> {
   try {
-    const res = await fetch(`${API_URL}/public/tags/${slug}`, {
+    const res = await fetch(`${API_URL}/public/tags/${encodeURIComponent(slug)}`, {
       next: { revalidate: 300 },
     });
     if (!res.ok) return null;
@@ -162,7 +162,7 @@ export async function getPages(): Promise<Page[]> {
 
 export async function getPageBySlug(slug: string): Promise<Page | null> {
   try {
-    const res = await fetch(`${API_URL}/public/pages/${slug}`, {
+    const res = await fetch(`${API_URL}/public/pages/${encodeURIComponent(slug)}`, {
       next: { revalidate: 300 },
     });
     if (!res.ok) return null;
@@ -174,7 +174,7 @@ export async function getPageBySlug(slug: string): Promise<Page | null> {
 
 export async function getAuthorProfile(idOrSlug: string): Promise<PublicAuthor | null> {
   try {
-    const res = await fetch(`${API_URL}/public/authors/${idOrSlug}`, {
+    const res = await fetch(`${API_URL}/public/authors/${encodeURIComponent(idOrSlug)}`, {
       next: { revalidate: 300 },
     });
     if (!res.ok) return null;
@@ -221,7 +221,7 @@ export function findPublicSetting<T>(settings: PublicSetting[], key: string): T 
 
 export async function getArticleComments(slug: string): Promise<CommentNode[]> {
   try {
-    const res = await fetch(`${API_URL}/public/articles/${slug}/comments`, {
+    const res = await fetch(`${API_URL}/public/articles/${encodeURIComponent(slug)}/comments`, {
       next: { revalidate: 30 },
     });
     if (!res.ok) return [];
@@ -247,7 +247,7 @@ export async function submitArticleComment(
   input: SubmitCommentInput,
 ): Promise<{ ok: true; status: string; message: string } | { ok: false; error: string }> {
   try {
-    const res = await fetch(`${API_URL}/public/articles/${slug}/comments`, {
+    const res = await fetch(`${API_URL}/public/articles/${encodeURIComponent(slug)}/comments`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
