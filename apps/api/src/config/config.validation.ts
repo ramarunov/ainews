@@ -52,6 +52,11 @@ export const configValidationSchema = Joi.object({
     .required()
     .concat(rejectPlaceholderInProduction('JWT_REFRESH_SECRET')),
   JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
+  // Grace period after a refresh token is rotated during which presenting
+  // the old token again is treated as a benign multi-tab / in-flight race
+  // (re-issue a session) rather than a stolen-token replay (revoke the
+  // family). See AuthService.refreshAccessToken.
+  REFRESH_ROTATION_GRACE_MS: Joi.number().min(0).default(60000),
   BCRYPT_ROUNDS: Joi.number().min(10).max(16).default(12),
 
   SESSION_SECRET: Joi.string().concat(rejectPlaceholderInProduction('SESSION_SECRET')),

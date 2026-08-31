@@ -76,6 +76,32 @@ export const useAuthStore = create<AuthState>()((set) => ({
   },
 }));
 
+// Cross-tab session sync. The `storage` event fires only in OTHER tabs, so
+// when one tab refreshes (and rotates) its tokens, every other open tab
+// immediately picks up the new pair here instead of later presenting its
+// now-stale refresh token — which the API's rotation reuse-detection would
+// otherwise treat as a stolen token and hard-log-out every tab. Also
+// mirrors a logout done in another tab.
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (e) => {
+    if (e.key !== STORAGE_KEY) return;
+    if (e.newValue == null) {
+      useAuthStore.getState().clearSession();
+      return;
+    }
+    try {
+      const parsed = JSON.parse(e.newValue);
+      useAuthStore.setState({
+        accessToken: parsed.accessToken ?? null,
+        refreshToken: parsed.refreshToken ?? null,
+        user: parsed.user ?? null,
+      });
+    } catch {
+      /* ignore a malformed write from another tab */
+    }
+  });
+}
+
 export function hasPermission(user: AuthUser | null, permission: string) {
   return user?.permissions.includes(permission) ?? false;
 }

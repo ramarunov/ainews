@@ -57,7 +57,9 @@ describe('AuthService', () => {
       },
       refreshToken: {
         create: jest.fn().mockResolvedValue({}),
+        update: jest.fn().mockResolvedValue({}),
         updateMany: jest.fn().mockResolvedValue({ count: 0 }),
+        findUnique: jest.fn(),
       },
       passwordResetToken: {
         create: jest.fn().mockResolvedValue({}),
@@ -718,6 +720,91 @@ describe('AuthService', () => {
         where: { userId: 'user-1', revokedAt: null },
         data: { revokedAt: expect.any(Date), revokeReason: 'password_changed' },
       });
+    });
+  });
+
+  describe('refreshAccessToken', () => {
+    const user = { id: 'user-1', email: 'a@b.co', organizationId: 'org-1', userRoles: [] };
+    const future = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    it('rotates the token and issues a new pair on a valid refresh', async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: 'rt-1',
+        family: 'fam-1',
+        revokedAt: null,
+        expiresAt: future,
+        user,
+      });
+
+      const result = await service.refreshAccessToken('plain-token');
+
+      expect(prisma.refreshToken.update).toHaveBeenCalledWith({
+        where: { id: 'rt-1' },
+        data: { revokedAt: expect.any(Date), revokeReason: 'rotated' },
+      });
+      expect(result.accessToken).toBeDefined();
+      expect(result.refreshToken).toBeDefined();
+    });
+
+    it('treats a just-rotated token as a benign race: re-issues a session, no family revoke', async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: 'rt-1',
+        family: 'fam-1',
+        revokedAt: new Date(Date.now() - 5_000), // rotated 5s ago, within the 60s grace
+        revokeReason: 'rotated',
+        expiresAt: future,
+        user,
+      });
+
+      const result = await service.refreshAccessToken('stale-but-recent-token');
+
+      expect(result.accessToken).toBeDefined();
+      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.objectContaining({ revokeReason: 'family_compromised' }) }),
+      );
+    });
+
+    it('revokes the whole family when a token rotated long ago is replayed', async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: 'rt-1',
+        family: 'fam-1',
+        revokedAt: new Date(Date.now() - 10 * 60 * 1000), // rotated 10min ago
+        revokeReason: 'rotated',
+        expiresAt: future,
+        user,
+      });
+
+      await expect(service.refreshAccessToken('old-replayed-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { family: 'fam-1' },
+        data: { revokedAt: expect.any(Date), revokeReason: 'family_compromised' },
+      });
+    });
+
+    it('revokes the family for a non-rotation revoke reason regardless of timing', async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        id: 'rt-1',
+        family: 'fam-1',
+        revokedAt: new Date(Date.now() - 1_000),
+        revokeReason: 'logout',
+        expiresAt: future,
+        user,
+      });
+
+      await expect(service.refreshAccessToken('logged-out-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { family: 'fam-1' },
+        data: { revokedAt: expect.any(Date), revokeReason: 'family_compromised' },
+      });
+    });
+
+    it('rejects an unknown refresh token', async () => {
+      prisma.refreshToken.findUnique.mockResolvedValue(null);
+      await expect(service.refreshAccessToken('nope')).rejects.toThrow(UnauthorizedException);
     });
   });
 });

@@ -411,7 +411,24 @@ export class AuthService {
     }
 
     if (stored.revokedAt) {
-      // Token reuse detected — revoke entire family
+      // A token that was rotated a moment ago and presented again is almost
+      // always a benign race, not theft: a second browser tab (or a request
+      // that was already in flight when another refresh landed) still holds
+      // the pre-rotation token because it hasn't seen the new one yet.
+      // Inside a short grace window, treat it as that race and hand the user
+      // a fresh session instead of nuking the whole token family and logging
+      // them out mid-session. Only reuse OUTSIDE the window is treated as a
+      // stolen-token replay.
+      const graceMs = this.config.get<number>('REFRESH_ROTATION_GRACE_MS', 60_000);
+      const rotatedRecently =
+        stored.revokeReason === 'rotated' &&
+        Date.now() - stored.revokedAt.getTime() <= graceMs;
+
+      if (rotatedRecently && stored.expiresAt > new Date()) {
+        return this.issueTokens(stored.user);
+      }
+
+      // Genuine reuse — revoke the entire family.
       await this.prisma.refreshToken.updateMany({
         where: { family: stored.family },
         data: { revokedAt: new Date(), revokeReason: 'family_compromised' },
