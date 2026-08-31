@@ -92,6 +92,14 @@ export function ArticleForm({ article }: { article?: Article }) {
   const router = useRouter();
   const isEditing = !!article;
 
+  // Optimistic-lock token: the article's updatedAt as it was when this
+  // editor loaded the form. Sent back on every save so the API can reject
+  // (409) if someone else saved in the meantime. Refreshed after each of
+  // our own successful saves so consecutive saves in one session work.
+  const [baseUpdatedAt, setBaseUpdatedAt] = useState<string | undefined>(
+    article?.updatedAt,
+  );
+
   const { data: categories } = useCategories();
   const { data: tags } = useTags();
   const createCategory = useCreateCategory();
@@ -330,6 +338,9 @@ export function ArticleForm({ article }: { article?: Article }) {
     isBreaking: values.isBreaking,
     isFeatured: values.isFeatured,
     commentsEnabled: values.commentsEnabled,
+    // Only on edit - CreateArticleDto rejects unknown fields
+    // (forbidNonWhitelisted). See baseUpdatedAt above.
+    ...(article && { expectedUpdatedAt: baseUpdatedAt }),
     // Sent as-is (empty string clears an override back to auto-generated),
     // same convention as subtitle/excerpt above. The backend upserts
     // ArticleSeo and preserves these across later re-publishes.
@@ -341,10 +352,29 @@ export function ArticleForm({ article }: { article?: Article }) {
     },
   });
 
+  // A 409 from the API means someone else saved this article while it was
+  // open here. Surface the server's (Indonesian) explanation with a reload
+  // action instead of the generic "Save failed" toast, and don't advance
+  // baseUpdatedAt - the user must reload to get the current version.
+  const handleSaveError = (err: unknown, fallback: string) => {
+    if (err instanceof ApiError && err.status === 409) {
+      toast.error(err.message, {
+        duration: Infinity,
+        action: {
+          label: "Muat ulang",
+          onClick: () => window.location.reload(),
+        },
+      });
+      return;
+    }
+    toast.error(err instanceof ApiError ? err.message : fallback);
+  };
+
   const onSave = async (values: ArticleFormValues) => {
     try {
       if (isEditing) {
-        await updateArticle.mutateAsync(buildPayload(values));
+        const updated = await updateArticle.mutateAsync(buildPayload(values));
+        setBaseUpdatedAt(updated.updatedAt);
         toast.success("Article saved");
       } else {
         const created = await createArticle.mutateAsync(buildPayload(values));
@@ -352,14 +382,15 @@ export function ArticleForm({ article }: { article?: Article }) {
         router.push(`/articles/${created.id}`);
       }
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Save failed");
+      handleSaveError(err, "Save failed");
     }
   };
 
   const onPublish = handleSubmit(async (values) => {
     try {
       if (isEditing) {
-        await updateArticle.mutateAsync(buildPayload(values));
+        const updated = await updateArticle.mutateAsync(buildPayload(values));
+        setBaseUpdatedAt(updated.updatedAt);
         await publishArticle.mutateAsync(article!.id);
       } else {
         const created = await createArticle.mutateAsync(buildPayload(values));
@@ -368,7 +399,7 @@ export function ArticleForm({ article }: { article?: Article }) {
       }
       toast.success("Article published");
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Publish failed");
+      handleSaveError(err, "Publish failed");
     }
   });
 

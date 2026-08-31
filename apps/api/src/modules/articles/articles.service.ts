@@ -1,4 +1,10 @@
-import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ArticleStatus, Prisma } from '@prisma/client';
 import slugify from 'slugify';
@@ -353,6 +359,29 @@ export class ArticlesService {
     organizationId: string,
   ) {
     const existing = await this.findOne(id, organizationId);
+
+    // Optimistic locking: reject the write if the article changed since the
+    // editor loaded it (two people editing the same article -> last save
+    // silently clobbered the first). The client sends the updatedAt it saw
+    // on load; if it no longer matches, bail with 409 and let them reload.
+    // Omitting expectedUpdatedAt skips the check (backward-compatible with
+    // older clients and internal callers like the translation pipeline).
+    if (
+      dto.expectedUpdatedAt !== undefined &&
+      new Date(dto.expectedUpdatedAt).getTime() !== existing.updatedAt.getTime()
+    ) {
+      const lastEditor = existing.revisions?.[0]?.author?.displayName;
+      const when = existing.updatedAt.toLocaleString('id-ID', {
+        timeZone: 'Asia/Jakarta',
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      });
+      throw new ConflictException(
+        lastEditor
+          ? `Artikel ini sudah diubah oleh ${lastEditor} pada ${when}. Muat ulang halaman untuk melihat versi terbaru — perubahanmu belum tersimpan.`
+          : `Artikel ini sudah diubah sejak kamu membukanya (terakhir ${when}). Muat ulang halaman untuk melihat versi terbaru — perubahanmu belum tersimpan.`,
+      );
+    }
 
     // Check ownership (writers can only edit their own articles)
     const isOwner = existing.primaryAuthorId === userId;

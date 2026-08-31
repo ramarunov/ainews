@@ -28,7 +28,7 @@ for (const name of ['fetch', 'Request', 'Response', 'Headers', 'FormData', 'Blob
   (global as any)[name] = (global as any)[name] || class {};
 }
 
-import { NotFoundException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { ArticleStatus } from '@prisma/client';
 import { ArticlesService } from './articles.service';
 
@@ -514,6 +514,64 @@ describe('ArticlesService', () => {
       await service.update('article-1', { excerpt: 'no content field here' } as any, 'author-1', 'org-1');
       const secondCallContent = prisma.article.update.mock.calls[0][0].data.content;
       expect(secondCallContent).toBe(existingArticle.content); // untouched, not re-sanitized
+    });
+
+    describe('optimistic locking (expectedUpdatedAt)', () => {
+      const storedUpdatedAt = new Date('2026-08-31T10:00:00.000Z');
+
+      beforeEach(() => {
+        jest.spyOn(service, 'findOne').mockResolvedValue({
+          ...existingArticle,
+          updatedAt: storedUpdatedAt,
+          revisions: [{ author: { displayName: 'Budi' } }],
+        } as any);
+      });
+
+      it('throws 409 when expectedUpdatedAt does not match the stored row', async () => {
+        await expect(
+          service.update(
+            'article-1',
+            { excerpt: 'stale edit', expectedUpdatedAt: '2026-08-31T09:00:00.000Z' } as any,
+            'author-1',
+            'org-1',
+          ),
+        ).rejects.toThrow(ConflictException);
+
+        expect(prisma.article.update).not.toHaveBeenCalled();
+      });
+
+      it('names the last editor in the conflict message when a revision author is known', async () => {
+        await expect(
+          service.update(
+            'article-1',
+            { excerpt: 'stale edit', expectedUpdatedAt: '2026-08-31T09:00:00.000Z' } as any,
+            'author-1',
+            'org-1',
+          ),
+        ).rejects.toThrow(/Budi/);
+      });
+
+      it('proceeds when expectedUpdatedAt matches the stored row exactly', async () => {
+        await service.update(
+          'article-1',
+          { excerpt: 'fresh edit', expectedUpdatedAt: storedUpdatedAt.toISOString() } as any,
+          'author-1',
+          'org-1',
+        );
+
+        expect(prisma.article.update).toHaveBeenCalled();
+      });
+
+      it('skips the check entirely when expectedUpdatedAt is omitted (backward-compatible)', async () => {
+        await service.update(
+          'article-1',
+          { excerpt: 'no token' } as any,
+          'author-1',
+          'org-1',
+        );
+
+        expect(prisma.article.update).toHaveBeenCalled();
+      });
     });
   });
 

@@ -193,6 +193,15 @@ export class UpdateArticleDto extends PartialType(CreateArticleDto) {
   @IsString()
   @MaxLength(500)
   changeSummary?: string;
+
+  @ApiProperty({
+    required: false,
+    description:
+      "Optimistic-lock token: the article's updatedAt as seen when the editor opened it. If it no longer matches the stored row, someone else saved in the meantime and the update is rejected with 409 (the client should reload). Omit to skip the check (backward-compatible).",
+  })
+  @IsOptional()
+  @IsDateString()
+  expectedUpdatedAt?: string;
 }
 
 export class ArticleQueryDto {

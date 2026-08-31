@@ -511,6 +511,10 @@ export interface CreateArticleInput {
   isBreaking?: boolean;
   isFeatured?: boolean;
   commentsEnabled?: boolean;
+  // Update-only optimistic-lock token (ignored on create): the article's
+  // updatedAt as seen when the form was opened. A 409 comes back if the
+  // stored row moved on since then.
+  expectedUpdatedAt?: string;
 }
 
 export interface MediaFile {
