@@ -221,12 +221,33 @@ describe('PublicSiteService', () => {
       await expect(service.findPublishedBySlug('x')).rejects.toThrow(NotFoundException);
     });
 
-    it('returns a published article', async () => {
-      const article = { id: 'a1', status: 'PUBLISHED', slug: 'x' };
+    it('returns a published article with a self-referencing hreflang map', async () => {
+      const article = { id: 'a1', status: 'PUBLISHED', slug: 'x', language: 'id' };
       articlesService.findBySlug.mockResolvedValue(article);
 
-      await expect(service.findPublishedBySlug('x')).resolves.toBe(article);
-      expect(articlesService.findBySlug).toHaveBeenCalledWith('x', 'org-1');
+      const result = await service.findPublishedBySlug('x');
+      expect(result).toMatchObject({ id: 'a1', slug: 'x', hreflang: { id: 'x' } });
+      expect(articlesService.findBySlug).toHaveBeenCalledWith('x', 'org-1', undefined);
+    });
+
+    it('adds the published translation counterpart to the hreflang map', async () => {
+      articlesService.findBySlug.mockResolvedValue({
+        id: 'a1',
+        status: 'PUBLISHED',
+        slug: 'kabar-terbaru',
+        language: 'id',
+        translations: [{ slug: 'latest-news', language: 'en', status: 'PUBLISHED' }],
+      });
+
+      const result = await service.findPublishedBySlug('kabar-terbaru');
+      expect(result.hreflang).toEqual({ id: 'kabar-terbaru', en: 'latest-news' });
+      expect(result).not.toHaveProperty('translations');
+    });
+
+    it('passes the requested language through to findBySlug', async () => {
+      articlesService.findBySlug.mockResolvedValue({ id: 'a1', status: 'PUBLISHED', slug: 'x', language: 'en' });
+      await service.findPublishedBySlug('x', 'en');
+      expect(articlesService.findBySlug).toHaveBeenCalledWith('x', 'org-1', 'en');
     });
 
     it('throws NotFoundException when the published article\'s category has been deactivated', async () => {
@@ -241,10 +262,10 @@ describe('PublicSiteService', () => {
     });
 
     it('returns the article when it has no primary category at all', async () => {
-      const article = { id: 'a1', status: 'PUBLISHED', slug: 'x', primaryCategory: null };
+      const article = { id: 'a1', status: 'PUBLISHED', slug: 'x', language: 'id', primaryCategory: null };
       articlesService.findBySlug.mockResolvedValue(article);
 
-      await expect(service.findPublishedBySlug('x')).resolves.toBe(article);
+      await expect(service.findPublishedBySlug('x')).resolves.toMatchObject({ id: 'a1', slug: 'x' });
     });
   });
 

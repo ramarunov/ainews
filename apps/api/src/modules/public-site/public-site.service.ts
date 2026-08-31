@@ -79,6 +79,8 @@ export class PublicSiteService {
         isBreaking: query.isBreaking,
         isFeatured: query.isFeatured,
         search: query.search,
+        // Default to the Indonesian edition; the /en/* routes pass 'en'.
+        language: query.language ?? 'id',
         page: query.page,
         limit: fetchLimit,
         sortBy: query.sortBy ?? 'publishedAt',
@@ -112,8 +114,9 @@ export class PublicSiteService {
     };
   }
 
-  async findPublishedBySlug(slug: string) {
-    const article = await this.articlesService.findBySlug(slug, this.getPublicOrgId());
+  async findPublishedBySlug(slug: string, language?: string) {
+    const lang = language === 'en' ? 'en' : language === 'id' ? 'id' : undefined;
+    const article = await this.articlesService.findBySlug(slug, this.getPublicOrgId(), lang);
 
     // findBySlug() doesn't filter by status — it's shared with the
     // authenticated editor UI, which legitimately previews drafts by slug.
@@ -130,7 +133,23 @@ export class PublicSiteService {
       throw new NotFoundException(`Article with slug "${slug}" not found`);
     }
 
-    return article;
+    // Flatten the translation pairing into { id, en } slug map for the
+    // public site to build hreflang tags. Each side points at its
+    // PUBLISHED counterpart (self included); missing = no alternate.
+    const { translationParent, translations, ...rest } = article as typeof article & {
+      translationParent?: { slug: string; language: string; status: ArticleStatus } | null;
+      translations?: Array<{ slug: string; language: string; status: ArticleStatus }>;
+    };
+    const hreflang: { id?: string; en?: string } = {
+      [article.language === 'en' ? 'en' : 'id']: article.slug,
+    };
+    for (const t of [translationParent, ...(translations ?? [])]) {
+      if (t && t.status === ArticleStatus.PUBLISHED && (t.language === 'id' || t.language === 'en')) {
+        hreflang[t.language] = t.slug;
+      }
+    }
+
+    return { ...rest, hreflang };
   }
 
   async listCategories() {

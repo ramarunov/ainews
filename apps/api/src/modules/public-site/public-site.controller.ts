@@ -27,7 +27,7 @@ export class PublicSiteController {
   @Get(':slug')
   @Header('Cache-Control', PUBLIC_CACHE_CONTROL)
   @ApiOperation({ summary: 'Get a single published article by slug' })
-  findBySlug(@Param('slug') slug: string) {
-    return this.publicSiteService.findPublishedBySlug(slug);
+  findBySlug(@Param('slug') slug: string, @Query('lang') lang?: string) {
+    return this.publicSiteService.findPublishedBySlug(slug, lang);
   }
 }

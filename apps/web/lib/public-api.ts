@@ -31,6 +31,7 @@ export interface ArticleFilters {
   search?: string;
   excludeId?: string;
   sortBy?: "publishedAt" | "viewCount";
+  language?: "id" | "en";
 }
 
 export async function getPublishedArticles(
@@ -47,6 +48,7 @@ export async function getPublishedArticles(
   if (filters.search) params.set("search", filters.search);
   if (filters.excludeId) params.set("excludeId", filters.excludeId);
   if (filters.sortBy) params.set("sortBy", filters.sortBy);
+  if (filters.language) params.set("language", filters.language);
 
   try {
     const res = await fetch(`${API_URL}/public/articles?${params.toString()}`, {
@@ -87,9 +89,10 @@ export async function getAllPublishedArticles(
 
 export async function getPublishedArticleBySlug(
   slug: string,
+  locale: "id" | "en" = "id",
 ): Promise<PublicArticle | null> {
   try {
-    const res = await fetch(`${API_URL}/public/articles/${slug}`, {
+    const res = await fetch(`${API_URL}/public/articles/${slug}?lang=${locale}`, {
       next: { revalidate: 60 },
     });
     if (!res.ok) return null;

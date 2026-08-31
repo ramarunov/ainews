@@ -430,6 +430,7 @@ export interface PublicArticle {
   content?: string | null;
   publishedAt?: string | null;
   updatedAt?: string | null;
+  // "id" | "en" - which edition this article belongs to.
   language?: string;
   featuredImageUrl?: string | null;
   featuredImageAlt?: string | null;
@@ -444,6 +445,9 @@ export interface PublicArticle {
   seoData?: PublicArticleSeo | null;
   geoData?: PublicArticleGeo | null;
   sourceUrl?: string | null;
+  // Slug of the published counterpart in each language (self included),
+  // for building hreflang tags. Only on the single-article endpoint.
+  hreflang?: { id?: string; en?: string };
 }
 
 // GEO engine output surfaced to readers - the "Poin Penting" box and the

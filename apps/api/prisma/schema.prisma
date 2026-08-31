@@ -429,7 +429,9 @@ model Article {
   featuredImageAlt  String?       @db.VarChar(255)
 
   // Language
-  language          String        @default("en") @db.VarChar(10)
+  // 'id' is this deployment's primary edition; 'en' rows are translations
+  // created by the translation pipeline, surfaced under /en/*.
+  language          String        @default("id") @db.VarChar(10)
   translationOf     String?       @db.Uuid
 
   // Source

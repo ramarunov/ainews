@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound, permanentRedirect, redirect } from "next/navigation";
+import { ArticleContent } from "@/components/public/article-content";
 import { InfiniteArticleFeed } from "@/components/public/infinite-article-feed";
 import {
   getArticleComments,
@@ -10,6 +11,7 @@ import {
   resolveRedirect,
 } from "@/lib/public-api";
 import { SITE_NAME } from "@/lib/brand";
+import type { Locale } from "@/lib/i18n";
 import { getArticleUrl, getCategoryUrl, getRootDomain, isCategorySubdomainsEnabled } from "@/lib/site-url";
 
 // Shared between apps/web/app/(public)/news/[slug]/page.tsx (this app's
@@ -19,8 +21,11 @@ import { getArticleUrl, getCategoryUrl, getRootDomain, isCategorySubdomainsEnabl
 // depending on that flag, but the SEO/JSON-LD/ads/related-articles logic
 // itself doesn't depend on which URL shape is active.
 
-export async function buildArticleMetadata(slug: string): Promise<Metadata> {
-  const article = await getPublishedArticleBySlug(slug);
+export async function buildArticleMetadata(
+  slug: string,
+  locale: "id" | "en" = "id",
+): Promise<Metadata> {
+  const article = await getPublishedArticleBySlug(slug, locale);
   if (!article) return {};
 
   const seo = article.seoData;
@@ -29,8 +34,20 @@ export async function buildArticleMetadata(slug: string): Promise<Metadata> {
   const ogImage = seo?.ogImageUrl ?? article.featuredImageUrl ?? undefined;
   const rootDomain = getRootDomain();
   const feedUrl = article.primaryCategory
-    ? `${getCategoryUrl(article.primaryCategory, rootDomain).replace(/\/$/, "")}/feed`
-    : `https://${rootDomain}/feed`;
+    ? `${getCategoryUrl(article.primaryCategory, rootDomain).replace(/\/$/, "")}/feed${locale === "en" ? "?lang=en" : ""}`
+    : `https://${rootDomain}${locale === "en" ? "/en" : ""}/feed`;
+
+  // Each language version is canonical to itself (never cross-canonical -
+  // that de-indexes one side). hreflang wires the pair together.
+  const selfUrl =
+    locale === "en"
+      ? `https://${rootDomain}/en/${article.slug}`
+      : seo?.canonicalUrl ?? getArticleUrl(article);
+  const languages: Record<string, string> = {};
+  if (article.hreflang?.id) languages["id"] = `https://${rootDomain}/${article.hreflang.id}`;
+  if (article.hreflang?.en) languages["en"] = `https://${rootDomain}/en/${article.hreflang.en}`;
+  // x-default -> the Indonesian original (primary market) when it exists.
+  if (languages["id"]) languages["x-default"] = languages["id"];
 
   return {
     // Article <title> is the headline itself, not run through the root
@@ -49,14 +66,16 @@ export async function buildArticleMetadata(slug: string): Promise<Metadata> {
     // name="robots"> tag at all instead of inheriting the default.
     ...(seo?.robots && { robots: seo.robots }),
     alternates: {
-      canonical: seo?.canonicalUrl ?? getArticleUrl(article),
+      canonical: selfUrl,
       types: { "application/rss+xml": feedUrl },
+      ...(Object.keys(languages).length > 1 && { languages }),
     },
     openGraph: {
       title: seo?.ogTitle ?? title,
       description: seo?.ogDescription ?? description,
-      url: seo?.canonicalUrl ?? getArticleUrl(article),
+      url: selfUrl,
       siteName: SITE_NAME,
+      locale: locale === "en" ? "en_US" : "id_ID",
       type: "article",
       publishedTime: article.publishedAt ?? undefined,
       modifiedTime: article.updatedAt ?? undefined,
@@ -72,10 +91,20 @@ export async function buildArticleMetadata(slug: string): Promise<Metadata> {
   };
 }
 
-export async function ArticleView({ slug }: { slug: string }) {
-  const article = await getPublishedArticleBySlug(slug);
+export async function ArticleView({
+  slug,
+  locale = "id",
+}: {
+  slug: string;
+  locale?: Locale;
+}) {
+  const article = await getPublishedArticleBySlug(slug, locale);
 
   if (!article) {
+    // The Redirect table is keyed on the migrated WordPress site's own
+    // Indonesian `/{slug}` permalinks - it has no `/en/*` rows, so a missing
+    // English translation is just a 404, no redirect lookup.
+    if (locale === "en") notFound();
     // The path actually requested for this article - rusdimedia.com's
     // articles live at this bare `/{slug}` (see lib/site-url.ts), which is
     // what a migrated site's Redirect rows (e.g. WordPress URLs that
@@ -114,13 +143,47 @@ export async function ArticleView({ slug }: { slug: string }) {
   // dashboard host's own public-path hits there before this ever renders),
   // so the check below would be comparing the apex to itself on every
   // single article view for nothing.
-  if (isCategorySubdomainsEnabled()) {
+  if (locale !== "en" && isCategorySubdomainsEnabled()) {
     const requestHostname = (await headers()).get("host")?.split(":")[0] ?? "";
     const canonicalArticleUrl = getArticleUrl(article, getRootDomain());
     const canonicalHostname = new URL(canonicalArticleUrl).hostname;
     if (requestHostname && requestHostname !== canonicalHostname) {
       permanentRedirect(canonicalArticleUrl);
     }
+  }
+
+  const emptyRelated = { data: [], meta: { total: 0, page: 1, limit: 8, totalPages: 0 } };
+
+  // The English edition is a lean, self-contained translation view - no
+  // infinite-scroll feed (that's an ad-impression play tuned for the
+  // Indonesian edition's much larger catalogue) and every related/trending
+  // query is scoped to `language: "en"` so it never links out to an
+  // untranslated Indonesian article.
+  if (locale === "en") {
+    const [related, settings, comments, trending] = await Promise.all([
+      article.primaryCategory
+        ? getPublishedArticles({
+            language: "en",
+            categorySlug: article.primaryCategory.slug,
+            excludeId: article.id,
+            limit: 8,
+          })
+        : Promise.resolve(emptyRelated),
+      getPublicSettings(),
+      getArticleComments(slug),
+      getPublishedArticles({ language: "en", sortBy: "viewCount", excludeId: article.id, limit: 5 }),
+    ]);
+
+    return (
+      <ArticleContent
+        article={article}
+        related={related}
+        settings={settings}
+        comments={comments}
+        trending={trending}
+        locale="en"
+      />
+    );
   }
 
   const [related, settings, comments, trending] = await Promise.all([
@@ -130,7 +193,7 @@ export async function ArticleView({ slug }: { slug: string }) {
           excludeId: article.id,
           limit: 8,
         })
-      : Promise.resolve({ data: [], meta: { total: 0, page: 1, limit: 8, totalPages: 0 } }),
+      : Promise.resolve(emptyRelated),
     getPublicSettings(),
     getArticleComments(slug),
     getPublishedArticles({ sortBy: "viewCount", excludeId: article.id, limit: 5 }),

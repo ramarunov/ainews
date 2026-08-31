@@ -63,4 +63,13 @@ export class PublicArticlesQueryDto {
   @IsOptional()
   @IsIn(['publishedAt', 'viewCount'])
   sortBy?: 'publishedAt' | 'viewCount';
+
+  @ApiPropertyOptional({
+    description: 'Which language edition to list. Defaults to "id".',
+    enum: ['id', 'en'],
+    default: 'id',
+  })
+  @IsOptional()
+  @IsIn(['id', 'en'])
+  language?: 'id' | 'en';
 }

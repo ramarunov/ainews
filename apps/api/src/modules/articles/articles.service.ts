@@ -101,7 +101,7 @@ export class ArticlesService {
         wordCount,
         readingTime,
         revisionCount: 1,
-        language: dto.language ?? 'en',
+        language: dto.language ?? 'id',
         isBreaking: dto.isBreaking ?? false,
         isFeatured: dto.isFeatured ?? false,
         isPremium: dto.isPremium ?? false,
@@ -300,12 +300,24 @@ export class ArticlesService {
     });
   }
 
-  async findBySlug(slug: string, organizationId: string) {
+  async findBySlug(slug: string, organizationId: string, language?: string) {
     const article = await this.prisma.article.findFirst({
-      where: { slug, organizationId, deletedAt: null },
+      where: {
+        slug,
+        organizationId,
+        deletedAt: null,
+        // The /{slug} (Indonesian) and /en/{slug} routes must not serve
+        // each other's content even though slugs never collide - scope by
+        // language when the caller passes one.
+        ...(language && { language }),
+      },
       include: {
         ...this.defaultIncludes(),
         seoData: true,
+        // Translation pairing for hreflang - the counterpart article in
+        // the other language, if one exists and is published.
+        translationParent: { select: { slug: true, language: true, status: true } },
+        translations: { select: { slug: true, language: true, status: true } },
         // GEO engine output surfaced to the public site (the "Poin Penting"
         // box + NewsArticle abstract/about). contentEmbedding is
         // deliberately excluded - it's a 1536-float vector, useless to a

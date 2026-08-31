@@ -19,6 +19,7 @@ import type { Category } from "@/lib/types";
 // and 404s itself if neither matches, the same way category subdomains are
 // checked against real category data rather than a hardcoded list.
 const PUBLIC_PATH_PREFIXES = [
+  "/en",
   "/author",
   "/category",
   "/tag",

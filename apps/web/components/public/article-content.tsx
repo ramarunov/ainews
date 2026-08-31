@@ -10,6 +10,7 @@ import { Breadcrumb } from "@/components/public/breadcrumb";
 import { Badge } from "@/components/ui/badge";
 import { getCategoryColors } from "@/lib/category-colors";
 import { getArticleUrl, getCategoryUrl, getRootDomain } from "@/lib/site-url";
+import { getT, type Locale } from "@/lib/i18n";
 import type { CommentNode, PaginatedResponse, PublicArticle, PublicSetting } from "@/lib/types";
 
 // Extracted from article-view.tsx's ArticleView so the exact same rendering
@@ -41,9 +42,10 @@ const MID_CONTENT_SPLIT_TAGS = ["</p>", "</h2>", "</h3>", "</h4>", "</blockquote
 // published article bodies (ArticleInternalLinkingService.insertReadAlso).
 // The stored markup is a plain <p> — the content sanitizer's attribute
 // allowlist has no `class` — so tag those paragraphs here for the callout
-// styling defined in contentProseClassName below.
+// styling defined in contentProseClassName below. Matches the English
+// "Read also:" form too, for translated (locale="en") article bodies.
 function styleReadAlso(html: string): string {
-  return html.replace(/<p>(\s*Baca juga:)/gi, '<p class="baca-juga">$1');
+  return html.replace(/<p>(\s*(?:Baca juga|Read also):)/gi, '<p class="baca-juga">$1');
 }
 
 function splitContentAtMidpoint(html: string): { before: string; after: string } | null {
@@ -77,13 +79,16 @@ export function ArticleContent({
   settings,
   comments,
   trending,
+  locale = "id",
 }: {
   article: PublicArticle;
   related: PaginatedResponse<PublicArticle>;
   settings: PublicSetting[];
   comments: CommentNode[];
   trending: PaginatedResponse<PublicArticle>;
+  locale?: Locale;
 }) {
+  const t = getT(locale);
   const colors = getCategoryColors(article.primaryCategory?.slug ?? article.primaryCategory?.name);
   const tags = article.articleTags ?? [];
   // Split the one category-scoped fetch above between the sidebar's compact
@@ -110,9 +115,12 @@ export function ArticleContent({
   const contentProseClassName =
     "whitespace-pre-line text-lg leading-relaxed break-words [&_p]:mb-5 [&_a]:text-primary [&_a]:underline [&_blockquote]:my-5 [&_blockquote]:border-l-4 [&_blockquote]:border-primary [&_blockquote]:pl-4 [&_blockquote]:text-xl [&_blockquote]:font-medium [&_blockquote]:text-foreground/80 [&_blockquote]:italic [&_h2]:mt-8 [&_h2]:mb-3 [&_h2]:text-2xl [&_h2]:font-black [&_h3]:mt-6 [&_h3]:mb-2 [&_h3]:text-xl [&_h3]:font-bold [&_img]:my-5 [&_img]:rounded-lg [&_ul]:mb-5 [&_ol]:mb-5 [&_li]:ml-5 [&_ol]:list-decimal [&_ul]:list-disc [&_.baca-juga]:my-6 [&_.baca-juga]:border-l-4 [&_.baca-juga]:border-primary [&_.baca-juga]:bg-primary/5 [&_.baca-juga]:py-2 [&_.baca-juga]:pr-3 [&_.baca-juga]:pl-4 [&_.baca-juga]:text-base [&_.baca-juga]:font-semibold [&_.baca-juga]:not-italic [&_.baca-juga_a]:font-bold [&_.baca-juga_a]:no-underline hover:[&_.baca-juga_a]:underline";
   const rootDomain = getRootDomain();
-  const canonicalArticleUrl = getArticleUrl(article, rootDomain);
+  // The English edition is apex-only at /en/{slug}; its Indonesian
+  // counterpart keeps the flat /{slug} permalink getArticleUrl builds.
+  const canonicalArticleUrl =
+    locale === "en" ? `https://${rootDomain}/en/${article.slug}` : getArticleUrl(article, rootDomain);
   const breadcrumbItems = [
-    { label: "Beranda", href: `https://${rootDomain}` },
+    { label: t("nav.home"), href: locale === "en" ? `https://${rootDomain}/en` : `https://${rootDomain}` },
     ...(article.primaryCategory?.parent
       ? [{ label: article.primaryCategory.parent.name, href: getCategoryUrl(article.primaryCategory.parent, rootDomain) }]
       : []),
@@ -222,25 +230,32 @@ export function ArticleContent({
                 <div className="flex items-center gap-2 text-muted-foreground">
                   {article.publishedAt && (
                     <time dateTime={article.publishedAt}>
-                      {new Date(article.publishedAt).toLocaleDateString("id-ID", {
-                        day: "numeric",
-                        month: "long",
-                        year: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      {new Date(article.publishedAt).toLocaleDateString(
+                        locale === "en" ? "en-US" : "id-ID",
+                        {
+                          day: "numeric",
+                          month: "long",
+                          year: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        },
+                      )}
                     </time>
                   )}
-                  {article.readingTime && <span>&middot; {article.readingTime} menit baca</span>}
+                  {article.readingTime && (
+                    <span>
+                      &middot; {article.readingTime} {t("article.readingTime")}
+                    </span>
+                  )}
                   {article.isAiAssisted && (
-                    <Badge variant="outline" title="Drafted with AI assistance" className="ml-1">
-                      AI-assisted
+                    <Badge variant="outline" title={t("article.aiAssisted")} className="ml-1">
+                      {t("article.aiAssisted")}
                     </Badge>
                   )}
                 </div>
               </div>
             </div>
-            <ShareButtons url={getArticleUrl(article)} title={article.title} />
+            <ShareButtons url={canonicalArticleUrl} title={article.title} />
           </div>
 
           <div className="mt-1">
@@ -275,7 +290,7 @@ export function ArticleContent({
               aria-label="Poin penting"
             >
               <h2 className="mb-2 text-xs font-black tracking-widest text-primary uppercase">
-                Poin Penting
+                {t("article.keyPoints")}
               </h2>
               {article.geoData?.structuredSummary && (
                 <p
@@ -327,10 +342,8 @@ export function ArticleContent({
           )}
 
           {faqItems.length > 0 && (
-            <section className="mt-8 border-t pt-6" aria-label="Pertanyaan yang sering diajukan">
-              <h2 className="mb-4 text-xl font-black tracking-tight">
-                Pertanyaan yang Sering Diajukan
-              </h2>
+            <section className="mt-8 border-t pt-6" aria-label={t("article.faqHeading")}>
+              <h2 className="mb-4 text-xl font-black tracking-tight">{t("article.faqHeading")}</h2>
               <div className="flex flex-col divide-y rounded-xl border">
                 {faqItems.map((faq, i) => (
                   <details key={i} className="group px-4 py-3 [&_summary]:list-none">
@@ -382,7 +395,7 @@ export function ArticleContent({
             <div className="flex flex-col gap-4 rounded-lg border bg-card p-4">
               <h2 className={`flex items-center gap-2 text-base font-black tracking-tight uppercase ${colors.text}`}>
                 <span className={`h-4 w-1 rounded-full ${colors.badge}`} />
-                Lainnya di {article.primaryCategory.name}
+                {t("article.moreInCategory")} {article.primaryCategory.name}
               </h2>
               <div className="flex flex-col divide-y">
                 {sidebarRelated.map((item) => (
@@ -400,7 +413,7 @@ export function ArticleContent({
           <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4">
             <div className="flex items-center gap-2">
               <span className="h-4 w-1 rounded-full bg-primary" />
-              <h2 className="text-lg font-black tracking-tight uppercase">Baca Juga</h2>
+              <h2 className="text-lg font-black tracking-tight uppercase">{t("article.relatedBand")}</h2>
             </div>
             <div className="grid gap-6 sm:grid-cols-2">
               {bandRelated.map((item) => (

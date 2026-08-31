@@ -52,17 +52,22 @@ export function ArticleCard({
   article,
   variant = "medium",
   className,
+  locale = "id",
 }: {
   article: CardArticle;
   variant?: "hero" | "secondary" | "medium" | "list" | "horizontal";
   className?: string;
+  locale?: "id" | "en";
 }) {
   const author = "primaryAuthor" in article ? article.primaryAuthor : null;
   const isBreaking = "isBreaking" in article ? article.isBreaking : false;
+  // The English edition lives at a flat /en/{slug}; everything else uses
+  // getArticleUrl's Indonesian permalink shape.
+  const href = locale === "en" ? `/en/${article.slug}` : getArticleUrl(article);
 
   if (variant === "list") {
     return (
-      <Link href={getArticleUrl(article)} className={cn("group flex gap-3", className)}>
+      <Link href={href} className={cn("group flex gap-3", className)}>
         <CardImage article={article} className="aspect-4/3 w-24 shrink-0 rounded-md" />
         <div className="flex min-w-0 flex-col justify-center gap-1">
           <CategoryTag article={article} />
@@ -79,7 +84,7 @@ export function ArticleCard({
 
   if (variant === "horizontal") {
     return (
-      <Link href={getArticleUrl(article)} className={cn("group flex gap-4", className)}>
+      <Link href={href} className={cn("group flex gap-4", className)}>
         <CardImage article={article} className="aspect-4/3 w-36 shrink-0 rounded-md sm:w-48" />
         <div className="flex min-w-0 flex-col justify-center gap-1.5">
           <CategoryTag article={article} />
@@ -101,7 +106,7 @@ export function ArticleCard({
 
   if (variant === "secondary") {
     return (
-      <Link href={getArticleUrl(article)} className={cn("group flex gap-3", className)}>
+      <Link href={href} className={cn("group flex gap-3", className)}>
         <CardImage article={article} className="aspect-4/3 w-28 shrink-0 rounded-md" />
         <div className="flex min-w-0 flex-col justify-center gap-1">
           <CategoryTag article={article} />
@@ -118,7 +123,7 @@ export function ArticleCard({
 
   if (variant === "hero") {
     return (
-      <Link href={getArticleUrl(article)} className={cn("group flex flex-col gap-4", className)}>
+      <Link href={href} className={cn("group flex flex-col gap-4", className)}>
         <CardImage article={article} className="aspect-video w-full rounded-xl shadow-sm" />
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
@@ -147,7 +152,7 @@ export function ArticleCard({
   }
 
   return (
-    <Link href={getArticleUrl(article)} className={cn("group flex flex-col gap-3", className)}>
+    <Link href={href} className={cn("group flex flex-col gap-3", className)}>
       <CardImage article={article} className="aspect-video w-full rounded-lg shadow-sm" />
       <div className="flex flex-col gap-1.5">
         <CategoryTag article={article} />
