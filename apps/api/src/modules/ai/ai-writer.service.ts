@@ -31,6 +31,25 @@ export interface EditorOptions {
   articleId?: string;
 }
 
+export interface TranslateArticleOptions {
+  title: string;
+  content: string;
+  subtitle?: string | null;
+  excerpt?: string | null;
+  // ISO 639-1 codes. Defaults: id -> en.
+  sourceLanguage?: string;
+  targetLanguage?: string;
+  organizationId?: string;
+  articleId?: string;
+}
+
+export interface TranslatedArticle {
+  title: string;
+  subtitle: string | null;
+  excerpt: string | null;
+  content: string;
+}
+
 export interface TitleOptions {
   content: string;
   focusKeyword?: string;
@@ -144,6 +163,74 @@ ${
   // same "instructions aren't 100% reliable" reason stripCodeFence exists.
   private stripLeadingHeading(text: string): string {
     return text.replace(/^\s*<h[1-3][^>]*>[\s\S]*?<\/h[1-3]>\s*/i, '');
+  }
+
+  /**
+   * Translates a whole published article into another language for the
+   * parallel-edition feature (Indonesian `/{slug}` -> English `/en/{slug}`).
+   * Two calls, not one: the body goes through plain `prompt()` so HTML comes
+   * back as HTML (models are far more reliable emitting an HTML document
+   * than JSON-escaping a multi-kilobyte HTML string), and the short
+   * title/subtitle/excerpt go through one small `jsonPrompt`. The caller
+   * (TranslationService) creates the translated article as IN_REVIEW - a
+   * human still approves it before it goes live.
+   */
+  async translateArticle(options: TranslateArticleOptions): Promise<TranslatedArticle> {
+    const sourceCode = options.sourceLanguage ?? 'id';
+    const targetCode = options.targetLanguage ?? 'en';
+    const source = LANGUAGE_NAMES[sourceCode] ?? sourceCode;
+    const target = LANGUAGE_NAMES[targetCode] ?? targetCode;
+
+    const bodySystem = `You are a professional news translator. Translate the article HTML from ${source} into ${target}.
+Rules:
+- Output valid HTML with the SAME tag structure as the input - the same <h2>/<h3>/<p>/<ul>/<ol>/<li>/<blockquote>/<a> elements in the same order and nesting.
+- Translate ONLY human-readable text. Never change, add or remove an HTML tag, attribute, or href/URL. Leave every <a href="..."> target exactly as-is.
+- Preserve every fact, figure, date, name and quotation exactly - a translation must not add, drop, soften or reinterpret information.
+- Keep proper nouns (people, organisations, places, product names) in the form an ${target} news reader would expect; use standard English exonyms for Indonesian places, don't invent translations for names.
+- Render an inline "Baca juga:" callout as "Read also:" but leave its <a href> untouched.
+- Return ONLY the translated HTML. No markdown code fence, no preamble, no commentary.`;
+
+    const body = await this.gateway.prompt(
+      bodySystem,
+      `Article HTML to translate:\n\n${options.content}`,
+      {
+        temperature: 0.3,
+        maxTokens: 8000,
+        organizationId: options.organizationId,
+        articleId: options.articleId,
+        analysisType: 'article_translation',
+      },
+    );
+
+    const meta = await this.gateway.jsonPrompt<{
+      title?: string;
+      subtitle?: string;
+      excerpt?: string;
+    }>(
+      `You are a professional news translator translating short article metadata from ${source} into ${target}.
+Translate the way a native ${target} news editor would write it - accurate and idiomatic, not word-for-word. Keep proper nouns intact and preserve every fact.
+Return JSON: {"title": "...", "subtitle": "...", "excerpt": "..."}. Use an empty string for any field whose input is empty.`,
+      `title: ${options.title}\nsubtitle: ${options.subtitle ?? ''}\nexcerpt: ${options.excerpt ?? ''}`,
+      {
+        temperature: 0.4,
+        maxTokens: 600,
+        organizationId: options.organizationId,
+        articleId: options.articleId,
+        analysisType: 'article_translation',
+      },
+    );
+
+    const clean = (v?: string | null) => {
+      const t = (v ?? '').trim();
+      return t.length > 0 ? t : null;
+    };
+
+    return {
+      title: clean(meta.title) ?? options.title,
+      subtitle: clean(meta.subtitle),
+      excerpt: clean(meta.excerpt),
+      content: this.stripCodeFence(body).trim(),
+    };
   }
 
   async rewriteParagraph(options: EditorOptions): Promise<string> {

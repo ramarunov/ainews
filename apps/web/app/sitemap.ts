@@ -47,8 +47,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // Apex: aggregator homepage + a pointer to every category's own site,
   // plus every published article site-wide (see getAllPublishedArticles -
-  // this used to silently cap at the newest 20 forever).
-  const [articles, pages] = await Promise.all([getAllPublishedArticles(), getPages()]);
+  // this used to silently cap at the newest 20 forever). `enArticles` is the
+  // English translation edition, served at /en/{slug} (see app/(public-en)).
+  const [articles, enArticles, pages] = await Promise.all([
+    getAllPublishedArticles(),
+    getAllPublishedArticles({ language: "en" }),
+    getPages(),
+  ]);
   const apexUrl = `https://${rootDomain}`;
 
   return [
@@ -64,6 +69,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: "hourly",
       priority: 0.8,
     },
+    ...(enArticles.length > 0
+      ? [
+          {
+            url: `${apexUrl}/en`,
+            lastModified: new Date(),
+            changeFrequency: "hourly" as const,
+            priority: 0.7,
+          },
+        ]
+      : []),
     ...pages.map((page) => ({
       url: `${apexUrl}/${page.slug}`,
       lastModified: new Date(page.updatedAt),
@@ -82,6 +97,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     })),
     ...articles.map((article) => ({
       url: getArticleUrl(article, rootDomain),
+      lastModified: article.publishedAt ? new Date(article.publishedAt) : new Date(),
+      changeFrequency: "weekly" as const,
+      priority: 0.6,
+    })),
+    ...enArticles.map((article) => ({
+      url: `${apexUrl}/en/${article.slug}`,
       lastModified: article.publishedAt ? new Date(article.publishedAt) : new Date(),
       changeFrequency: "weekly" as const,
       priority: 0.6,

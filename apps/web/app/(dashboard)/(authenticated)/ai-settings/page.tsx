@@ -35,7 +35,7 @@ import { useSetting, useUpdateSetting } from "@/hooks/use-settings";
 import { useOrgMembers } from "@/hooks/use-org-users";
 import { useAutonomousPipelineUsage } from "@/hooks/use-news-intelligence";
 import { useAuthStore } from "@/lib/auth-store";
-import { ApiError } from "@/lib/api-client";
+import { ApiError, apiClient } from "@/lib/api-client";
 
 const AUTONOMOUS_ENABLED_KEY = "news.autonomous_pipeline.enabled";
 const AUTONOMOUS_AUTHOR_KEY = "news.autonomous_pipeline.author_user_id";
@@ -361,6 +361,84 @@ function AutonomousPublishingCard({ aiConfigured }: { aiConfigured: boolean }) {
   );
 }
 
+const TRANSLATION_ENABLED_KEY = "news.autonomous_translation.enabled";
+
+// Backfill/queue controls for the English translation edition served at
+// /en/{slug} (see apps/api translation module). When enabled, each
+// Indonesian article that is published for the first time gets an English
+// translation drafted automatically into the review queue.
+function TranslationEditionCard() {
+  const { data: enabledSaved, isLoading } = useSetting<boolean>(TRANSLATION_ENABLED_KEY);
+  const updateEnabled = useUpdateSetting(TRANSLATION_ENABLED_KEY);
+  const [approving, setApproving] = useState(false);
+  const enabled = enabledSaved ?? false;
+
+  const handleToggle = async (checked: boolean) => {
+    try {
+      await updateEnabled.mutateAsync({ value: checked });
+      toast.success(
+        checked
+          ? "Auto-translation enabled — new Indonesian articles get an English draft in Review"
+          : "Auto-translation disabled",
+      );
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to save");
+    }
+  };
+
+  const handleApproveAll = async () => {
+    setApproving(true);
+    try {
+      const res = await apiClient.post<{ pending: number; published: number }>(
+        "/translation/approve-pending",
+      );
+      toast.success(
+        res.pending === 0
+          ? "No pending English translations"
+          : `Published ${res.published} of ${res.pending} pending English translation(s)`,
+      );
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to publish translations");
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">English Translation Edition</CardTitle>
+        <CardDescription>
+          Publishes an English edition at <code>/en/</code>. When enabled, the
+          first publish of each Indonesian article drafts an English
+          translation straight into the Review queue — a human still approves
+          it before it goes live. Off by default; each translation is one AI
+          call. Turning this on only affects articles published from now on.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="translation-enabled"
+            checked={enabled}
+            disabled={isLoading || updateEnabled.isPending}
+            onCheckedChange={(c) => handleToggle(c === true)}
+          />
+          <Label htmlFor="translation-enabled">Auto-translate new articles to English</Label>
+        </div>
+        <div className="flex flex-col gap-2">
+          <Button variant="outline" disabled={approving} onClick={handleApproveAll} className="w-fit">
+            {approving ? "Publishing…" : "Publish all pending English translations"}
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Bulk-approves every English translation currently sitting in Review.
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 const PROVIDERS = [
   { field: "openaiApiKey", statusKey: "openai", label: "OpenAI", placeholder: "sk-..." },
   { field: "anthropicApiKey", statusKey: "anthropic", label: "Anthropic", placeholder: "sk-ant-..." },
@@ -564,6 +642,8 @@ export default function AiSettingsPage() {
       <MediaProviderKeysCard />
 
       <AutonomousPublishingCard aiConfigured={Boolean(status?.openai || status?.anthropic || status?.google)} />
+
+      <TranslationEditionCard />
     </div>
   );
 }

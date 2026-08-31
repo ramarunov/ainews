@@ -133,7 +133,12 @@ export class SeoService {
       this.generateArticleSchema(article, siteUrl, organization),
     ]);
 
-    const canonicalUrl = this.buildCanonicalUrl(siteUrl, article.slug, article.primaryCategory);
+    const canonicalUrl = this.buildCanonicalUrl(
+      siteUrl,
+      article.slug,
+      article.primaryCategory,
+      article.language,
+    );
     const seoScore = this.calculateSeoScore(article.content, article.title, {
       metaTitle,
       metaDescription,
@@ -194,7 +199,7 @@ Return ONLY the title text, no quotes or explanation.`,
     siteUrl: string,
     organization?: PublisherInfo,
   ): Promise<object> {
-    const url = this.buildCanonicalUrl(siteUrl, article.slug, article.primaryCategory);
+    const url = this.buildCanonicalUrl(siteUrl, article.slug, article.primaryCategory, article.language);
     const rootUrl = siteUrl.replace(/\/$/, '');
 
     const schema: Record<string, any> = {
@@ -566,7 +571,14 @@ Return ONLY the title text, no quotes or explanation.`,
     siteUrl: string,
     slug: string,
     category?: { slug: string; subdomain?: string | null; parent?: { subdomain?: string | null } | null } | null,
+    language?: string | null,
   ): string {
+    // The English translation edition is apex-only, at /en/{slug} - it never
+    // uses a category subdomain (see apps/web app/(public-en)), and each
+    // edition is canonical to itself, never cross-canonical.
+    if (language === 'en') {
+      return `${siteUrl.replace(/\/$/, '')}/en/${slug}`;
+    }
     if (this.config && (category?.subdomain || category?.parent?.subdomain)) {
       return getArticleUrl({ slug, primaryCategory: category }, getRootDomain(this.config));
     }

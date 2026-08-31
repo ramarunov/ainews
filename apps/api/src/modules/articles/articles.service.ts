@@ -102,6 +102,8 @@ export class ArticlesService {
         readingTime,
         revisionCount: 1,
         language: dto.language ?? 'id',
+        ...(dto.translationOf && { translationOf: dto.translationOf }),
+        isAiAssisted: dto.isAiAssisted ?? false,
         isBreaking: dto.isBreaking ?? false,
         isFeatured: dto.isFeatured ?? false,
         isPremium: dto.isPremium ?? false,

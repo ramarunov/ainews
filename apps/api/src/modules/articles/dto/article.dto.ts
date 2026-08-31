@@ -141,10 +141,24 @@ export class CreateArticleDto {
   @IsBoolean()
   commentsEnabled?: boolean;
 
-  @ApiProperty({ required: false, default: 'en' })
+  @ApiProperty({ required: false, default: 'id' })
   @IsOptional()
   @IsString()
   language?: string;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Id of the source article this is a translation of (parallel-edition feature). Sets the translationOf self-relation.',
+  })
+  @IsOptional()
+  @IsUUID()
+  translationOf?: string;
+
+  @ApiProperty({ required: false, default: false })
+  @IsOptional()
+  @IsBoolean()
+  isAiAssisted?: boolean;
 
   @ApiProperty({ required: false })
   @IsOptional()

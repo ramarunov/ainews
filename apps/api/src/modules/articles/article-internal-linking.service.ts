@@ -16,7 +16,17 @@ const SHOW_TEXT = 4; // NodeFilter.SHOW_TEXT — avoids depending on jsdom's win
 // standalone <p> blocks dropped between paragraphs, not links wrapped
 // around phrases already in the prose.
 const MAX_READ_ALSO = 3;
-const READ_ALSO_PREFIX = 'Baca juga:';
+const READ_ALSO_PREFIX: Record<string, string> = { id: 'Baca juga:', en: 'Read also:' };
+const READ_ALSO_MARKER: Record<string, RegExp> = {
+  id: /baca juga:/i,
+  en: /read also:/i,
+};
+
+// The English edition lives at /en/{slug}; every other language uses the
+// flat /{slug} permalink. Keep in sync with apps/web lib/i18n.ts.
+function articleHref(slug: string, language: string): string {
+  return language === 'en' ? `/en/${slug}` : `/${slug}`;
+}
 
 /**
  * Fully-automatic internal linking (no human review step, per explicit
@@ -41,6 +51,7 @@ export class ArticleInternalLinkingService {
       select: {
         id: true,
         content: true,
+        language: true,
         primaryCategoryId: true,
         articleTags: { select: { tagId: true } },
       },
@@ -56,6 +67,10 @@ export class ArticleInternalLinkingService {
         status: ArticleStatus.PUBLISHED,
         deletedAt: null,
         id: { not: articleId },
+        // Only link within the same edition - an English article must not
+        // link out to an Indonesian one (different URL space, and a reader
+        // on /en/ following it lands on a language they weren't reading).
+        language: article.language,
         OR: [
           ...(article.primaryCategoryId ? [{ primaryCategoryId: article.primaryCategoryId }] : []),
           ...(tagIds.length > 0 ? [{ articleTags: { some: { tagId: { in: tagIds } } } }] : []),
@@ -86,7 +101,13 @@ export class ArticleInternalLinkingService {
       const textNode = this.findMatchableTextNode(document, suggestion.searchText);
       if (!textNode) continue;
 
-      this.wrapTextNodeInLink(document, textNode, suggestion.searchText, suggestion.targetSlug);
+      this.wrapTextNodeInLink(
+        document,
+        textNode,
+        suggestion.searchText,
+        suggestion.targetSlug,
+        article.language,
+      );
       usedSlugs.add(suggestion.targetSlug);
       usedSearchTexts.add(suggestion.searchText);
       inserted++;
@@ -113,12 +134,14 @@ export class ArticleInternalLinkingService {
       select: {
         id: true,
         content: true,
+        language: true,
         primaryCategoryId: true,
         articleTags: { select: { tagId: true } },
       },
     });
     if (!article?.content) return;
-    if (/baca juga:/i.test(article.content)) return;
+    const lang = article.language === 'en' ? 'en' : 'id';
+    if ((READ_ALSO_MARKER[lang] ?? READ_ALSO_MARKER.id).test(article.content)) return;
 
     const tagIds = article.articleTags.map((t) => t.tagId);
     if (!article.primaryCategoryId && tagIds.length === 0) return;
@@ -129,6 +152,8 @@ export class ArticleInternalLinkingService {
         status: ArticleStatus.PUBLISHED,
         deletedAt: null,
         id: { not: articleId },
+        // Same-edition only - see insertLinks().
+        language: article.language,
         OR: [
           ...(article.primaryCategoryId ? [{ primaryCategoryId: article.primaryCategoryId }] : []),
           ...(tagIds.length > 0 ? [{ articleTags: { some: { tagId: { in: tagIds } } } }] : []),
@@ -166,9 +191,9 @@ export class ArticleInternalLinkingService {
 
       const candidate = candidates[i - 1];
       const p = document.createElement('p');
-      p.textContent = `${READ_ALSO_PREFIX} `;
+      p.textContent = `${READ_ALSO_PREFIX[lang] ?? READ_ALSO_PREFIX.id} `;
       const anchor = document.createElement('a');
-      anchor.setAttribute('href', `/${candidate.slug}`);
+      anchor.setAttribute('href', articleHref(candidate.slug, lang));
       anchor.textContent = candidate.title;
       p.appendChild(anchor);
       paragraphs[idx].after(p);
@@ -204,7 +229,13 @@ export class ArticleInternalLinkingService {
     return false;
   }
 
-  private wrapTextNodeInLink(document: Document, textNode: Text, searchText: string, targetSlug: string): void {
+  private wrapTextNodeInLink(
+    document: Document,
+    textNode: Text,
+    searchText: string,
+    targetSlug: string,
+    language: string,
+  ): void {
     const fullText = textNode.textContent || '';
     const index = fullText.indexOf(searchText);
     if (index === -1) return;
@@ -213,8 +244,9 @@ export class ArticleInternalLinkingService {
     const after = fullText.slice(index + searchText.length);
 
     const anchor = document.createElement('a');
-    // Articles live at a bare `/{slug}` (see common/url/site-url.util.ts).
-    anchor.setAttribute('href', `/${targetSlug}`);
+    // ID articles live at a bare `/{slug}`, the English edition at
+    // `/en/{slug}` (see common/url/site-url.util.ts + apps/web lib/i18n.ts).
+    anchor.setAttribute('href', articleHref(targetSlug, language));
     anchor.textContent = searchText;
 
     const parent = textNode.parentNode;
