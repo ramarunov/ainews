@@ -63,6 +63,15 @@ const STATUS_OPTIONS: { value: ArticleStatus | "ALL"; label: string }[] = [
   { value: "REJECTED", label: "Rejected" },
 ];
 
+// Edition filter. Defaults to the Indonesian edition so the list isn't
+// mixed with the /en/ translation drafts by default; "en" is the
+// translation review queue, "ALL" shows both.
+const LANGUAGE_OPTIONS: { value: string; label: string }[] = [
+  { value: "id", label: "Indonesian" },
+  { value: "en", label: "English" },
+  { value: "ALL", label: "All languages" },
+];
+
 const STATUS_VARIANT: Record<ArticleStatus, "default" | "secondary" | "outline" | "destructive"> = {
   DRAFT: "secondary",
   IN_REVIEW: "outline",
@@ -112,6 +121,7 @@ function ArticlesTab() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<ArticleStatus | "ALL">("ALL");
+  const [language, setLanguage] = useState<string>("id");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkActionPending, setBulkActionPending] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -122,6 +132,7 @@ function ArticlesTab() {
     limit: 20,
     search: search || undefined,
     status: status === "ALL" ? undefined : status,
+    language: language === "ALL" ? undefined : language,
   });
 
   const publishMutation = usePublishArticle();
@@ -228,6 +239,25 @@ function ArticlesTab() {
             ))}
           </SelectContent>
         </Select>
+        <Select
+          value={language}
+          onValueChange={(v) => {
+            setLanguage(v || "id");
+            setPage(1);
+            setSelectedIds(new Set());
+          }}
+        >
+          <SelectTrigger className="w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {LANGUAGE_OPTIONS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <CardTitle className="sr-only">Articles</CardTitle>
       </CardHeader>
       {selectedIds.size > 0 && (
@@ -305,12 +335,20 @@ function ArticlesTab() {
                       />
                     </TableCell>
                     <TableCell className="font-medium">
-                      <Link
-                        href={`/articles/${article.id}`}
-                        className="hover:underline"
-                      >
-                        {article.title}
-                      </Link>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant="outline"
+                          className="shrink-0 font-mono text-[10px] tracking-wider text-muted-foreground"
+                        >
+                          {(article.language ?? "id").toUpperCase()}
+                        </Badge>
+                        <Link
+                          href={`/articles/${article.id}`}
+                          className="hover:underline"
+                        >
+                          {article.title}
+                        </Link>
+                      </div>
                     </TableCell>
                     <TableCell>
                       {article.primaryCategory?.name ?? (

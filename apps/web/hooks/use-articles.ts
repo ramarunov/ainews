@@ -13,6 +13,9 @@ export interface ArticleFilters {
   limit?: number;
   status?: ArticleStatus;
   search?: string;
+  // Edition filter: "id" (Indonesian) or "en" (translation edition).
+  // Omit for all languages.
+  language?: string;
 }
 
 function buildQuery(filters: ArticleFilters) {
@@ -21,6 +24,7 @@ function buildQuery(filters: ArticleFilters) {
   if (filters.limit) params.set("limit", String(filters.limit));
   if (filters.status) params.set("status", filters.status);
   if (filters.search) params.set("search", filters.search);
+  if (filters.language) params.set("language", filters.language);
   const qs = params.toString();
   return qs ? `?${qs}` : "";
 }

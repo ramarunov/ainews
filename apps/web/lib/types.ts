@@ -348,6 +348,9 @@ export interface Article {
   isFeatured: boolean;
   isAiAssisted?: boolean;
   commentsEnabled: boolean;
+  // "id" (Indonesian edition) | "en" (translation edition).
+  language?: string;
+  translationOf?: string | null;
   featuredImageId?: string | null;
   featuredImageUrl?: string | null;
   primaryCategoryId?: string | null;
