@@ -7,7 +7,6 @@ import * as Joi from 'joi';
 // to boot is the only safe response; a warning alone is too easy to miss.
 const PLACEHOLDER_SECRETS: Record<string, string> = {
   JWT_SECRET: 'change-this-to-a-very-long-random-secret-at-least-64-chars',
-  JWT_REFRESH_SECRET: 'change-this-to-another-very-long-random-secret',
   SESSION_SECRET: 'change-this-session-secret',
   ENCRYPTION_KEY: 'change-this-32-char-encryption-key!!',
   CSRF_SECRET: 'change-this-csrf-secret',
@@ -47,10 +46,9 @@ export const configValidationSchema = Joi.object({
 
   JWT_SECRET: Joi.string().min(32).required().concat(rejectPlaceholderInProduction('JWT_SECRET')),
   JWT_ACCESS_EXPIRES_IN: Joi.string().default('15m'),
-  JWT_REFRESH_SECRET: Joi.string()
-    .min(32)
-    .required()
-    .concat(rejectPlaceholderInProduction('JWT_REFRESH_SECRET')),
+  // Refresh tokens are opaque random strings hashed in the DB (not JWTs -
+  // see AuthService.issueTokens), so there's no separate refresh signing
+  // secret. This is just their lifetime: "7d" / "12h" / "3600s" etc.
   JWT_REFRESH_EXPIRES_IN: Joi.string().default('7d'),
   // Grace period after a refresh token is rotated during which presenting
   // the old token again is treated as a benign multi-tab / in-flight race

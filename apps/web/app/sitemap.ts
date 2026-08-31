@@ -49,6 +49,12 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
             changeFrequency: "hourly" as const,
             priority: 0.7,
           },
+          {
+            url: `${apexUrl}/en/news`,
+            lastModified: new Date(),
+            changeFrequency: "hourly" as const,
+            priority: 0.6,
+          },
         ]
       : []),
     ...pages.map((page) => ({

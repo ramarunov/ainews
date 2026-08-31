@@ -27,6 +27,20 @@ import { EmailService } from '../../common/email/email.service';
 const LOGIN_ATTEMPTS_PREFIX = 'login_attempts:';
 const MAX_LOGIN_ATTEMPTS = 5;
 const LOCKOUT_DURATION = 900; // 15 minutes in seconds
+const DEFAULT_REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+// Parse a "7d" / "12h" / "30m" / "3600s" / plain-seconds duration into ms.
+// Used for JWT_REFRESH_EXPIRES_IN (the access token's own expiry is handled
+// by @nestjs/jwt, which accepts the string form directly).
+function parseDurationMs(value: string | undefined): number {
+  if (!value) return DEFAULT_REFRESH_TOKEN_TTL_MS;
+  const m = /^(\d+)\s*([smhd]?)$/.exec(value.trim());
+  if (!m) return DEFAULT_REFRESH_TOKEN_TTL_MS;
+  const n = Number(m[1]);
+  const unit = m[2] || 's';
+  const mult = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }[unit]!;
+  return n * mult;
+}
 const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour, per SECURITY.md
 const MFA_CHALLENGE_PREFIX = 'mfa:challenge:';
 const MFA_CHALLENGE_TTL_SECONDS = 300; // 5 minutes
@@ -369,8 +383,9 @@ export class AuthService {
       .digest('hex');
     const family = randomBytes(16).toString('hex');
 
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
+    const expiresAt = new Date(
+      Date.now() + parseDurationMs(this.config.get<string>('JWT_REFRESH_EXPIRES_IN')),
+    );
 
     await this.prisma.refreshToken.create({
       data: {

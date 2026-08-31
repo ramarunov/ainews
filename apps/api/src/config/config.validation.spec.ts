@@ -3,7 +3,6 @@ import { configValidationSchema } from './config.validation';
 const baseEnv = {
   DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
   JWT_SECRET: 'a-real-random-secret-that-is-at-least-32-chars-long',
-  JWT_REFRESH_SECRET: 'another-real-random-secret-at-least-32-chars-long',
   ENCRYPTION_KEY: 'a-real-32-char-or-longer-encryption-key',
   S3_ENDPOINT: 'http://localhost:9000',
   S3_REGION: 'us-east-1',
@@ -27,7 +26,6 @@ describe('configValidationSchema', () => {
       ...baseEnv,
       NODE_ENV: 'development',
       JWT_SECRET: 'change-this-to-a-very-long-random-secret-at-least-64-chars',
-      JWT_REFRESH_SECRET: 'change-this-to-another-very-long-random-secret',
       SESSION_SECRET: 'change-this-session-secret',
       ENCRYPTION_KEY: 'change-this-32-char-encryption-key!!',
       CSRF_SECRET: 'change-this-csrf-secret',
@@ -38,7 +36,6 @@ describe('configValidationSchema', () => {
 
   it.each([
     ['JWT_SECRET', 'change-this-to-a-very-long-random-secret-at-least-64-chars'],
-    ['JWT_REFRESH_SECRET', 'change-this-to-another-very-long-random-secret'],
     ['SESSION_SECRET', 'change-this-session-secret'],
     ['ENCRYPTION_KEY', 'change-this-32-char-encryption-key!!'],
     ['CSRF_SECRET', 'change-this-csrf-secret'],
