@@ -4,7 +4,7 @@ import type { Category, FooterWidget, Page, SiteFooterSetting } from "@/lib/type
 import { getCategoryColors } from "@/lib/category-colors";
 import { getCategoryUrl, getRootDomain } from "@/lib/site-url";
 import { SITE_NAME, SITE_TAGLINE } from "@/lib/brand";
-import { getT, localizePath, type Locale } from "@/lib/i18n";
+import { getT, localizePath, categoryLabel, type Locale } from "@/lib/i18n";
 import { LoginLink } from "./login-link";
 
 // Shown until an admin ever saves a footer configuration - matches the
@@ -29,7 +29,9 @@ const DEFAULT_FOOTER_COLUMNS: { widgets: FooterWidget[] }[] = [
 ];
 
 // The English edition ignores the admin's (Indonesian) footer config and
-// uses this fixed English set instead.
+// uses this fixed English set instead. No generic "Pages" column - the
+// static pages (About, Privacy, ...) only exist in Indonesian; the
+// editorial/legal strip below still links them for E-E-A-T reachability.
 const EN_FOOTER_COLUMNS: { widgets: FooterWidget[] }[] = [
   {
     widgets: [
@@ -52,7 +54,6 @@ const EN_FOOTER_COLUMNS: { widgets: FooterWidget[] }[] = [
       },
     ],
   },
-  { widgets: [{ id: "en-pages", type: "pages", title: "Pages" }] },
 ];
 
 function FooterWidgetView({
@@ -124,7 +125,7 @@ function FooterWidgetView({
                 className="w-fit text-sm hover:text-background"
               >
                 <span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${colors.badge}`} />
-                {category.name}
+                {categoryLabel(category, locale)}
               </Link>
             );
           })}

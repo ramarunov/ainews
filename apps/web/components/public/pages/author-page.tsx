@@ -20,7 +20,7 @@ export async function buildAuthorMetadata({ idOrSlug, locale }: Args): Promise<M
   const t = getT(locale);
   return {
     title: author.displayName ?? t("article.author"),
-    description: author.bio ?? `Articles by ${author.displayName} on ${SITE_NAME}.`,
+    description: (locale === "en" ? author.bioEn ?? author.bio : author.bio) ?? `Articles by ${author.displayName} on ${SITE_NAME}.`,
   };
 }
 
@@ -45,6 +45,8 @@ export async function AuthorPage({ idOrSlug, locale }: Args) {
   });
 
   const authorUrl = `https://${getRootDomain()}${authorBase}/${author.slug ?? author.id}`;
+  const bio = locale === "en" && author.bioEn ? author.bioEn : author.bio;
+  const jobTitle = locale === "en" && author.jobTitleEn ? author.jobTitleEn : author.jobTitle;
 
   const sameAs = author.sameAs?.filter(Boolean) ?? [];
   const knowsAbout = author.knowsAbout?.filter(Boolean) ?? [];
@@ -52,10 +54,10 @@ export async function AuthorPage({ idOrSlug, locale }: Args) {
     "@context": "https://schema.org",
     "@type": "Person",
     name: author.displayName,
-    description: author.bio || undefined,
+    description: bio || undefined,
     image: author.avatarUrl || undefined,
     url: authorUrl,
-    jobTitle: author.jobTitle || undefined,
+    jobTitle: jobTitle || undefined,
     worksFor: { "@type": "NewsMediaOrganization", name: SITE_NAME },
     sameAs: sameAs.length > 0 ? sameAs : undefined,
     knowsAbout: knowsAbout.length > 0 ? knowsAbout : undefined,
@@ -83,10 +85,10 @@ export async function AuthorPage({ idOrSlug, locale }: Args) {
               {t("article.author")}
             </p>
             <h1 className="text-2xl font-black tracking-tight md:text-3xl">{author.displayName}</h1>
-            {author.jobTitle && (
-              <p className="mt-0.5 text-sm font-semibold text-primary">{author.jobTitle}</p>
+            {jobTitle && (
+              <p className="mt-0.5 text-sm font-semibold text-primary">{jobTitle}</p>
             )}
-            {author.bio && <p className="mt-1 max-w-2xl text-muted-foreground">{author.bio}</p>}
+            {bio && <p className="mt-1 max-w-2xl text-muted-foreground">{bio}</p>}
             {sameAs.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm">
                 {sameAs.map((url) => (

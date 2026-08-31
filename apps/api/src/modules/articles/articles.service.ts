@@ -794,17 +794,21 @@ export class ArticlesService {
           displayName: true,
           avatarUrl: true,
           bio: true,
+          // authorProfile.bioEn/jobTitleEn are flattened out for the public
+          // /en/ edition in PublicSiteService.findPublishedBySlug.
+          metadata: true,
         },
       },
       primaryCategory: {
         select: {
           id: true,
           name: true,
+          nameEn: true,
           slug: true,
           subdomain: true,
           isActive: true,
           parentId: true,
-          parent: { select: { id: true, name: true, slug: true, subdomain: true } },
+          parent: { select: { id: true, name: true, nameEn: true, slug: true, subdomain: true } },
         },
       },
       articleTags: {

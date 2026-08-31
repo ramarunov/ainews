@@ -52,6 +52,8 @@ const profileSchema = z.object({
   timezone: z.string().max(100).optional().or(z.literal("")),
   locale: z.string().max(20).optional().or(z.literal("")),
   jobTitle: z.string().max(120).optional().or(z.literal("")),
+  jobTitleEn: z.string().max(120).optional().or(z.literal("")),
+  bioEn: z.string().max(2000).optional().or(z.literal("")),
   // Free text in the form (one per line); split into arrays on submit.
   sameAs: z.string().optional().or(z.literal("")),
   knowsAbout: z.string().optional().or(z.literal("")),
@@ -97,6 +99,8 @@ function ProfileCard() {
       timezone: profile?.timezone ?? "",
       locale: profile?.locale ?? "",
       jobTitle: profile?.metadata?.authorProfile?.jobTitle ?? "",
+      jobTitleEn: profile?.metadata?.authorProfile?.jobTitleEn ?? "",
+      bioEn: profile?.metadata?.authorProfile?.bioEn ?? "",
       sameAs: (profile?.metadata?.authorProfile?.sameAs ?? []).join("\n"),
       knowsAbout: (profile?.metadata?.authorProfile?.knowsAbout ?? []).join("\n"),
     },
@@ -104,11 +108,13 @@ function ProfileCard() {
 
   const onSubmit = async (values: ProfileFormValues) => {
     try {
-      const { jobTitle, sameAs, knowsAbout, ...rest } = values;
+      const { jobTitle, jobTitleEn, bioEn, sameAs, knowsAbout, ...rest } = values;
       await updateProfile.mutateAsync({
         ...rest,
         authorProfile: {
           jobTitle: jobTitle || undefined,
+          jobTitleEn: jobTitleEn || undefined,
+          bioEn: bioEn || undefined,
           sameAs: linesToArray(sameAs),
           knowsAbout: linesToArray(knowsAbout),
         },
@@ -211,6 +217,15 @@ function ProfileCard() {
             <Label htmlFor="profile-bio">Bio</Label>
             <Textarea id="profile-bio" rows={3} {...register("bio")} />
           </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="profile-bio-en">Bio (English)</Label>
+            <Textarea
+              id="profile-bio-en"
+              rows={3}
+              placeholder="shown on the /en/ edition; falls back to the Indonesian bio"
+              {...register("bioEn")}
+            />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="flex flex-col gap-2">
               <Label htmlFor="profile-timezone">Timezone</Label>
@@ -235,6 +250,14 @@ function ProfileCard() {
                 id="profile-job-title"
                 placeholder="Redaktur Pelaksana"
                 {...register("jobTitle")}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="profile-job-title-en">Job title (English)</Label>
+              <Input
+                id="profile-job-title-en"
+                placeholder="Managing Editor"
+                {...register("jobTitleEn")}
               />
             </div>
             <div className="flex flex-col gap-2">

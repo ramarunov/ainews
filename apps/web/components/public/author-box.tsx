@@ -7,6 +7,7 @@ export function AuthorBox({ author, locale = "id" }: { author: PublicAuthor; loc
   const initial = (author.displayName ?? "?").charAt(0).toUpperCase();
   const t = getT(locale);
   const href = `${locale === "en" ? "/en/author" : "/author"}/${author.slug ?? author.id}`;
+  const bio = locale === "en" && author.bioEn ? author.bioEn : author.bio;
 
   return (
     <div className="mt-10 flex flex-col gap-4 rounded-xl border bg-[var(--zone)] p-6 sm:flex-row sm:items-start">
@@ -26,7 +27,7 @@ export function AuthorBox({ author, locale = "id" }: { author: PublicAuthor; loc
         <Link href={href} className="w-fit text-lg font-black hover:text-primary hover:underline">
           {author.displayName}
         </Link>
-        {author.bio && <p className="text-sm leading-relaxed text-muted-foreground">{author.bio}</p>}
+        {bio && <p className="text-sm leading-relaxed text-muted-foreground">{bio}</p>}
         <Link href={href} className="mt-1 w-fit text-sm font-bold text-primary hover:underline">
           {t("article.moreByAuthor")} {author.displayName} &rarr;
         </Link>

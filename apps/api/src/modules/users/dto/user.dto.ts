@@ -23,6 +23,18 @@ export class AuthorProfileDto {
   @MaxLength(120)
   jobTitle?: string;
 
+  @ApiProperty({ required: false, example: 'Editorial Team', maxLength: 120, description: 'English job title for the /en/ edition' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  jobTitleEn?: string;
+
+  @ApiProperty({ required: false, maxLength: 2000, description: 'English bio for the /en/ edition' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  bioEn?: string;
+
   @ApiProperty({ required: false, type: [String], description: 'Off-site profile URLs (LinkedIn, X, ...)' })
   @IsOptional()
   @IsArray()

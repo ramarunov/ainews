@@ -10,7 +10,7 @@ import { getCategoryColors } from "@/lib/category-colors";
 import { getCategoryUrl, getRootDomain } from "@/lib/site-url";
 import { getPublishedArticles } from "@/lib/public-api";
 import { SITE_NAME } from "@/lib/brand";
-import { getT, localizePath, type Locale } from "@/lib/i18n";
+import { getT, localizePath, categoryLabel, type Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { CategoryMegaPanel } from "./category-mega-panel";
 import { LoginLink } from "./login-link";
@@ -190,7 +190,7 @@ export function PublicHeader({
                 <span
                   className={`font-bold tracking-wide uppercase ${getCategoryColors(activeCategory.slug ?? activeCategory.name).text}`}
                 >
-                  {activeCategory.name}
+                  {categoryLabel(activeCategory, locale)}
                 </span>
                 <a href={`https://${getRootDomain()}`} className="opacity-70 hover:text-background hover:opacity-100">
                   {t("nav.allChannels")} &rarr;
@@ -301,7 +301,7 @@ export function PublicHeader({
                     isActive ? "border-current" : "border-transparent",
                   )}
                 >
-                  {category.name}
+                  {categoryLabel(category, locale)}
                 </Link>
               );
             })}

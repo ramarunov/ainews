@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Category, PublicArticle } from "@/lib/types";
 import { getCategoryColors } from "@/lib/category-colors";
 import { getArticleUrl, getCategoryUrl } from "@/lib/site-url";
-import { getT, type Locale } from "@/lib/i18n";
+import { getT, categoryLabel, type Locale } from "@/lib/i18n";
 import { SmartArticleImage, CategoryPlaceholder } from "./smart-article-image";
 
 function PreviewCard({ article, locale }: { article: PublicArticle; locale: Locale }) {
@@ -72,7 +72,7 @@ export function CategoryMegaPanel({
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 px-4 py-6">
         <div className="flex items-center justify-between">
           <span className={`text-xs font-black tracking-wide uppercase ${colors.text}`}>
-            {category.name}
+            {categoryLabel(category, locale)}
           </span>
           <Link
             href={categoryHref}

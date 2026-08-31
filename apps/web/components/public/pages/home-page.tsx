@@ -16,7 +16,7 @@ import {
   getPublishedArticles,
 } from "@/lib/public-api";
 import { SITE_NAME, SITE_TAGLINE } from "@/lib/brand";
-import { getT, type Locale } from "@/lib/i18n";
+import { getT, categoryLabel, type Locale } from "@/lib/i18n";
 import type { HomepageSeoSetting, HomepageWidgetsSetting, SiteBrandingSetting } from "@/lib/types";
 
 // Shared homepage view for both editions. app/(public)/page.tsx renders it
@@ -206,7 +206,7 @@ export async function HomePage({ locale = "id" }: { locale?: Locale }) {
               <section key={category.id} className="flex flex-col gap-5">
                 <div className={`flex items-center justify-between border-b-2 pb-2 ${colors.border}`}>
                   <h2 className={`text-xl font-black tracking-tight uppercase ${colors.text}`}>
-                    {category.name}
+                    {categoryLabel(category, locale)}
                   </h2>
                   <Link
                     href={catHref(category.slug)}

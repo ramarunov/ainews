@@ -13,6 +13,8 @@ export interface UpdateProfileInput {
   locale?: string;
   authorProfile?: {
     jobTitle?: string;
+    jobTitleEn?: string;
+    bioEn?: string;
     sameAs?: string[];
     knowsAbout?: string[];
   };

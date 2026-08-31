@@ -149,6 +149,20 @@ export class PublicSiteService {
       }
     }
 
+    // Flatten the author's English E-E-A-T overrides out of the free-form
+    // metadata bag (same shape getAuthorProfile() reads) so the /en/ author
+    // box can show an English bio/job title. Raw metadata isn't exposed.
+    const primaryAuthor = (rest as { primaryAuthor?: { metadata?: unknown } }).primaryAuthor;
+    if (primaryAuthor) {
+      const profile = ((primaryAuthor.metadata as any) ?? {}).authorProfile ?? {};
+      delete (primaryAuthor as { metadata?: unknown }).metadata;
+      Object.assign(primaryAuthor, {
+        bioEn: typeof profile.bioEn === 'string' ? profile.bioEn : null,
+        jobTitle: typeof profile.jobTitle === 'string' ? profile.jobTitle : null,
+        jobTitleEn: typeof profile.jobTitleEn === 'string' ? profile.jobTitleEn : null,
+      });
+    }
+
     return { ...rest, hreflang };
   }
 
@@ -226,6 +240,8 @@ export class PublicSiteService {
     return {
       ...rest,
       jobTitle: typeof profile.jobTitle === 'string' ? profile.jobTitle : null,
+      jobTitleEn: typeof profile.jobTitleEn === 'string' ? profile.jobTitleEn : null,
+      bioEn: typeof profile.bioEn === 'string' ? profile.bioEn : null,
       sameAs: Array.isArray(profile.sameAs)
         ? profile.sameAs.filter((x: unknown) => typeof x === 'string' && x)
         : [],

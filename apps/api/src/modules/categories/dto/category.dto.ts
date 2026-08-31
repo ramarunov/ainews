@@ -30,6 +30,12 @@ export class CreateCategoryDto {
   @MaxLength(255)
   name: string;
 
+  @ApiProperty({ required: false, example: 'World News', description: 'English label for the /en/ edition' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  nameEn?: string;
+
   @ApiProperty({ required: false, example: 'world-news' })
   @IsOptional()
   @IsString()

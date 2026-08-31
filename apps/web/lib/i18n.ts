@@ -151,3 +151,12 @@ export const OG_LOCALE: Record<Locale, string> = {
   id: "id_ID",
   en: "en_US",
 };
+
+/** Category label for the current edition - `nameEn` on /en/ when set, else `name`. */
+export function categoryLabel(
+  c: { name: string; nameEn?: string | null } | null | undefined,
+  locale: Locale,
+): string {
+  if (!c) return "";
+  return locale === "en" && c.nameEn ? c.nameEn : c.name;
+}

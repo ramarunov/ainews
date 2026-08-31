@@ -10,7 +10,7 @@ import { Breadcrumb } from "@/components/public/breadcrumb";
 import { Badge } from "@/components/ui/badge";
 import { getCategoryColors } from "@/lib/category-colors";
 import { getArticleUrl, getCategoryUrl, getRootDomain } from "@/lib/site-url";
-import { getT, type Locale } from "@/lib/i18n";
+import { getT, categoryLabel, type Locale } from "@/lib/i18n";
 import type { CommentNode, PaginatedResponse, PublicArticle, PublicSetting } from "@/lib/types";
 
 // Extracted from article-view.tsx's ArticleView so the exact same rendering
@@ -128,10 +128,10 @@ export function ArticleContent({
   const breadcrumbItems = [
     { label: t("nav.home"), href: isEn ? `https://${rootDomain}/en` : `https://${rootDomain}` },
     ...(article.primaryCategory?.parent
-      ? [{ label: article.primaryCategory.parent.name, href: catHref(article.primaryCategory.parent) }]
+      ? [{ label: categoryLabel(article.primaryCategory.parent, locale), href: catHref(article.primaryCategory.parent) }]
       : []),
     ...(article.primaryCategory
-      ? [{ label: article.primaryCategory.name, href: catHref(article.primaryCategory) }]
+      ? [{ label: categoryLabel(article.primaryCategory, locale), href: catHref(article.primaryCategory) }]
       : []),
     { label: article.title },
   ];
@@ -212,7 +212,7 @@ export function ArticleContent({
               }
               className={`w-fit rounded px-2.5 py-1 text-xs font-black tracking-wide text-white uppercase ${colors.badge}`}
             >
-              {article.primaryCategory.name}
+              {categoryLabel(article.primaryCategory, locale)}
             </Link>
           )}
 
@@ -405,7 +405,7 @@ export function ArticleContent({
             <div className="flex flex-col gap-4 rounded-lg border bg-card p-4">
               <h2 className={`flex items-center gap-2 text-base font-black tracking-tight uppercase ${colors.text}`}>
                 <span className={`h-4 w-1 rounded-full ${colors.badge}`} />
-                {t("article.moreInCategory")} {article.primaryCategory.name}
+                {t("article.moreInCategory")} {categoryLabel(article.primaryCategory, locale)}
               </h2>
               <div className="flex flex-col divide-y">
                 {sidebarRelated.map((item) => (

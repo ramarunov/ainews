@@ -59,6 +59,7 @@ export class CategoriesService {
         organizationId,
         parentId: dto.parentId,
         name: dto.name,
+        nameEn: dto.nameEn,
         slug,
         description: dto.description,
         imageUrl: dto.imageUrl,
@@ -217,6 +218,7 @@ export class CategoriesService {
       where: { id },
       data: {
         ...(dto.name && { name: dto.name }),
+        ...(dto.nameEn !== undefined && { nameEn: dto.nameEn || null }),
         slug,
         ...(dto.description !== undefined && { description: dto.description }),
         ...(dto.imageUrl !== undefined && { imageUrl: dto.imageUrl }),

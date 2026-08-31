@@ -10,7 +10,7 @@ import { getCategoryColors } from "@/lib/category-colors";
 import { getCategoryBySlug, getPublishedArticles } from "@/lib/public-api";
 import { getCategoryUrl, getRootDomain, isCategorySubdomainsEnabled } from "@/lib/site-url";
 import { SITE_NAME } from "@/lib/brand";
-import { getT, type Locale } from "@/lib/i18n";
+import { getT, categoryLabel, type Locale } from "@/lib/i18n";
 
 // Shared category-archive view. app/(public)/category/[slug]/page.tsx renders
 // it with locale="id"; app/(public-en)/en/category/[slug]/page.tsx with
@@ -38,12 +38,13 @@ export async function buildCategoryMetadata({ slug, page, locale }: Args): Promi
       : getCategoryUrl(category);
   const canonical = page > 1 ? `${base}?page=${page}` : base;
   const idBase = getCategoryUrl(category);
+  const label = categoryLabel(category, locale);
   return {
-    title: category.metaTitle || category.name,
+    title: category.metaTitle || label,
     description:
       category.metaDescription ||
       category.description ||
-      `${category.name} ${t("category.latestToday")} | ${SITE_NAME}`,
+      `${label} ${t("category.latestToday")} | ${SITE_NAME}`,
     alternates: {
       canonical,
       types: {
@@ -86,6 +87,7 @@ export async function CategoryPage({ slug, page, locale }: Args) {
   ]);
 
   const colors = getCategoryColors(category.slug ?? category.name);
+  const label = categoryLabel(category, locale);
   const [lead, ...rest] = articles;
   const rootDomain = getRootDomain();
   const categoryUrl =
@@ -99,7 +101,7 @@ export async function CategoryPage({ slug, page, locale }: Args) {
     ...(category.parent
       ? [
           {
-            label: category.parent.name,
+            label: categoryLabel(category.parent, locale),
             href:
               locale === "en"
                 ? `https://${rootDomain}/en/category/${category.parent.slug}`
@@ -107,14 +109,14 @@ export async function CategoryPage({ slug, page, locale }: Args) {
           },
         ]
       : []),
-    { label: category.name },
+    { label },
   ];
 
   const categorySchema = [
     {
       "@context": "https://schema.org",
       "@type": "CollectionPage",
-      name: category.metaTitle || category.name,
+      name: category.metaTitle || label,
       description: category.metaDescription || category.description || undefined,
       url: categoryUrl,
     },
@@ -140,7 +142,7 @@ export async function CategoryPage({ slug, page, locale }: Args) {
         <div className="mx-auto w-full max-w-6xl px-4">
           <Breadcrumb className="mb-3 text-white" items={breadcrumbItems} />
           <h1 className="text-4xl font-black tracking-tight text-white uppercase md:text-5xl">
-            {category.name}
+            {label}
           </h1>
           {category.description && (
             <p className="mt-2 max-w-2xl text-white/80">{category.description}</p>
@@ -157,7 +159,7 @@ export async function CategoryPage({ slug, page, locale }: Args) {
                   }
                   className="rounded-full border border-white/40 px-3 py-1 text-xs font-bold tracking-wide text-white uppercase hover:bg-white/10"
                 >
-                  {child.name}
+                  {categoryLabel(child, locale)}
                 </Link>
               ))}
             </nav>
@@ -191,7 +193,7 @@ export async function CategoryPage({ slug, page, locale }: Args) {
             <aside className="flex flex-col gap-6">
               <TrendingList
                 articles={trending.data}
-                title={`${t("category.popularIn")} ${category.name}`}
+                title={`${t("category.popularIn")} ${label}`}
                 locale={locale}
               />
             </aside>

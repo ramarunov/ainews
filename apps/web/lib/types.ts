@@ -31,6 +31,8 @@ export interface AuthUser {
 
 export interface AuthorProfile {
   jobTitle?: string | null;
+  jobTitleEn?: string | null;
+  bioEn?: string | null;
   sameAs?: string[];
   knowsAbout?: string[];
 }
@@ -239,6 +241,8 @@ export interface WebhookDelivery {
 export interface Category {
   id: string;
   name: string;
+  // English label for the /en/ edition; falls back to `name` when unset.
+  nameEn?: string | null;
   slug: string;
   description?: string | null;
   imageUrl?: string | null;
@@ -255,7 +259,7 @@ export interface Category {
   // and lives at a path underneath it (see getCategoryUrl). Populated
   // client-side from the flat /public/categories list (getCategories() in
   // public-api.ts), not returned by the API response itself.
-  parent?: Pick<Category, "id" | "name" | "slug" | "subdomain"> | null;
+  parent?: Pick<Category, "id" | "name" | "nameEn" | "slug" | "subdomain"> | null;
   // Only populated by getCategoryBySlug() for the one category being
   // rendered (e.g. the category page's sub-nav) — not present on every
   // category returned by getCategories().
@@ -420,6 +424,9 @@ export interface PublicAuthor {
   // PublicSiteService.getAuthorProfile. Only present on the author-profile
   // endpoint, not on article.primaryAuthor.
   jobTitle?: string | null;
+  // English overrides for the /en/ edition.
+  bioEn?: string | null;
+  jobTitleEn?: string | null;
   sameAs?: string[];
   knowsAbout?: string[];
 }

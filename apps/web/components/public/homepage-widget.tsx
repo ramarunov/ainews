@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Category, HomepageWidget as HomepageWidgetConfig, PublicArticle } from "@/lib/types";
 import { getCategoryColors } from "@/lib/category-colors";
 import { getCategoryUrl } from "@/lib/site-url";
-import { getT, type Locale } from "@/lib/i18n";
+import { getT, categoryLabel, type Locale } from "@/lib/i18n";
 import { TrendingList } from "./trending-list";
 import { AdSlot } from "./ad-slot";
 
@@ -43,7 +43,7 @@ export function HomepageWidget({
                 className="flex items-center gap-1.5 text-sm hover:underline"
               >
                 <span className={`h-2 w-2 rounded-full ${colors.badge}`} />
-                {category.name}
+                {categoryLabel(category, locale)}
               </Link>
             );
           })}

@@ -3,7 +3,7 @@ import type { PublicArticle } from "@/lib/types";
 import type { Category } from "@/lib/types";
 import { getCategoryColors } from "@/lib/category-colors";
 import { getArticleUrl, getCategoryUrl } from "@/lib/site-url";
-import type { Locale } from "@/lib/i18n";
+import { categoryLabel, type Locale } from "@/lib/i18n";
 
 // The compact "more channels" block real news portals use to give every
 // category a presence on the homepage without a full lead-image section
@@ -28,7 +28,7 @@ export function CategoryMosaicCard({
           href={locale === "en" ? `/en/category/${category.slug}` : getCategoryUrl(category)}
           className={`text-sm font-black tracking-wide uppercase hover:underline ${colors.text}`}
         >
-          {category.name}
+          {categoryLabel(category, locale)}
         </Link>
         <span className={`h-2 w-2 rounded-full ${colors.badge}`} />
       </div>

@@ -61,6 +61,7 @@ const SUBDOMAIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 const categorySchema = z.object({
   name: z.string().min(1, "Name is required").max(255),
+  nameEn: z.string().max(255).optional().or(z.literal("")),
   slug: z.string().max(255).optional().or(z.literal("")),
   description: z.string().optional().or(z.literal("")),
   imageUrl: z.string().max(500).optional().or(z.literal("")),
@@ -105,6 +106,7 @@ function CategoryFormDialog({
     resolver: zodResolver(categorySchema),
     values: {
       name: category?.name ?? "",
+      nameEn: category?.nameEn ?? "",
       slug: category?.slug ?? "",
       description: category?.description ?? "",
       imageUrl: category?.imageUrl ?? "",
@@ -146,6 +148,7 @@ function CategoryFormDialog({
         : undefined;
     const payload = {
       name: values.name,
+      nameEn: values.nameEn ?? "",
       slug: values.slug || undefined,
       description: values.description || undefined,
       imageUrl: values.imageUrl || undefined,
@@ -185,6 +188,14 @@ function CategoryFormDialog({
             {errors.name && (
               <p className="text-sm text-destructive">{errors.name.message}</p>
             )}
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="cat-name-en">Name (English)</Label>
+            <Input
+              id="cat-name-en"
+              placeholder="shown on the /en/ edition; falls back to Name"
+              {...register("nameEn")}
+            />
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="cat-slug">Slug</Label>

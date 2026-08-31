@@ -292,6 +292,8 @@ model Category {
   organizationId  String    @db.Uuid
   parentId        String?   @db.Uuid
   name            String    @db.VarChar(255)
+  // English label for the /en/ edition; null -> fall back to `name`.
+  nameEn          String?   @db.VarChar(255)
   slug            String    @db.VarChar(255)
   description     String?
   imageUrl        String?   @db.VarChar(500)
