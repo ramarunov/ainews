@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 
 import { SystemSettingsService } from '../system-settings/system-settings.service';
 import { MEDIA_PROVIDER_SETTING_KEYS } from '../system-settings/system-settings.constants';
+import { safeFetch } from '../../common/ssrf-guard';
 import { MediaService } from './media.service';
 
 export interface StockPhotoResult {
@@ -116,8 +117,13 @@ export class StockPhotoService {
     uploaderId: string,
     organizationId: string,
   ) {
-    assertAllowedPhotoUrl(result.fullUrl);
-    const res = await fetch(result.fullUrl);
+    // safeFetch re-runs the host allowlist on every redirect hop too, so a
+    // Location bounce off images.pexels.com can't turn this into an SSRF.
+    const { response: res } = await safeFetch(
+      result.fullUrl,
+      {},
+      { validate: assertAllowedPhotoUrl },
+    );
     if (!res.ok) {
       throw new BadRequestException(`Failed to download the selected photo (${res.status})`);
     }

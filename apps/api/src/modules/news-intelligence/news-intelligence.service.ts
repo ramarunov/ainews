@@ -9,7 +9,7 @@ import slugify from 'slugify';
 
 import { PrismaService } from '../../infrastructure/prisma/prisma.service';
 import { sanitizeArticleHtml } from '../../common/sanitize-html';
-import { assertPublicHttpUrl } from '../../common/ssrf-guard';
+import { safeFetch } from '../../common/ssrf-guard';
 import {
   CreateNewsSourceDto,
   UpdateNewsSourceDto,
@@ -153,16 +153,28 @@ export class NewsIntelligenceService {
     let itemsSkipped = 0;
 
     try {
-      // source.url is set by whoever has news:manage-sources - without this
-      // check, pointing a source at an internal address would make the
-      // server fetch it via rss-parser, the same SSRF class as
-      // ArticleExtractionService.extractFromUrl. Handled by the catch
-      // below like any other feed-fetch failure (recorded on the source,
-      // doesn't crash the sweep).
-      await assertPublicHttpUrl(source.url);
-
-      const parser = new Parser();
-      const feed = await parser.parseURL(source.url);
+      // source.url is set by whoever has news:manage-sources - pointing a
+      // source at an internal address would otherwise make the server
+      // fetch it, the same SSRF class as ArticleExtractionService. Fetch
+      // the feed body ourselves via safeFetch (re-checks redirect hops,
+      // which rss-parser's own parseURL does not) and hand the string to
+      // the parser. Handled by the catch below like any other feed-fetch
+      // failure (recorded on the source, doesn't crash the sweep).
+      const feedController = new AbortController();
+      const feedTimeout = setTimeout(() => feedController.abort(), 15_000);
+      let feed: Awaited<ReturnType<Parser['parseString']>>;
+      try {
+        const { response } = await safeFetch(source.url, {
+          signal: feedController.signal,
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AINewsCMS/1.0 RSS)' },
+        });
+        if (!response.ok) {
+          throw new Error(`Feed fetch failed: HTTP ${response.status}`);
+        }
+        feed = await new Parser().parseString(await response.text());
+      } finally {
+        clearTimeout(feedTimeout);
+      }
       itemsFound = feed.items?.length ?? 0;
 
       for (const item of feed.items ?? []) {

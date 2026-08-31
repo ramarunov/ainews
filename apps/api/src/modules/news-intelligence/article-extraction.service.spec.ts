@@ -14,12 +14,21 @@ import { TextEncoder, TextDecoder } from 'node:util';
 // these tests stay fast/offline/deterministic instead of depending on real
 // DNS resolution for example.com. Defaults to a public address; the SSRF
 // test below overrides it per-call to simulate a private-IP result.
+// lookup is called as lookup(host, { all: true }) -> array of records.
 jest.mock('node:dns/promises', () => ({
-  lookup: jest.fn().mockResolvedValue({ address: '93.184.216.34', family: 4 }),
+  lookup: jest.fn().mockResolvedValue([{ address: '93.184.216.34', family: 4 }]),
 }));
 
 import { lookup } from 'node:dns/promises';
 import { ArticleExtractionService } from './article-extraction.service';
+
+// A non-redirect fetch response mock with the headers.get() safeFetch reads.
+const okHtml = (html: string) => ({
+  ok: true,
+  status: 200,
+  headers: { get: () => null },
+  text: async () => html,
+});
 
 describe('ArticleExtractionService', () => {
   let service: ArticleExtractionService;
@@ -27,7 +36,7 @@ describe('ArticleExtractionService', () => {
   beforeEach(() => {
     service = new ArticleExtractionService();
     (global as any).fetch = jest.fn();
-    (lookup as jest.Mock).mockResolvedValue({ address: '93.184.216.34', family: 4 });
+    (lookup as jest.Mock).mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
   });
 
   afterEach(() => {
@@ -61,11 +70,7 @@ describe('ArticleExtractionService', () => {
     it('extracts and sanitizes the full article body from a real page', async () => {
       const html = `<!doctype html><html><head><title>Test Article</title></head>
         <body><article><h1>Test Article</h1><p>${paragraph}</p><script>alert(1)</script></article></body></html>`;
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        url: 'https://example.com/article',
-        text: async () => html,
-      });
+      (global.fetch as jest.Mock).mockResolvedValue(okHtml(html));
 
       const result = await service.extractFromUrl('https://example.com/article');
 
@@ -75,26 +80,31 @@ describe('ArticleExtractionService', () => {
       expect(result!.textContent.length).toBeGreaterThan(200);
     });
 
-    it('returns the real destination URL after following a redirect (e.g. a Google News wrapper link)', async () => {
+    it('follows a redirect (e.g. a Google News wrapper) and returns the real destination URL', async () => {
+      const dest = 'https://www.nytimes.com/2026/07/17/opinion/andy-burnham.html';
       const html = `<!doctype html><html><head><title>Test Article</title></head>
         <body><article><h1>Test Article</h1><p>${paragraph}</p></article></body></html>`;
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        url: 'https://www.nytimes.com/2026/07/17/opinion/andy-burnham-britain-prime-minister.html',
-        text: async () => html,
-      });
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          status: 301,
+          ok: false,
+          headers: { get: (h: string) => (h.toLowerCase() === 'location' ? dest : null) },
+        })
+        .mockResolvedValueOnce(okHtml(html));
 
       const result = await service.extractFromUrl(
         'https://news.google.com/rss/articles/CBMi-some-wrapper-token',
       );
 
-      expect(result!.resolvedUrl).toBe(
-        'https://www.nytimes.com/2026/07/17/opinion/andy-burnham-britain-prime-minister.html',
-      );
+      expect(result!.resolvedUrl).toBe(dest);
     });
 
     it('returns null when the fetch response is not ok', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 404 });
+      (global.fetch as jest.Mock).mockResolvedValue({
+        ok: false,
+        status: 404,
+        headers: { get: () => null },
+      });
 
       const result = await service.extractFromUrl('https://example.com/missing');
 
@@ -110,7 +120,7 @@ describe('ArticleExtractionService', () => {
     });
 
     it('refuses to fetch (and returns null) when the URL resolves to a private/internal address', async () => {
-      (lookup as jest.Mock).mockResolvedValue({ address: '169.254.169.254', family: 4 });
+      (lookup as jest.Mock).mockResolvedValue([{ address: '169.254.169.254', family: 4 }]);
 
       const result = await service.extractFromUrl('https://sneaky.example/feed');
 
@@ -119,10 +129,9 @@ describe('ArticleExtractionService', () => {
     });
 
     it('returns null when Readability finds nothing article-like', async () => {
-      (global.fetch as jest.Mock).mockResolvedValue({
-        ok: true,
-        text: async () => '<!doctype html><html><body><div>too short</div></body></html>',
-      });
+      (global.fetch as jest.Mock).mockResolvedValue(
+        okHtml('<!doctype html><html><body><div>too short</div></body></html>'),
+      );
 
       const result = await service.extractFromUrl('https://example.com/empty');
 
