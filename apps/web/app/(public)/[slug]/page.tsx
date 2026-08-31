@@ -8,6 +8,12 @@ import { ArticleView, buildArticleMetadata } from "@/components/public/article-v
 // Covers both the flat article route and the static-Page route this file
 // also serves.
 export const revalidate = 60;
+// Empty list = prerender nothing at build, but generate + cache each
+// path on its first request (on-demand ISR). Required for revalidate to
+// take effect on a route with no build-time params (Next docs).
+export function generateStaticParams() {
+  return [];
+}
 
 interface Props {
   params: Promise<{ slug: string }>;

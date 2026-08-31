@@ -1,9 +1,6 @@
 import type { Metadata } from "next";
 import { CategoryPage, buildCategoryMetadata } from "@/components/public/pages/category-page";
 
-// ISR: cache the rendered page at the edge, revalidate in the background.
-export const revalidate = 60;
-
 interface Props {
   params: Promise<{ slug: string }>;
   searchParams: Promise<{ page?: string }>;

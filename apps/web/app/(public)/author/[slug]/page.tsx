@@ -3,6 +3,12 @@ import { AuthorPage, buildAuthorMetadata } from "@/components/public/pages/autho
 
 // ISR: cache the rendered page at the edge, revalidate in the background.
 export const revalidate = 60;
+// Empty list = prerender nothing at build, but generate + cache each
+// path on its first request (on-demand ISR). Required for revalidate to
+// take effect on a route with no build-time params (Next docs).
+export function generateStaticParams() {
+  return [];
+}
 
 interface Props {
   params: Promise<{ slug: string }>;
