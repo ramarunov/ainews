@@ -15,6 +15,14 @@ interface Args {
   locale: Locale;
 }
 
+// ~90% of this org's tags (imported from an old WordPress export) have 0-2
+// published articles - a tag hub that thin is functionally a duplicate of
+// the article(s) it lists, and at this volume (~4,200 of 4,702 tags) was a
+// major contributor to Search Console's "Crawled/Discovered - currently not
+// indexed" counts. Below this bar the page stays live (still useful to a
+// reader who lands on it) but is marked noindex.
+const MIN_INDEXABLE_TAG_ARTICLES = 3;
+
 function tagPath(slug: string, locale: Locale) {
   return locale === "en" ? `/en/tag/${slug}` : `/tag/${slug}`;
 }
@@ -28,9 +36,14 @@ export async function buildTagMetadata({ slug, page, locale }: Args): Promise<Me
   const enUrl = `https://${rootDomain}/en/tag/${tag.slug}`;
   const base = locale === "en" ? enUrl : idUrl;
   const canonical = page > 1 ? `${base}?page=${page}` : base;
+
+  const { meta } = await getPublishedArticles({ tagSlug: slug, limit: 1, language: locale === "en" ? "en" : undefined });
+  const thin = meta.total < MIN_INDEXABLE_TAG_ARTICLES;
+
   return {
     title: `#${tag.name}`,
     description: tag.description || `${t("tag.topicNews")} ${tag.name} · ${SITE_NAME}.`,
+    ...(thin && { robots: { index: false, follow: true } }),
     alternates: {
       canonical,
       ...(locale === "en" && {
