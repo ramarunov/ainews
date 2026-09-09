@@ -49,6 +49,20 @@ describe('TagsService', () => {
       expect(result).toBe(created);
     });
 
+    it('reuses an existing tag instead of creating a duplicate on a case-insensitive name match', async () => {
+      const existing = { id: 'tag-1', name: 'contoh-tag', slug: 'contoh-tag', deletedAt: null };
+      prisma.tag.findFirst.mockResolvedValue(existing);
+
+      const result = await service.create({ name: 'Contoh-Tag' } as any, 'org-1');
+
+      expect(prisma.tag.findFirst).toHaveBeenCalledWith({
+        where: { organizationId: 'org-1', deletedAt: null, name: { equals: 'Contoh-Tag', mode: 'insensitive' } },
+      });
+      expect(prisma.tag.create).not.toHaveBeenCalled();
+      expect(eventEmitter.emit).not.toHaveBeenCalled();
+      expect(result).toBe(existing);
+    });
+
     it('picks a suffixed slug when the base is taken by a soft-deleted tag', async () => {
       // The DB unique constraint on (organizationId, slug) applies
       // regardless of deletedAt, so a slug "freed up" by a deleted tag is
@@ -56,6 +70,7 @@ describe('TagsService', () => {
       // must see soft-deleted rows too, or create() blows up with an
       // unhandled P2002 instead of just picking `-1`.
       prisma.tag.findFirst
+        .mockResolvedValueOnce(null) // name-dedup check: no active tag named "AI"
         .mockResolvedValueOnce({ id: 'old-tag', slug: 'ai', deletedAt: new Date() })
         .mockResolvedValueOnce(null);
       const created = { id: 'tag-2', name: 'AI', slug: 'ai-1' };

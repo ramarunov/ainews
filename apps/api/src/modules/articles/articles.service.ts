@@ -548,10 +548,22 @@ export class ArticlesService {
     if (isFirstPublish) {
       // Sequential, not parallel: both read-modify-write article.content,
       // so running them at once would let one clobber the other's changes.
-      this.internalLinkingService
-        .insertLinks(id, organizationId)
-        .then(() => this.internalLinkingService.insertReadAlso(id, organizationId))
-        .catch((err) => this.logger.error(`Content enrichment failed for article ${id}`, err));
+      // Each gets its own catch (not one .then().catch() chain) - insertLinks
+      // depends on the AI gateway and insertReadAlso doesn't (it's a plain DB
+      // lookup), so an AI-provider outage in the former must not silently
+      // skip the latter too.
+      void (async () => {
+        try {
+          await this.internalLinkingService.insertLinks(id, organizationId);
+        } catch (err) {
+          this.logger.error(`Internal linking failed for article ${id}`, err);
+        }
+        try {
+          await this.internalLinkingService.insertReadAlso(id, organizationId);
+        } catch (err) {
+          this.logger.error(`"Baca juga" insertion failed for article ${id}`, err);
+        }
+      })();
     }
 
     return updated;

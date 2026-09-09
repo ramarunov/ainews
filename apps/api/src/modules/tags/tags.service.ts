@@ -17,6 +17,17 @@ export class TagsService {
   // ─── Create ────────────────────────────────────────────────────────────────
 
   async create(dto: CreateTagDto, organizationId: string) {
+    // Case-insensitive dedup by name, mirroring findOrCreateByNames() below -
+    // without this, generateSlug() just finds "contoh-tag" taken and hands
+    // back "contoh-tag-1" for a brand new row with the SAME name, silently
+    // duplicating the tag instead of reusing it. The org can have thousands
+    // of tags, so any client-side "does this name already exist" check
+    // against a paginated tag list is unreliable - this has to be server-side.
+    const existing = await this.prisma.tag.findFirst({
+      where: { organizationId, deletedAt: null, name: { equals: dto.name, mode: 'insensitive' } },
+    });
+    if (existing) return existing;
+
     const slug = await this.generateSlug(dto.name, organizationId);
 
     const tag = await this.prisma.tag.create({
